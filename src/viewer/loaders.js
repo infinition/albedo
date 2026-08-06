@@ -182,9 +182,10 @@ export async function loadModel(
       return { object: obj, animations: [] };
     }
     case "usdz": {
-      const { USDZLoader } = await import("three/examples/jsm/loaders/USDZLoader.js");
-      const obj = await new USDZLoader(manager).loadAsync(url, progress);
-      return { object: obj, animations: [] };
+      // Almost every package holds a binary crate, which three cannot read;
+      // the USD module sorts out which of the two paths applies.
+      const { loadUSD } = await import("./usd.js");
+      return loadUSD(url, { findTextures, resolveSibling });
     }
     case "usd":
     case "usda":

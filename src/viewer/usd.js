@@ -34,16 +34,17 @@ export async function loadUSD(url, { findTextures, resolveSibling } = {}) {
   const bytes = new Uint8Array(buffer);
 
   if (startsWith(bytes, CRATE)) {
-    throw new Error(
-      "USD binaire (crate) : ce conteneur n'a pas de décodeur JavaScript. " +
-        "Convertis-le en .usdz ou en .usda, par exemple avec « usdcat -o sortie.usda entree.usdc »."
-    );
+    // A loose crate: its textures sit beside it on disk.
+    const { CrateFile, buildFromCrate } = await import("./usdc/index.js");
+    const object = buildFromCrate(new CrateFile(bytes), {
+      resolveTexture: (file) =>
+        resolveSibling ? resolveSibling(file) : new URL(file, new URL(url, document.baseURI)).href,
+    });
+    return { object, animations: [] };
   }
 
-  // A .usd that is really a package: hand it over untouched.
-  if (startsWith(bytes, ZIP)) {
-    return { object: new USDZLoader().parse(buffer), animations: [] };
-  }
+  // A .usd that is really a package.
+  if (startsWith(bytes, ZIP)) return loadPackage(bytes, buffer);
 
   const text = fflate.strFromU8(bytes);
   const files = { "root.usda": bytes }; // must stay first: three reads entry 0
@@ -52,6 +53,50 @@ export async function loadUSD(url, { findTextures, resolveSibling } = {}) {
   const zipped = fflate.zipSync(files, { level: 0 });
   const object = new USDZLoader().parse(zipped.buffer);
   return { object, animations: [] };
+}
+
+/**
+ * A .usdz archive.
+ *
+ * Its first entry is the stage. Nearly every package in circulation stores it
+ * as a binary crate, which three refuses, so that case is decoded here and the
+ * archive's own images are handed over as textures. An ASCII stage still goes
+ * through three's reader, which handles it well.
+ */
+export async function loadPackage(bytes, buffer) {
+  const zip = fflate.unzipSync(bytes);
+  const names = Object.keys(zip);
+  const stage = names[0];
+  const isCrate = stage && startsWith(zip[stage], CRATE);
+
+  if (!isCrate) {
+    return { object: new USDZLoader().parse(buffer), animations: [] };
+  }
+
+  const { CrateFile, buildFromCrate } = await import("./usdc/index.js");
+  // Entries are addressed exactly as the stage names them, but a leading "./"
+  // and case differences do turn up in the wild.
+  const lookup = new Map(names.map((n) => [n.replace(/^\.\//, "").toLowerCase(), n]));
+  const urls = new Map();
+  const resolveTexture = (file) => {
+    const key = file.replace(/^\.\//, "").toLowerCase();
+    const entry = lookup.get(key) || lookup.get(key.split("/").pop());
+    if (!entry) return null;
+    if (!urls.has(entry)) {
+      urls.set(entry, URL.createObjectURL(new Blob([zip[entry]], { type: mimeOf(entry) })));
+    }
+    return urls.get(entry);
+  };
+
+  const object = buildFromCrate(new CrateFile(zip[stage]), { resolveTexture });
+  return { object, animations: [] };
+}
+
+function mimeOf(name) {
+  if (/\.png$/i.test(name)) return "image/png";
+  if (/\.jpe?g$/i.test(name)) return "image/jpeg";
+  if (/\.webp$/i.test(name)) return "image/webp";
+  return "application/octet-stream";
 }
 
 /**
