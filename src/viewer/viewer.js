@@ -111,6 +111,8 @@ export class Viewer {
     this.root.add(object);
     this.current = object;
 
+    // Each model starts from the user's own preference, not the last model's
+    this.skeletons.visible = this._skeletonVisible === true;
     let meshCount = 0;
     object.traverse((o) => {
       if (o.isMesh || o.isPoints) meshCount++;
@@ -248,6 +250,7 @@ export class Viewer {
     this.invalidate();
   }
   setSkeleton(v) {
+    this._skeletonVisible = v;
     this.skeletons.visible = v;
     this.invalidate();
   }

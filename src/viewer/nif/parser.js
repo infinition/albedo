@@ -167,8 +167,15 @@ function readAVObject(r, version) {
   return { ...base, flags, transform: { translation, rotation, scale }, props };
 }
 
-/** NiDynamicEffect: the nodes a light or projector applies to. */
+/**
+ * NiDynamicEffect: the nodes a light or projector applies to.
+ *
+ * The list is a 10.x addition. Reading it on a 4.x file swallows the first
+ * word of whatever follows, which on a NiTextureEffect is its projection
+ * matrix.
+ */
 function readDynamicEffect(r, version) {
+  if (version < V.V10_0_1_0) return;
   if (version >= V.V10_1_0_106) r.u8(); // switch state
   const n = r.u32();
   for (let i = 0; i < n; i++) r.ref();
@@ -186,12 +193,14 @@ function readTimeController(r) {
   return { next, flags, frequency, phase, start, stop, target };
 }
 
-const readExtraDataBase = (r, version) => (version >= V.V10_0_1_0 ? r.string() : nextExtra(r));
-
-function nextExtra(r) {
-  // pre-10.0.1.0 NiExtraData is a linked list with a byte count
-  r.ref();
-  r.u32();
+/**
+ * NiExtraData base. From 10.0.1.0 the block is named; before that it is a
+ * link in a chain and carries nothing else, the byte count that follows
+ * belonging to the concrete subclass rather than to the base.
+ */
+function readExtraDataBase(r, version) {
+  if (version >= V.V10_0_1_0) return r.string();
+  r.ref(); // next extra data
   return "";
 }
 
@@ -486,6 +495,77 @@ function readSkinPartition(r, version) {
 // Block dispatch
 // ---------------------------------------------------------------------------
 
+/** Particle systems share NiGeometry's header but carry per-particle arrays. */
+function readParticlesData(r, version, kind) {
+  const g = readGeomShared(r, version);
+  if (version <= V.V4_0_0_2) r.u16(); // declared particle count
+  r.f32(); // particle radius
+  if (version <= V.V4_2_2_0) r.u16(); // active count
+  if (readBool(r, version)) r.skip(g.numVertices * 4); // per-particle sizes
+  if (version >= V.V10_0_1_0 && readBool(r, version)) r.skip(g.numVertices * 16);
+  if (kind === "NiRotatingParticlesData" && version <= V.V4_2_2_0) {
+    if (readBool(r, version)) r.skip(g.numVertices * 16); // rotations
+  }
+  // Particles have no triangles: nothing to hand to the scene builder.
+  return { numVertices: g.numVertices, vertices: null, normals: null, uvs: null, colors: null, indices: null };
+}
+
+/** NiParticleModifier base, then the fields each modifier adds. */
+function readParticleModifier(r, version, kind) {
+  r.ref(); // next modifier
+  r.ref(); // owning controller
+  switch (kind) {
+    case "NiParticleGrowFade":
+      r.f32();
+      r.f32();
+      break;
+    case "NiParticleColorModifier":
+      r.ref();
+      break;
+    case "NiParticleRotation":
+      r.u8();
+      r.f32();
+      r.vec3();
+      break;
+    case "NiGravity":
+      r.f32();
+      r.f32();
+      r.u32();
+      r.vec3();
+      r.vec3();
+      break;
+    case "NiParticleBomb":
+      for (let i = 0; i < 4; i++) r.f32();
+      r.u32();
+      r.u32();
+      r.vec3();
+      r.vec3();
+      break;
+    case "NiPlanarCollider":
+      r.u16();
+      for (let i = 0; i < 4; i++) r.f32();
+      r.vec3();
+      r.vec3();
+      r.vec3();
+      r.vec3();
+      break;
+    case "NiSphericalCollider":
+      r.u16();
+      r.f32();
+      r.f32();
+      r.vec3();
+      break;
+    case "NiParticleMeshModifier": {
+      const n = r.u32();
+      for (let i = 0; i < n; i++) r.ref();
+      break;
+    }
+    default:
+      break;
+  }
+  return null;
+}
+
 function readBlock(r, kind, version, ctx) {
   if (TRI_SHAPES.has(kind)) {
     const av = readAVObject(r, version);
@@ -510,6 +590,9 @@ function readBlock(r, kind, version, ctx) {
     case "NiNode":
     case "NiBillboardNode":
     case "NiSwitchNode":
+    case "NiLODNode":
+    case "RootCollisionNode":
+    case "AvoidNode":
     case "NiBSAnimationNode":
     case "NiBSParticleNode": {
       const av = readAVObject(r, version);
@@ -518,9 +601,57 @@ function readBlock(r, kind, version, ctx) {
       for (let i = 0; i < n; i++) children.push(r.ref());
       const e = r.u32();
       for (let i = 0; i < e; i++) r.ref(); // effects
-      if (kind === "NiBillboardNode" && version >= V.V10_1_0_106) r.u16();
-      if (kind === "NiSwitchNode") r.u32();
+      // The billboard mode appears with 10.1: reading it on a 4.x file
+      // overshoots the block by exactly two bytes.
+      if (kind === "NiBillboardNode" && version >= V.V10_1_0_0) r.u16();
+      if (kind === "NiSwitchNode" || kind === "NiLODNode") {
+        if (version >= V.V10_1_0_0) r.u16(); // switch flags
+        r.u32(); // active child
+      }
+      if (kind === "NiLODNode" && version <= V.V10_0_1_0) {
+        r.vec3(); // lod centre
+        r.skip(r.u32() * 8); // near and far extent per level
+      }
       return { ...av, children };
+    }
+
+    case "NiParticles":
+    case "NiAutoNormalParticles":
+    case "NiRotatingParticles":
+    case "NiParticleMeshes":
+    case "NiParticleSystem": {
+      // Structurally a NiGeometry; the emitter itself is not rendered here.
+      const av = readAVObject(r, version);
+      const data = r.ref();
+      const skin = r.ref();
+      if (version >= V.V10_0_1_0 && version <= V.V20_1_0_3) {
+        if (readBool(r, version)) {
+          r.string();
+          r.u32();
+        }
+      }
+      return { ...av, data, skin, particles: true };
+    }
+
+    case "NiParticlesData":
+    case "NiAutoNormalParticlesData":
+    case "NiRotatingParticlesData":
+    case "NiParticleMeshesData": {
+      const geometry = readParticlesData(r, version, kind);
+      if (kind === "NiParticleMeshesData") r.ref(); // the mesh each particle draws
+      return { geometry };
+    }
+
+    case "NiCamera": {
+      const av = readAVObject(r, version);
+      if (version >= V.V10_1_0_0) r.u16(); // camera flags
+      for (let i = 0; i < 6; i++) r.f32(); // frustum
+      if (version >= V.V4_2_2_0) r.u8(); // orthographic
+      for (let i = 0; i < 5; i++) r.f32(); // viewport and lod adjust
+      r.ref(); // scene
+      r.u32(); // screen polygons
+      if (version >= V.V4_2_2_0) r.u32(); // screen textures
+      return av;
     }
 
     case "NiTriShapeData":
@@ -611,7 +742,8 @@ function readBlock(r, kind, version, ctx) {
       return { name: readExtraDataBase(r, version), value: r.u8() !== 0 };
 
     case "NiColorExtraData":
-      return { name: readExtraDataBase(r, version), value: r.vec3() };
+      // a Color4, alpha included, unlike NiVectorExtraData
+      return { name: readExtraDataBase(r, version), value: r.vec4() };
 
     case "NiVectorExtraData": {
       const name = readExtraDataBase(r, version);
@@ -753,6 +885,111 @@ function readBlock(r, kind, version, ctx) {
       if (version >= V.V10_1_0_0) r.u16(); // which colour the curve drives
       const data = r.ref();
       return { ...tc, data };
+    }
+
+    case "NiAlphaController":
+    case "NiFloatController":
+    case "NiRollController": {
+      const tc = readTimeController(r);
+      const data = r.ref();
+      return { ...tc, data };
+    }
+
+    case "NiFlipController": {
+      const tc = readTimeController(r);
+      r.u32(); // texture slot
+      if (version >= V.V4_0_0_2 && version <= V.V10_1_0_0) {
+        r.f32(); // unknown
+        r.f32(); // delta
+      }
+      const n = r.u32();
+      for (let i = 0; i < n; i++) r.ref();
+      return { ...tc };
+    }
+
+    case "NiParticleSystemController":
+    case "NiBSPArrayController": {
+      const tc = readTimeController(r);
+      for (let i = 0; i < 6; i++) r.f32(); // speed, declination, planar angle and their variations
+      r.vec3(); // initial normal
+      r.vec4(); // initial colour
+      for (let i = 0; i < 3; i++) r.f32(); // initial size, emit start, emit stop
+      if (version <= V.V4_2_2_0) r.u8(); // reset flag
+      for (let i = 0; i < 3; i++) r.f32(); // birth rate, lifetime, variation
+      r.u16(); // emit flags
+      r.vec3(); // start random
+      r.ref(); // emitter
+      r.u16();
+      r.f32();
+      r.u32();
+      r.u32();
+      r.u16();
+      const numParticles = r.u16();
+      r.u16(); // valid count
+      r.skip(numParticles * 40); // velocity, direction, ages and vertex id
+      r.ref();
+      r.ref(); // particle extra data
+      r.ref();
+      r.u8(); // trailer
+      return { ...tc };
+    }
+
+    case "NiTextureTransformController": {
+      const tc = readTimeController(r);
+      r.u8(); // shader map
+      r.u32(); // texture slot
+      r.u32(); // which member of the transform
+      const data = r.ref();
+      return { ...tc, data };
+    }
+
+    case "NiParticleGrowFade":
+    case "NiParticleColorModifier":
+    case "NiParticleRotation":
+    case "NiGravity":
+    case "NiParticleBomb":
+    case "NiPlanarCollider":
+    case "NiSphericalCollider":
+    case "NiParticleMeshModifier":
+      // Particle modifiers form a chain the viewer never simulates; they are
+      // only read far enough to keep the stream aligned.
+      return readParticleModifier(r, version, kind);
+
+    case "NiLookAtController": {
+      const tc = readTimeController(r);
+      if (version >= V.V10_1_0_0) r.u16();
+      r.ref(); // the node being looked at
+      return { ...tc };
+    }
+
+    case "NiPathController": {
+      const tc = readTimeController(r);
+      r.u32(); // bank direction
+      r.f32(); // max bank angle
+      r.f32(); // smoothing
+      r.u16(); // follow axis
+      r.ref(); // path data
+      r.ref(); // percent data
+      return { ...tc };
+    }
+
+    case "NiPixelData": {
+      r.u32(); // pixel format
+      for (let i = 0; i < 4; i++) r.u32(); // channel masks
+      r.u32(); // bits per pixel
+      r.skip(12); // three words the format never documented
+      if (version >= V.V10_0_1_0) r.ref(); // palette, a later addition
+      const mipmaps = r.u32();
+      r.u32(); // bytes per pixel
+      r.skip(mipmaps * 12); // width, height, offset per level
+      r.skip(r.u32()); // the pixels themselves
+      return null;
+    }
+
+    case "NiPalette": {
+      r.u8(); // has alpha
+      r.skip(r.u32() * 4); // one RGBA entry per index
+      return null;
     }
 
     case "NiPosData":
