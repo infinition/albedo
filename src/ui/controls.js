@@ -155,8 +155,17 @@ export function wireTimeline({ viewer, onState }) {
 
   const state = { action: null, duration: 0, scrubbing: false };
 
+  // The action's own clock is what poses the model, and it is the only one
+  // that stays right while scrubbing: the mixer's clock keeps running with the
+  // frame loop even when the action is paused.
+  const now = () => {
+    if (!state.action) return 0;
+    const d = state.duration || 1;
+    return ((state.action.time % d) + d) % d;
+  };
+
   const paint = () => {
-    const t = viewer.mixer ? viewer.mixer.time % (state.duration || 1) : 0;
+    const t = now();
     if (!state.scrubbing) range.value = String(t);
     clock.textContent = `${t.toFixed(2)} / ${state.duration.toFixed(2)} s`;
     icon.setAttribute("d", viewer.playing ? PAUSE : PLAY);
@@ -164,9 +173,19 @@ export function wireTimeline({ viewer, onState }) {
     if (onState) onState(viewer.playing);
   };
 
+  /**
+   * Scrub to an instant.
+   *
+   * A paused action has an effective time scale of zero, so `mixer.setTime()`
+   * hands it a delta of zero and the pose never moves: the model would snap to
+   * the first frame and stay there for the whole drag. Setting the action's
+   * time directly and asking the mixer for a zero-length step re-evaluates the
+   * tracks and applies the pose, which makes the drag follow frame by frame.
+   */
   const setTime = (t) => {
-    if (!viewer.mixer) return;
-    viewer.mixer.setTime(t);
+    if (!viewer.mixer || !state.action) return;
+    state.action.time = Math.max(0, Math.min(state.duration, t));
+    viewer.mixer.update(0);
     viewer.invalidate();
     paint();
   };
@@ -192,7 +211,9 @@ export function wireTimeline({ viewer, onState }) {
       state.action = action;
       state.duration = duration || 0;
       range.max = String(state.duration || 1);
-      $("timeline").hidden = !action;
+      // A clip of zero length is a bind pose, not an animation: showing a
+      // scrubber that cannot move would only be in the way.
+      $("timeline").hidden = !action || state.duration <= 0;
       paint();
     },
     toggle,

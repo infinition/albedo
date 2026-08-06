@@ -171,19 +171,25 @@ function buildAnimationUi(clips) {
   select.textContent = "";
   viewer.playing = false;
 
-  if (!clips.length) {
+  // Some formats carry a bind pose as a clip with no duration; that is not
+  // something to play, so it must not put a scrubber on screen.
+  const playable = clips
+    .map((c, i) => ({ clip: c, index: i }))
+    .filter(({ clip }) => clip.duration > 0);
+
+  if (!playable.length) {
     timeline.attach(null, 0);
     return;
   }
   // The picker only earns its place when there is something to pick.
-  select.hidden = clips.length < 2;
-  clips.forEach((c, i) => {
+  select.hidden = playable.length < 2;
+  for (const { clip, index } of playable) {
     const opt = document.createElement("option");
-    opt.value = String(i);
-    opt.textContent = c.name || `clip ${i + 1}`;
+    opt.value = String(index);
+    opt.textContent = clip.name || `clip ${index + 1}`;
     select.appendChild(opt);
-  });
-  selectClip(0);
+  }
+  selectClip(playable[0].index);
 }
 
 function selectClip(index) {

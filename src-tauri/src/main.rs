@@ -10,18 +10,19 @@ const MODEL_EXTS: &[&str] = &[
 ];
 
 /// Path handed over by the shell ("Open with…"), if any.
+///
+/// Any existing file is passed through rather than filtered against the list
+/// above. The frontend is what actually knows the readable formats, and
+/// keeping a second list here only produced files that opened when dropped on
+/// the window but not when opened from the shell. An unreadable file now gets
+/// a real error message instead of silence.
 fn cli_model_path() -> Option<String> {
     std::env::args().skip(1).find_map(|arg| {
         if arg.starts_with('-') {
             return None;
         }
         let p = PathBuf::from(&arg);
-        let ok = p
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| MODEL_EXTS.contains(&e.to_lowercase().as_str()))
-            .unwrap_or(false);
-        if ok && p.exists() {
+        if p.is_file() {
             Some(p.to_string_lossy().to_string())
         } else {
             None

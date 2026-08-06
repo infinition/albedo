@@ -10,6 +10,7 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { ColladaLoader } from "three/examples/jsm/loaders/ColladaLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
+import { SpecularGlossinessExtension } from "./specgloss.js";
 
 export const SUPPORTED = [
   "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf",
@@ -54,6 +55,9 @@ function getGLTFLoader(renderer) {
     .setDRACOLoader(draco)
     .setKTX2Loader(ktx2)
     .setMeshoptDecoder(MeshoptDecoder);
+  // three dropped specular-glossiness; without this, files written with it
+  // lose their diffuse texture and render as bare metal
+  gltfLoader.register((parser) => new SpecularGlossinessExtension(parser));
   return gltfLoader;
 }
 
