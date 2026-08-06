@@ -273,6 +273,24 @@ body.inspector .ov-br { opacity: 0; }
 .field input[type="range"] { width: 100%; }
 
 .row { display: flex; gap: 8px; align-items: center; }
+
+/* one material per line: its name, then how it should be drawn */
+.mat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.mat-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.mat-row .seg { padding: 3px 8px; font-size: 11px; }
 .wide { width: 100%; }
 
 button.wide,

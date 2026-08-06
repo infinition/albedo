@@ -104,6 +104,11 @@ its own lighting into the texture, so lighting it again puts a veil over it.
 Unlit shows the texture as authored, with no lighting and no tone mapping,
 while keeping alpha masks, blending and vertex colours.
 
+A model is rarely all one thing, so the inspector lists its materials and each
+one has the same switch. Painted skin can be shown flat while the eyes it
+carries stay genuinely shiny. The toggle next to the file name sets the default
+for everything and clears the individual choices.
+
 Textures that a model references but does not embed are looked for around it.
 Formats that name their maps, NIF and USD, are asked by name; the others are
 matched against the naming conventions the industry actually uses.
@@ -179,6 +184,7 @@ confirmed on the real thing.
 | Phong and Lambert converted to PBR | [x] | FBX white veil gone, 4 materials converted |
 | Colour space correction | [x] | Base colour sRGB, data maps linear |
 | PBR / unlit toggle | [x] | Both buttons drive the channel state |
+| Per material PBR / unlit | [x] | Alligator body unlit while its eyes stay PBR |
 | Unlit keeps alpha, blending and vertex colours | [ ] | Written, not compared side by side on a masked asset |
 | Ten inspection channels | [ ] | Switching verified; per channel output not compared |
 | Wireframe, grid, bounding box, skeleton | [x] | Toggles verified |
@@ -232,7 +238,7 @@ confirmed on the real thing.
 
 - [x] Viewer with on demand rendering, so an idle window costs nothing
 - [x] Generated studio lighting, no HDRI to ship and no licence to track
-- [x] Ten inspection channels and a PBR / unlit toggle
+- [x] Ten inspection channels, plus a PBR / unlit toggle per model and per material
 - [x] Automatic texture discovery, by name and by convention
 - [x] Material normalisation, so every format lands on the same PBR footing
 - [x] Animation timeline with frame by frame scrubbing

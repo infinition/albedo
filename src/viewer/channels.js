@@ -83,13 +83,56 @@ export class ChannelView {
   constructor(viewer) {
     this.viewer = viewer;
     this.original = new Map(); // mesh -> material(s)
+    /** Per material override of the render mode, keyed by material uuid. */
+    this.materialModes = new Map();
+    this.built = new Map(); // uuid|channel -> material, so toggling is cheap
     this.mode = "shaded";
     this.wireframe = false;
   }
 
   reset() {
     this.original.clear();
+    this.materialModes.clear();
+    this.built.clear();
     this.mode = "shaded";
+  }
+
+  /** The distinct materials of the loaded model, for the inspector list. */
+  materials() {
+    const out = [];
+    const seen = new Set();
+    this.viewer.root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      this.remember(o);
+      const source = this.original.get(o);
+      for (const m of Array.isArray(source) ? source : [source]) {
+        if (!m || seen.has(m.uuid)) continue;
+        seen.add(m.uuid);
+        out.push({ uuid: m.uuid, name: m.name || "(sans nom)", textured: !!m.map });
+      }
+    });
+    return out;
+  }
+
+  /**
+   * Set one material's render mode.
+   *
+   * A model is rarely all one thing: painted skin wants to be shown flat while
+   * the eyes it carries are genuinely shiny, so the choice is per material and
+   * the viewport toggle only sets the default.
+   */
+  setMaterialMode(uuid, mode) {
+    if (mode) this.materialModes.set(uuid, mode);
+    else this.materialModes.delete(uuid);
+    this.apply(this.mode);
+  }
+
+  /** Which channel a given material should be drawn with. */
+  channelFor(material, mode) {
+    // Inspection channels are a whole-model view; only the two render modes
+    // are per material.
+    if (mode !== "shaded" && mode !== "unlit") return mode;
+    return this.materialModes.get(material?.uuid) || mode;
   }
 
   remember(mesh) {
@@ -147,22 +190,28 @@ export class ChannelView {
 
   apply(mode) {
     this.mode = mode;
-    const root = this.viewer.root;
-    root.traverse((o) => {
+    const make = (m) => {
+      if (!m) return m;
+      const channel = this.channelFor(m, mode);
+      if (channel === "shaded") {
+        this.setWireframeOn(m, this.wireframe);
+        return m;
+      }
+      const key = `${m.uuid}|${channel}`;
+      let built = this.built.get(key);
+      if (!built) {
+        built = this.build(m, channel);
+        this.built.set(key, built);
+      }
+      built.wireframe = this.wireframe;
+      return built;
+    };
+
+    this.viewer.root.traverse((o) => {
       if (!o.isMesh && !o.isSkinnedMesh) return;
       this.remember(o);
       const source = this.original.get(o);
-      if (mode === "shaded") {
-        o.material = source;
-      } else {
-        const make = (m) => {
-          const built = this.build(m, mode);
-          built.wireframe = this.wireframe;
-          return built;
-        };
-        o.material = Array.isArray(source) ? source.map(make) : make(source);
-      }
-      if (mode === "shaded") this.setWireframeOn(o.material, this.wireframe);
+      o.material = Array.isArray(source) ? source.map(make) : make(source);
     });
     this.viewer.invalidate();
   }

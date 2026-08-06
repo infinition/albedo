@@ -82,6 +82,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     setTitle(label);
     showStats(stats);
     $("tree").textContent = viewer.sceneTree();
+    paintMaterialList();
     $("empty").classList.add("hidden");
     buildAnimationUi(animations);
     if (info?.warnings?.length) console.warn("[albedo]", info.warnings);
@@ -163,9 +164,59 @@ function applyChannel(id) {
   $("mode-unlit").classList.toggle("active", id === "unlit");
 }
 
-$("mode-pbr").addEventListener("click", () => applyChannel("shaded"));
-$("mode-unlit").addEventListener("click", () => applyChannel("unlit"));
-const toggleUnlit = () => applyChannel(currentChannel === "unlit" ? "shaded" : "unlit");
+$("mode-pbr").addEventListener("click", () => setRenderMode("shaded"));
+$("mode-unlit").addEventListener("click", () => setRenderMode("unlit"));
+const toggleUnlit = () => setRenderMode(currentChannel === "unlit" ? "shaded" : "unlit");
+
+/**
+ * The viewport toggle sets the default for the whole model and clears the per
+ * material choices, which is what someone expects from a master switch.
+ */
+function setRenderMode(mode) {
+  channels.materialModes.clear();
+  applyChannel(mode);
+  paintMaterialList();
+}
+
+/**
+ * One row per material, so a painted body and glossy eyes can be shown the way
+ * each was authored.
+ */
+function paintMaterialList() {
+  const holder = $("materials");
+  const list = viewer.current ? channels.materials() : [];
+  $("materials-section").hidden = list.length === 0;
+  holder.textContent = "";
+
+  for (const { uuid, name, textured } of list) {
+    const row = document.createElement("div");
+    row.className = "mat-row";
+
+    const label = document.createElement("span");
+    label.className = "mat-name";
+    label.textContent = name;
+    label.title = textured ? `${name} (texturé)` : name;
+
+    const group = document.createElement("div");
+    group.className = "segment";
+    for (const [mode, text] of [["shaded", "PBR"], ["unlit", "Unlit"]]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "seg";
+      b.textContent = text;
+      const active = channels.channelFor({ uuid }, currentChannel === "unlit" ? "unlit" : "shaded");
+      b.classList.toggle("active", active === mode);
+      b.addEventListener("click", () => {
+        channels.setMaterialMode(uuid, mode);
+        paintMaterialList();
+      });
+      group.appendChild(b);
+    }
+
+    row.append(label, group);
+    holder.appendChild(row);
+  }
+}
 
 function stepChannel(delta) {
   const i = CHANNELS.findIndex((c) => c.id === currentChannel);
