@@ -19,6 +19,10 @@
 
 * { box-sizing: border-box; }
 
+/* The browser hides [hidden] with a rule any class selector outranks, so an
+   overlay that sets its own display would stay on screen. */
+[hidden] { display: none !important; }
+
 html, body, #app { height: 100%; margin: 0; }
 
 body {
