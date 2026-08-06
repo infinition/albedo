@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Albedo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view"></canvas>
+
+      <!-- Empty state ------------------------------------------------------->
+      <div id="empty">
+        <svg viewBox="0 0 24 24" class="empty-icon" aria-hidden="true">
+          <path d="M12 2.5 21 7v10l-9 4.5L3 17V7z" />
+          <path d="M3 7l9 4.5L21 7M12 11.5V21" />
+        </svg>
+        <p class="empty-title">Dépose un modèle</p>
+        <p class="empty-sub">ou <button id="btn-open" class="link" type="button">parcourir</button></p>
+        <p class="empty-formats">glTF · GLB · FBX · OBJ · STL · PLY · DAE · 3MF · 3DS · USDZ · VRML · VOX · AMF · PCD · XYZ · NIF</p>
+      </div>
+
+      <div id="loading" hidden><span></span></div>
+
+      <!-- Overlay chrome ---------------------------------------------------->
+      <div id="chrome">
+        <div class="ov ov-tl" id="title-slot">
+          <span id="file-name">Albedo</span>
+          <span id="file-kind" class="badge" hidden></span>
+        </div>
+
+        <div class="ov ov-tr">
+          <button id="btn-inspector" class="icon" type="button" title="Inspecteur (Tab)" aria-pressed="false">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10" /></svg>
+          </button>
+          <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
+            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
+        </div>
+
+        <div class="ov ov-bl">
+          <div class="segment" role="group" aria-label="Mode de navigation">
+            <button id="nav-orbit" class="seg active" type="button" title="Orbite (O)">Orbite</button>
+            <button id="nav-fly" class="seg" type="button" title="Vol libre (V)">Vol</button>
+          </div>
+          <button id="btn-frame" class="icon" type="button" title="Recadrer (F)">
+            <svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" /><circle cx="12" cy="12" r="3" /></svg>
+          </button>
+          <span id="devices" class="devices"></span>
+        </div>
+
+        <div class="ov ov-br">
+          <span id="stats" class="mono"></span>
+        </div>
+
+        <div id="timeline" class="ov" hidden>
+          <button id="anim-play" class="icon" type="button" title="Lecture / pause (Espace)">
+            <svg viewBox="0 0 24 24" id="icon-play"><path d="M8 5l11 7-11 7z" /></svg>
+          </button>
+          <input type="range" id="anim-time" min="0" max="1" step="0.001" value="0" aria-label="Position" />
+          <span id="anim-clock" class="mono">0.00 / 0.00</span>
+          <select id="anim-select" class="quiet" aria-label="Animation" hidden></select>
+        </div>
+      </div>
+
+      <!-- Inspector --------------------------------------------------------->
+      <aside id="inspector" aria-hidden="true">
+        <section>
+          <h2>Canaux</h2>
+          <div class="grid" id="channels"></div>
+        </section>
+
+        <section>
+          <h2>Affichage</h2>
+          <label class="check"><input type="checkbox" id="opt-wireframe" /><span>Wireframe</span></label>
+          <label class="check"><input type="checkbox" id="opt-grid" checked /><span>Grille</span></label>
+          <label class="check"><input type="checkbox" id="opt-bounds" /><span>Boîte englobante</span></label>
+          <label class="check"><input type="checkbox" id="opt-skeleton" /><span>Squelette</span></label>
+          <label class="field">
+            <span>Exposition</span>
+            <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" />
+          </label>
+        </section>
+
+        <section>
+          <h2>Périphériques</h2>
+          <div class="row">
+            <button id="btn-spacemouse" class="wide" type="button">Connecter une SpaceMouse</button>
+          </div>
+          <p id="dev-pad" class="hint">Manette : aucune détectée</p>
+          <details id="dev-tuning">
+            <summary>Réglages</summary>
+            <label class="field"><span>Sensibilité manette</span>
+              <input type="range" id="pad-sens" min="0.2" max="3" step="0.05" value="1" /></label>
+            <label class="field"><span>Zone morte manette</span>
+              <input type="range" id="pad-dead" min="0" max="0.4" step="0.01" value="0.14" /></label>
+            <label class="check"><input type="checkbox" id="pad-inverty" /><span>Inverser l'axe Y</span></label>
+            <label class="field"><span>Translation SpaceMouse</span>
+              <input type="range" id="sm-trans" min="0.1" max="4" step="0.05" value="1" /></label>
+            <label class="field"><span>Rotation SpaceMouse</span>
+              <input type="range" id="sm-rot" min="0.1" max="4" step="0.05" value="1" /></label>
+            <p class="hint">Inverser un axe SpaceMouse</p>
+            <div class="grid axes" id="sm-invert"></div>
+            <label class="check"><input type="checkbox" id="sm-lockroll" /><span>Bloquer le roulis</span></label>
+          </details>
+        </section>
+
+        <section>
+          <h2>Scène</h2>
+          <div id="tree" class="tree">—</div>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

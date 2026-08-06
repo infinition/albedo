@@ -1,0 +1,222 @@
+// Prevents an extra console window on Windows in release
+// No console window, ever: the app is a GUI even in debug builds
+#![windows_subsystem = "windows"]
+
+use std::path::PathBuf;
+
+const MODEL_EXTS: &[&str] = &[
+    "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf", "3ds", "usdz",
+    "wrl", "vrml", "vox", "amf", "pcd", "xyz", "nif", "kf", "kfa",
+];
+
+/// Path handed over by the shell ("Open with…"), if any.
+fn cli_model_path() -> Option<String> {
+    std::env::args().skip(1).find_map(|arg| {
+        if arg.starts_with('-') {
+            return None;
+        }
+        let p = PathBuf::from(&arg);
+        let ok = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| MODEL_EXTS.contains(&e.to_lowercase().as_str()))
+            .unwrap_or(false);
+        if ok && p.exists() {
+            Some(p.to_string_lossy().to_string())
+        } else {
+            None
+        }
+    })
+}
+
+#[tauri::command]
+fn startup_file() -> Option<String> {
+    cli_model_path()
+}
+
+/// Formats the viewer accepts, so the frontend and the shell stay in sync.
+#[tauri::command]
+fn supported_extensions() -> Vec<String> {
+    MODEL_EXTS.iter().map(|s| s.to_string()).collect()
+}
+
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "tga", "dds"];
+
+/// Folders artists actually drop their maps into, next to or under the model.
+const TEXTURE_DIRS: &[&str] = &[
+    "textures", "texture", "tex", "maps", "map", "materials", "material",
+    "images", "img", "source", "textures_unscrambled",
+];
+
+#[derive(serde::Serialize)]
+struct TexEntry {
+    name: String,
+    path: String,
+}
+
+fn collect_images(dir: &std::path::Path, out: &mut Vec<TexEntry>, limit: usize) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if out.len() >= limit {
+            return;
+        }
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let is_image = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| IMAGE_EXTS.contains(&e.to_lowercase().as_str()))
+            .unwrap_or(false);
+        if !is_image {
+            continue;
+        }
+        out.push(TexEntry {
+            name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            path: path.to_string_lossy().to_string(),
+        });
+    }
+}
+
+/// Images sitting next to a model: same folder, usual sub-folders, and the
+/// sibling texture folder one level up.
+#[tauri::command]
+fn scan_textures(model_path: String) -> Vec<TexEntry> {
+    let mut out = Vec::new();
+    let model = std::path::PathBuf::from(&model_path);
+    let Some(dir) = model.parent() else {
+        return out;
+    };
+
+    collect_images(dir, &mut out, 400);
+    for name in TEXTURE_DIRS {
+        collect_images(&dir.join(name), &mut out, 400);
+    }
+    if let Some(parent) = dir.parent() {
+        for name in TEXTURE_DIRS {
+            collect_images(&parent.join(name), &mut out, 400);
+        }
+    }
+    out
+}
+
+/// Look for specific texture file names around a model.
+///
+/// Formats that name their maps (NIF is the one that matters here) point at a
+/// shared folder that can sit well away from the model: a game keeps every skin
+/// in one place while the meshes live in per-part directories. Walking up a few
+/// levels and searching those subtrees finds them, and since the wanted names
+/// are known the search stops as soon as they are all accounted for.
+#[tauri::command]
+fn find_textures(model_path: String, names: Vec<String>) -> Vec<TexEntry> {
+    use std::collections::HashMap;
+
+    let mut wanted: HashMap<String, Option<String>> = names
+        .iter()
+        .map(|n| (n.to_lowercase(), None))
+        .collect();
+    if wanted.is_empty() {
+        return Vec::new();
+    }
+    // Names are also matched without their extension: a mesh may ask for a .dds
+    // while the loose file on disk is the original .tga.
+    let stems: HashMap<String, String> = wanted
+        .keys()
+        .map(|n| (n.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or_else(|| n.clone()), n.clone()))
+        .collect();
+
+    let model = std::path::PathBuf::from(&model_path);
+    let Some(start) = model.parent() else {
+        return Vec::new();
+    };
+
+    // Budget rather than depth alone: one bad ancestor should not walk a disk.
+    let mut budget = 40_000usize;
+    let mut roots: Vec<std::path::PathBuf> = vec![start.to_path_buf()];
+    let mut up = start;
+    for _ in 0..3 {
+        match up.parent() {
+            Some(p) => {
+                roots.push(p.to_path_buf());
+                up = p;
+            }
+            None => break,
+        }
+    }
+
+    let mut missing = wanted.len();
+    for root in roots {
+        if missing == 0 || budget == 0 {
+            break;
+        }
+        let mut stack = vec![(root, 0usize)];
+        while let Some((dir, depth)) = stack.pop() {
+            if missing == 0 || budget == 0 || depth > 4 {
+                continue;
+            }
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                if budget == 0 {
+                    break;
+                }
+                budget -= 1;
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push((path, depth + 1));
+                    continue;
+                }
+                let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                let lower = file_name.to_lowercase();
+                let key = if wanted.contains_key(&lower) {
+                    Some(lower.clone())
+                } else {
+                    lower
+                        .rsplit_once('.')
+                        .and_then(|(s, _)| stems.get(s))
+                        .cloned()
+                };
+                let Some(key) = key else { continue };
+                if let Some(slot) = wanted.get_mut(&key) {
+                    if slot.is_none() {
+                        *slot = Some(path.to_string_lossy().to_string());
+                        missing -= 1;
+                    }
+                }
+            }
+        }
+    }
+
+    wanted
+        .into_iter()
+        .filter_map(|(name, path)| {
+            path.map(|path| TexEntry {
+                name: std::path::Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or(name),
+                path,
+            })
+        })
+        .collect()
+}
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .invoke_handler(tauri::generate_handler![
+            startup_file,
+            supported_extensions,
+            scan_textures,
+            find_textures
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running Albedo");
+}
