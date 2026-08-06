@@ -9,6 +9,7 @@ import * as THREE from "three";
  */
 export const CHANNELS = [
   { id: "shaded", label: "Rendu" },
+  { id: "unlit", label: "Handpainted" },
   { id: "albedo", label: "Albedo" },
   { id: "normalMap", label: "Normales" },
   { id: "roughness", label: "Rugosité" },
@@ -96,6 +97,30 @@ export class ChannelView {
   }
 
   build(mat, channel) {
+    if (channel === "unlit") {
+      // Hand-painted art bakes its own light into the texture, so lighting it
+      // again is what puts the veil on it. Unlike the inspection channels this
+      // is a way to actually look at the model, so masks, blending and vertex
+      // colours are carried over instead of being flattened away.
+      const out = new THREE.MeshBasicMaterial({
+        map: mat.map || null,
+        color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
+        side: mat.side,
+        transparent: mat.transparent,
+        opacity: mat.opacity ?? 1,
+        alphaTest: mat.alphaTest ?? 0,
+        alphaMap: mat.alphaMap || null,
+        depthWrite: mat.depthWrite !== false,
+        vertexColors: !!mat.vertexColors,
+      });
+      if (mat.aoMap) {
+        out.aoMap = mat.aoMap;
+        out.aoMapIntensity = mat.aoMapIntensity ?? 1;
+      }
+      // No tone mapping: the point of this mode is the texture as authored.
+      out.toneMapped = false;
+      return out;
+    }
     if (channel === "normalGeom") {
       return new THREE.MeshNormalMaterial({ side: mat.side, flatShading: false });
     }

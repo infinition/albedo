@@ -39,12 +39,34 @@ const setBusy = (on) => {
   $("loading").hidden = !on;
 };
 
-async function open(url, label, { findTextures } = {}) {
+/**
+ * Turn a path relative to the model into an asset URL.
+ *
+ * The asset protocol collapses a path into one URL segment, so loaders cannot
+ * resolve siblings on their own; they are given the real folder instead.
+ */
+function siblingResolver(modelPath) {
+  const cut = Math.max(modelPath.lastIndexOf("\\"), modelPath.lastIndexOf("/"));
+  const dir = modelPath.slice(0, cut);
+  const unc = dir.startsWith("\\\\");
+  return (relative) => {
+    const parts = dir.split(/[\\/]/).filter(Boolean);
+    for (const segment of relative.split(/[\\/]/)) {
+      if (!segment || segment === ".") continue;
+      if (segment === "..") parts.pop();
+      else parts.push(segment);
+    }
+    return tauri.core.convertFileSrc((unc ? "\\\\" : "") + parts.join("\\"));
+  };
+}
+
+async function open(url, label, { findTextures, resolveSibling } = {}) {
   setBusy(true);
   try {
     const { object, animations, info } = await loadModel(url, {
       renderer: viewer.renderer,
       findTextures,
+      resolveSibling,
     });
     // Phong/Lambert under an IBL turns into a white veil: unify on PBR first
     normalizeMaterials(object);
@@ -99,7 +121,7 @@ async function openPath(path) {
     const found = await tauri.core.invoke("find_textures", { modelPath: path, names });
     return (found || []).map((f) => ({ name: f.name, url: tauri.core.convertFileSrc(f.path) }));
   };
-  await open(url, name, { findTextures });
+  await open(url, name, { findTextures, resolveSibling: siblingResolver(path) });
   await rescueTextures(path, name);
 }
 
@@ -136,7 +158,14 @@ function applyChannel(id) {
   currentChannel = id;
   channels.apply(id);
   for (const b of $("channels").children) b.classList.toggle("active", b.dataset.id === id);
+  // The viewport toggle and the inspector list are two views of one state.
+  $("mode-pbr").classList.toggle("active", id === "shaded");
+  $("mode-unlit").classList.toggle("active", id === "unlit");
 }
+
+$("mode-pbr").addEventListener("click", () => applyChannel("shaded"));
+$("mode-unlit").addEventListener("click", () => applyChannel("unlit"));
+const toggleUnlit = () => applyChannel(currentChannel === "unlit" ? "shaded" : "unlit");
 
 function stepChannel(delta) {
   const i = CHANNELS.findIndex((c) => c.id === currentChannel);
@@ -333,6 +362,7 @@ window.addEventListener("keydown", (e) => {
     case "Digit5": applyChannel("uv"); break;
     case "KeyO": hud.setMode("orbit"); break;
     case "KeyV": hud.setMode("fly"); break;
+    case "KeyU": toggleUnlit(); break;
     case "KeyR": nav.resetRoll(); break;
     case "KeyW":
       if (!e.ctrlKey && nav.mode === "orbit") {

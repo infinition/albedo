@@ -18,7 +18,7 @@
         </svg>
         <p class="empty-title">Dépose un modèle</p>
         <p class="empty-sub">ou <button id="btn-open" class="link" type="button">parcourir</button></p>
-        <p class="empty-formats">glTF · GLB · FBX · OBJ · STL · PLY · DAE · 3MF · 3DS · USDZ · VRML · VOX · AMF · PCD · XYZ · NIF</p>
+        <p class="empty-formats">glTF · GLB · FBX · OBJ · STL · PLY · DAE · 3MF · 3DS · USD · USDA · USDZ · VRML · VOX · AMF · PCD · XYZ · NIF</p>
       </div>
 
       <div id="loading" hidden><span></span></div>
@@ -28,6 +28,11 @@
         <div class="ov ov-tl" id="title-slot">
           <span id="file-name">Albedo</span>
           <span id="file-kind" class="badge" hidden></span>
+          <span class="ov-sep"></span>
+          <div class="segment" role="group" aria-label="Mode de rendu">
+            <button id="mode-pbr" class="seg active" type="button" title="Rendu PBR, éclairé par l'environnement (U)">PBR</button>
+            <button id="mode-unlit" class="seg" type="button" title="Handpainted : texture telle quelle, sans éclairage (U)">Unlit</button>
+          </div>
         </div>
 
         <div class="ov ov-tr">

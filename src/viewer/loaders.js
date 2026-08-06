@@ -14,15 +14,12 @@ import { SpecularGlossinessExtension } from "./specgloss.js";
 
 export const SUPPORTED = [
   "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf",
-  "3ds", "usdz", "wrl", "vrml", "vox", "amf", "pcd", "xyz",
+  "3ds", "usdz", "usd", "usda", "wrl", "vrml", "vox", "amf", "pcd", "xyz",
   "nif", "kf", "kfa",
 ];
 
 // Formats people ask for that no browser-side loader handles today.
 export const KNOWN_UNSUPPORTED = {
-  usd: "USD binaire/ASCII : seul l'emballage .usdz est lisible ici",
-  usda: "USD ASCII : seul l'emballage .usdz est lisible ici",
-  usdc: "USD binaire : seul l'emballage .usdz est lisible ici",
   blend: "Fichier Blender : format interne, à exporter en glTF",
   max: "3ds Max : format propriétaire fermé",
   ma: "Maya ASCII : format propriétaire",
@@ -40,10 +37,48 @@ const ext = (url) => {
 const dirOf = (url) => url.slice(0, url.lastIndexOf("/") + 1);
 const nameOf = (url) => decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "");
 
+/**
+ * Make sibling files resolve under Tauri's asset protocol.
+ *
+ * `convertFileSrc` percent-encodes the whole path into a single URL segment,
+ * so `http://asset.localhost/C%3A%2F...%2Fscene.gltf` has exactly one segment.
+ * Any relative reference inside the file, a .bin buffer, an .mtl library, a
+ * texture, therefore resolves against the host root and arrives as
+ * `http://asset.localhost/scene.bin`, which is nowhere. Every loader routes
+ * its requests through the manager, so putting the folder back here fixes the
+ * whole family at once.
+ */
+export function siblingManager(url, resolveSibling) {
+  const manager = new THREE.LoadingManager();
+  if (!resolveSibling) return manager;
+
+  manager.setURLModifier((requested) => {
+    if (!requested || requested === url) return requested;
+    if (/^(blob|data):/i.test(requested)) return requested;
+    const m = /^https?:\/\/asset\.localhost\/(.*)$/i.exec(requested);
+    if (!m) return requested;
+    let rel;
+    try {
+      rel = decodeURIComponent(m[1]);
+    } catch (_) {
+      return requested;
+    }
+    // Already a full path: the asset protocol produced it, leave it alone.
+    if (/^[a-z]:[\\/]/i.test(rel) || rel.startsWith("\\\\") || rel.startsWith("/")) {
+      return requested;
+    }
+    return resolveSibling(rel.split(/[?#]/)[0]) || requested;
+  });
+  return manager;
+}
+
 let gltfLoader = null;
 
-function getGLTFLoader(renderer) {
-  if (gltfLoader) return gltfLoader;
+function getGLTFLoader(renderer, manager) {
+  if (gltfLoader) {
+    gltfLoader.manager = manager;
+    return gltfLoader;
+  }
   const draco = new DRACOLoader().setDecoderPath(
     "https://www.gstatic.com/draco/versioned/decoders/1.5.6/"
   );
@@ -51,7 +86,7 @@ function getGLTFLoader(renderer) {
     "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/basis/"
   );
   if (renderer) ktx2.detectSupport(renderer);
-  gltfLoader = new GLTFLoader()
+  gltfLoader = new GLTFLoader(manager)
     .setDRACOLoader(draco)
     .setKTX2Loader(ktx2)
     .setMeshoptDecoder(MeshoptDecoder);
@@ -66,11 +101,15 @@ function getGLTFLoader(renderer) {
  * Sibling resources (.bin, textures, .mtl) resolve relative to it.
  * @returns {Promise<{object: THREE.Object3D, animations: THREE.AnimationClip[]}>}
  */
-export async function loadModel(url, { renderer, onProgress, candidates, findTextures } = {}) {
+export async function loadModel(
+  url,
+  { renderer, onProgress, candidates, findTextures, resolveSibling } = {}
+) {
   const kind = ext(url);
   const progress = (e) => {
     if (onProgress && e.total) onProgress(e.loaded / e.total);
   };
+  const manager = siblingManager(url, resolveSibling);
 
   switch (kind) {
     case "nif":
@@ -82,19 +121,19 @@ export async function loadModel(url, { renderer, onProgress, candidates, findTex
     }
     case "glb":
     case "gltf": {
-      const gltf = await getGLTFLoader(renderer).loadAsync(url, progress);
+      const gltf = await getGLTFLoader(renderer, manager).loadAsync(url, progress);
       return { object: gltf.scene, animations: gltf.animations || [] };
     }
     case "fbx": {
-      const obj = await new FBXLoader().loadAsync(url, progress);
+      const obj = await new FBXLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: obj.animations || [] };
     }
     case "obj": {
-      const loader = new OBJLoader();
+      const loader = new OBJLoader(manager);
       // An .mtl next to the .obj is the usual convention; ignore it if absent
       const mtlUrl = url.replace(/\.obj(\?|#|$)/i, ".mtl$1");
       try {
-        const mtl = await new MTLLoader()
+        const mtl = await new MTLLoader(manager)
           .setResourcePath(dirOf(url))
           .loadAsync(mtlUrl);
         mtl.preload();
@@ -106,7 +145,7 @@ export async function loadModel(url, { renderer, onProgress, candidates, findTex
       return { object: obj, animations: [] };
     }
     case "stl": {
-      const geo = await new STLLoader().loadAsync(url, progress);
+      const geo = await new STLLoader(manager).loadAsync(url, progress);
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(
         geo,
@@ -116,7 +155,7 @@ export async function loadModel(url, { renderer, onProgress, candidates, findTex
       return { object: mesh, animations: [] };
     }
     case "ply": {
-      const geo = await new PLYLoader().loadAsync(url, progress);
+      const geo = await new PLYLoader(manager).loadAsync(url, progress);
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(
         geo,
@@ -130,49 +169,55 @@ export async function loadModel(url, { renderer, onProgress, candidates, findTex
       return { object: mesh, animations: [] };
     }
     case "dae": {
-      const res = await new ColladaLoader().loadAsync(url, progress);
+      const res = await new ColladaLoader(manager).loadAsync(url, progress);
       return { object: res.scene, animations: res.scene.animations || [] };
     }
     case "3mf": {
-      const obj = await new ThreeMFLoader().loadAsync(url, progress);
+      const obj = await new ThreeMFLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: [] };
     }
     case "3ds": {
       const { TDSLoader } = await import("three/examples/jsm/loaders/TDSLoader.js");
-      const obj = await new TDSLoader().loadAsync(url, progress);
+      const obj = await new TDSLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: [] };
     }
     case "usdz": {
       const { USDZLoader } = await import("three/examples/jsm/loaders/USDZLoader.js");
-      const obj = await new USDZLoader().loadAsync(url, progress);
+      const obj = await new USDZLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: [] };
+    }
+    case "usd":
+    case "usda":
+    case "usdc": {
+      const { loadUSD } = await import("./usd.js");
+      return loadUSD(url, { findTextures, resolveSibling });
     }
     case "wrl":
     case "vrml": {
       const { VRMLLoader } = await import("three/examples/jsm/loaders/VRMLLoader.js");
-      const scene = await new VRMLLoader().loadAsync(url, progress);
+      const scene = await new VRMLLoader(manager).loadAsync(url, progress);
       return { object: scene, animations: [] };
     }
     case "vox": {
       const { VOXLoader, VOXMesh } = await import("three/examples/jsm/loaders/VOXLoader.js");
-      const chunks = await new VOXLoader().loadAsync(url, progress);
+      const chunks = await new VOXLoader(manager).loadAsync(url, progress);
       const group = new THREE.Group();
       for (const chunk of chunks) group.add(new VOXMesh(chunk));
       return { object: group, animations: [] };
     }
     case "amf": {
       const { AMFLoader } = await import("three/examples/jsm/loaders/AMFLoader.js");
-      const obj = await new AMFLoader().loadAsync(url, progress);
+      const obj = await new AMFLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: [] };
     }
     case "pcd": {
       const { PCDLoader } = await import("three/examples/jsm/loaders/PCDLoader.js");
-      const points = await new PCDLoader().loadAsync(url, progress);
+      const points = await new PCDLoader(manager).loadAsync(url, progress);
       return { object: points, animations: [] };
     }
     case "xyz": {
       const { XYZLoader } = await import("three/examples/jsm/loaders/XYZLoader.js");
-      const geo = await new XYZLoader().loadAsync(url, progress);
+      const geo = await new XYZLoader(manager).loadAsync(url, progress);
       const points = new THREE.Points(
         geo,
         new THREE.PointsMaterial({ size: 0.01, vertexColors: !!geo.attributes.color })

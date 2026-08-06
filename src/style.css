@@ -64,7 +64,10 @@ body.clean #inspector { opacity: 0; pointer-events: none; }
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
 }
 
-.ov-tl { top: var(--gap); left: var(--gap); padding: 5px 10px; gap: 8px; max-width: 46vw; }
+/* the render toggle sits in this group, so the padding is asymmetric: text
+   breathes on the left, the buttons keep the 4px the other overlays use */
+.ov-tl { top: var(--gap); left: var(--gap); padding: 4px 4px 4px 11px; gap: 8px; max-width: 52vw; }
+.ov-tl .seg { padding: 4px 10px; font-size: 12px; }
 .ov-tr { top: var(--gap); right: var(--gap); }
 .ov-bl { bottom: var(--gap); left: var(--gap); }
 .ov-br {
@@ -128,6 +131,13 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .icon.active { background: var(--accent); color: #fff; }
 #anim-play svg { fill: currentColor; stroke: none; }
+
+.ov-sep {
+  width: 1px;
+  height: 17px;
+  background: var(--line);
+  flex: none;
+}
 
 .segment { display: flex; gap: 2px; }
 .seg { padding: 5px 12px; color: var(--muted); }
