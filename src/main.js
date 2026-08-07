@@ -1308,6 +1308,71 @@ async function toggleLibrary() {
 }
 $("btn-library").addEventListener("click", toggleLibrary);
 
+
+// --- post-processing ------------------------------------------------------
+
+/**
+ * The effect chain, brought up the first time one is switched on.
+ *
+ * Every control writes through to the same place, so restoring a saved set on
+ * launch and moving a slider by hand take the identical path. Nothing is loaded
+ * until a box is ticked: a viewer showing one untouched model must not pay for
+ * a composer it never renders through.
+ */
+const POST_CONTROLS = [
+  ["ao", "on", "ao-on"], ["ao", "radius", "ao-radius"], ["ao", "intensity", "ao-intensity"],
+  ["bloom", "on", "bloom-on"], ["bloom", "strength", "bloom-strength"],
+  ["bloom", "radius", "bloom-radius"], ["bloom", "threshold", "bloom-threshold"],
+  ["dof", "on", "dof-on"], ["dof", "focus", "dof-focus"],
+  ["dof", "aperture", "dof-aperture"], ["dof", "maxblur", "dof-maxblur"],
+  ["grade", "on", "grade-on"], ["grade", "contrast", "grade-contrast"],
+  ["grade", "saturation", "grade-saturation"], ["grade", "temperature", "grade-temperature"],
+  ["grade", "vignette", "grade-vignette"], ["grade", "grain", "grade-grain"],
+  ["grade", "aberration", "grade-aberration"], ["grade", "sharpen", "grade-sharpen"],
+  ["aa", "on", "aa-on"],
+];
+
+let postPending = null;
+async function setPost(group, key, value) {
+  const saved = { ...(prefs.get("post") || {}) };
+  saved[group] = { ...(saved[group] || {}), [key]: value };
+  prefs.set("post", saved);
+  // One chain, even if three sliders move before it has finished loading
+  postPending ||= viewer.effects();
+  const fx = await postPending;
+  fx.set(group, key, value);
+  viewer.invalidate();
+}
+
+for (const [group, key, id] of POST_CONTROLS) {
+  const el = $(id);
+  if (!el) continue;
+  const isCheck = el.type === "checkbox";
+  el.addEventListener(isCheck ? "change" : "input", () =>
+    setPost(group, key, isCheck ? el.checked : Number(el.value))
+  );
+}
+
+// Restore what was left on, and only then: a saved set that is entirely off
+// must not drag the chain in at launch.
+{
+  const saved = prefs.get("post");
+  const wanted = saved && Object.values(saved).some((g) => g && g.on);
+  for (const [group, key, id] of POST_CONTROLS) {
+    const value = saved?.[group]?.[key];
+    if (value === undefined || !$(id)) continue;
+    if ($(id).type === "checkbox") $(id).checked = !!value;
+    else $(id).value = String(value);
+  }
+  if (wanted) {
+    postPending = viewer.effects();
+    postPending.then((fx) => {
+      fx.apply(saved);
+      viewer.invalidate();
+    });
+  }
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
   if (library?.isOpen && e.code !== "KeyB") return;

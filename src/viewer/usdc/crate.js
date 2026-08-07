@@ -287,6 +287,24 @@ export class CrateFile {
           for (let i = 0; i < 4; i++) m[i * 5] = d[i];
           return m;
         }
+        // A short vector whose components are small whole numbers is packed one
+        // signed byte per component. Reading it as a plain number turns a black
+        // specular colour into the number zero, and a default normal of
+        // (0, 0, 1) into 65536, both of which then mean nothing.
+        case T.Vec2f:
+        case T.Vec2d:
+        case T.Vec2i:
+          return inlineVector(rep.payload, 2);
+        case T.Vec3f:
+        case T.Vec3d:
+        case T.Vec3i:
+          return inlineVector(rep.payload, 3);
+        case T.Vec4f:
+        case T.Vec4d:
+        case T.Vec4i:
+        case T.Quatf:
+        case T.Quatd:
+          return inlineVector(rep.payload, 4);
         default:
           return rep.payload;
       }
@@ -398,6 +416,16 @@ export class CrateFile {
 }
 
 const utf8 = (bytes) => new TextDecoder().decode(bytes);
+
+/** One signed byte per component, which is how short vectors are inlined. */
+function inlineVector(payload, size) {
+  const out = new Float32Array(size);
+  for (let i = 0; i < size; i++) {
+    const byte = (payload / 2 ** (8 * i)) & 0xff;
+    out[i] = byte > 127 ? byte - 256 : byte;
+  }
+  return out;
+}
 
 const encodedSize = (count, wide) =>
   (wide ? 8 : 4) + Math.ceil((count * 2) / 8) + count * (wide ? 8 : 4);

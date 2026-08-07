@@ -70,6 +70,11 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
     const materialPath = Array.isArray(target) ? target[0] : target;
     const material = getMaterial(materialPath);
 
+    // Whether the back of a surface is drawn at all. USD says single sided
+    // unless told otherwise, and an open mouth or a cloak reads as holes when
+    // that is guessed rather than read.
+    if (valueAt(`${primPath}.doubleSided`) === true) material.side = THREE.DoubleSide;
+
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = primPath.split("/").pop();
     mesh.applyMatrix4(worldMatrix(primPath));
@@ -100,76 +105,137 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
     return out;
   }
 
+  /**
+   * Read one input of the surface shader.
+   *
+   * An input either states a value or is wired to another shader. Following the
+   * wire is what tells a diffuse texture from a normal map: they are both an
+   * `inputs:file` on some texture reader, and taking whichever came last put
+   * normal maps in the albedo slot.
+   *
+   * @returns {{value: *}|{file: string}|null}
+   */
+  function readInput(shaderPath, name) {
+    const fields = fieldsAt(`${shaderPath}.${name}`);
+    if (!fields) return null;
+
+    const wired = crate.value(fields.connectionPaths) || crate.value(fields.connectionChildren);
+    const target = Array.isArray(wired) ? wired[0] : wired;
+    if (target) {
+      // The wire lands on an output; the reader is the prim that owns it.
+      const reader = target.split(".")[0];
+      const file = valueAt(`${reader}.inputs:file`);
+      if (file) return { file, reader };
+    }
+    if (fields.default) return { value: crate.value(fields.default) };
+    return null;
+  }
+
   function getMaterial(materialPath) {
     if (!materialPath) return defaultMaterial();
     if (materials.has(materialPath)) return materials.get(materialPath);
 
-    const material = new THREE.MeshStandardMaterial({
+    // UsdPreviewSurface's own defaults, so a file that states nothing lands
+    // where the specification says it should.
+    const material = new THREE.MeshPhysicalMaterial({
       name: materialPath.split("/").pop(),
       color: 0xffffff,
-      // UsdPreviewSurface's own defaults, so a file that states nothing lands
-      // where the specification says it should.
       roughness: 0.5,
       metalness: 0,
       envMapIntensity: 1,
     });
-    let glossiness = null;
-    let hasRoughness = false;
 
-    // Walk the shader network below the material and take what is useful.
-    for (const spec of crate.specs) {
-      if (!spec.path.startsWith(materialPath + "/")) continue;
-      const name = spec.path.slice(spec.path.lastIndexOf(".") + 1);
-      const fields = crate.fieldsOf(spec);
-      if (name === "inputs:file") {
-        const file = crate.value(fields.default);
-        const url = file && resolveTexture ? resolveTexture(file) : null;
-        if (url) {
-          const texture = url.isTexture ? url : new THREE.TextureLoader().load(url);
-          texture.colorSpace = THREE.SRGBColorSpace;
-          // USD st coordinates start at the bottom left of the image, which is
-          // three's default orientation. Forcing flipY off is the glTF
-          // convention and turns every USD texture upside down.
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
-          material.map = texture;
-          material.needsUpdate = true;
+    // The surface shader is whatever the material's surface output points at,
+    // falling back to the one shader below it that says it is a preview surface.
+    const surface =
+      readInput(materialPath, "outputs:surface")?.reader ||
+      crate.specs.find(
+        (s) =>
+          s.path.startsWith(`${materialPath}/`) &&
+          s.path.endsWith(".info:id") &&
+          crate.value(crate.fieldsOf(s).default) === "UsdPreviewSurface"
+      )?.path.split(".")[0];
+    if (!surface) {
+      materials.set(materialPath, material);
+      return material;
+    }
+
+    const texture = (file, srgb) => {
+      const url = resolveTexture ? resolveTexture(file) : null;
+      if (!url) return null;
+      const tex = url.isTexture ? url : new THREE.TextureLoader().load(url);
+      // USD st coordinates start at the bottom left of the image, which is
+      // three's default orientation. Forcing flipY off is the glTF convention
+      // and turns every USD texture upside down.
+      tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    };
+
+    const wire = (name, slot, srgb, apply) => {
+      const input = readInput(surface, name);
+      if (!input) return false;
+      if (input.file) {
+        const tex = texture(input.file, srgb);
+        if (tex) {
+          material[slot] = tex;
+          return true;
         }
-      } else if (name === "inputs:diffuseColor" && !material.map) {
-        const c = crate.value(fields.default);
-        if (c && c.length >= 3) material.color.setRGB(c[0], c[1], c[2]);
-      } else if (name === "inputs:roughness") {
-        const v = crate.value(fields.default);
-        if (typeof v === "number") {
-          material.roughness = v;
-          hasRoughness = true;
-        }
-      } else if (name === "inputs:glossiness") {
-        // UsdPreviewSurface has two workflows, and half the packages in the
-        // wild use the specular one: it states glossiness where the other
-        // states roughness. Ignoring it left every such surface at the default,
-        // which on a rough hide reads as a white sheen of reflected
-        // environment that the file never asked for.
-        const v = crate.value(fields.default);
-        if (typeof v === "number") glossiness = v;
-      } else if (name === "inputs:metallic") {
-        const v = crate.value(fields.default);
-        if (typeof v === "number") material.metalness = v;
-      } else if (name === "inputs:opacity") {
-        const v = crate.value(fields.default);
-        if (typeof v === "number" && v < 1) {
-          material.transparent = true;
-          material.opacity = v;
-        }
+        return false;
+      }
+      apply?.(input.value);
+      return false;
+    };
+
+    const textured = wire("inputs:diffuseColor", "map", true, (v) => {
+      if (v?.length >= 3) material.color.setRGB(v[0], v[1], v[2]);
+    });
+    if (textured) material.color.setRGB(1, 1, 1);
+
+    wire("inputs:normal", "normalMap", false);
+    wire("inputs:occlusion", "aoMap", false);
+    wire("inputs:emissiveColor", "emissiveMap", true, (v) => {
+      if (v?.length >= 3 && (v[0] || v[1] || v[2])) material.emissive.setRGB(v[0], v[1], v[2]);
+    });
+    wire("inputs:metallic", "metalnessMap", false, (v) => {
+      if (typeof v === "number") material.metalness = v;
+    });
+
+    // Two workflows exist and half the packages use the specular one, which
+    // states glossiness where the other states roughness.
+    let roughnessSet = wire("inputs:roughness", "roughnessMap", false, (v) => {
+      if (typeof v === "number") {
+        material.roughness = v;
+        roughnessSet = true;
+      }
+    });
+    if (!roughnessSet) {
+      const gloss = readInput(surface, "inputs:glossiness");
+      if (typeof gloss?.value === "number") {
+        material.roughness = Math.min(1, Math.max(0, 1 - gloss.value));
       }
     }
 
-    // Applied after the walk: the two workflows can both appear in one file,
-    // and an explicit roughness is the more direct statement of the two.
-    if (glossiness !== null && !hasRoughness) {
-      material.roughness = Math.min(1, Math.max(0, 1 - glossiness));
+    // A black specular colour says the surface is matte. Leaving the dielectric
+    // default in place put a sheen of reflected environment on a rough hide
+    // that the file never asked for, which is the same mistake the glTF
+    // specular-glossiness path used to make.
+    const specular = readInput(surface, "inputs:specularColor");
+    if (specular && !specular.file && specular.value?.length >= 3) {
+      const v = specular.value;
+      material.specularIntensity = Math.min(1, Math.max(0, Math.max(v[0], v[1], v[2]) * 2));
+      const peak = Math.max(v[0], v[1], v[2]);
+      if (peak > 0) material.specularColor.setRGB(v[0] / peak, v[1] / peak, v[2] / peak);
     }
 
+    const opacity = readInput(surface, "inputs:opacity");
+    if (opacity && !opacity.file && typeof opacity.value === "number" && opacity.value < 1) {
+      material.transparent = true;
+      material.opacity = opacity.value;
+    }
+
+    material.needsUpdate = true;
     materials.set(materialPath, material);
     return material;
   }

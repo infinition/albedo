@@ -21,6 +21,11 @@ const COPY_MAPS = [
   "lightMap",
 ];
 
+/** Perceived brightness of a colour, in plain sRGB. */
+function luminance(color) {
+  return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+}
+
 function shininessToRoughness(shininess) {
   // Blinn-Phong exponent to a perceptual roughness, the usual approximation
   const s = Math.max(0, Math.min(1000, shininess ?? 30));
@@ -45,7 +50,17 @@ export function normalizeMaterials(object) {
     const tint = mat.color ? mat.color.clone() : new THREE.Color(0xffffff);
     if (mat.map && tint.r === tint.g && tint.g === tint.b) tint.setRGB(1, 1, 1);
 
-    const std = new THREE.MeshStandardMaterial({
+    // How hard the highlight is, which Phong states and PBR would otherwise
+    // invent. An exporter writing a near black specular is saying the surface
+    // is matte; dropping that on the floor and keeping only the shininess gave
+    // every FBX a uniform plastic sheen, the veil over models that came from
+    // anywhere but glTF. This is the same correction the specular-glossiness
+    // path makes, so one asset now reads the same whatever it arrived in.
+    const specular = mat.isMeshPhongMaterial && mat.specular ? mat.specular : null;
+    const strength = specular ? luminance(specular) : null;
+    const physical = strength !== null;
+
+    const std = new (physical ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
       name: mat.name,
       color: tint,
       emissive: mat.emissive ? mat.emissive.clone() : new THREE.Color(0x000000),
@@ -72,6 +87,23 @@ export function normalizeMaterials(object) {
     if (mat.specularMap && !std.roughnessMap) {
       std.roughnessMap = mat.specularMap;
       std.roughness = 1;
+    }
+    if (physical) {
+      // A mid grey specular is what an exporter writes for an ordinary
+      // dielectric, so that maps to a full strength highlight and anything
+      // darker damps it. The hue is kept: a tinted specular is a decision.
+      //
+      // The reflection factor is folded in with it. Phong keeps the highlight
+      // and the environment reflection apart, and PBR does not: one term drives
+      // both. In a viewer lit by an environment, a file that says it reflects
+      // nothing is asking for no specular at all. Reading only the colour is
+      // what left the same alligator matte as glTF and varnished as FBX, since
+      // that exporter writes a bright specular next to a reflection factor of
+      // zero.
+      const reflect = mat.reflectivity ?? 1;
+      std.specularIntensity = Math.min(1, Math.max(0, strength * 2 * reflect));
+      const peak = Math.max(specular.r, specular.g, specular.b);
+      if (peak > 0) std.specularColor.setRGB(specular.r / peak, specular.g / peak, specular.b / peak);
     }
     // The same footing as glTF. Dimming the environment here was meant to keep
     // reflections subtle on formats not authored for IBL, and its real effect

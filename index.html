@@ -90,6 +90,9 @@
           <button class="tab" type="button" data-pane="decor" title="Décor" aria-label="Décor">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="4" /><path d="M3 19h18M6 15l3-3 3 3" /></svg>
           </button>
+          <button class="tab" type="button" data-pane="effects" title="Effets" aria-label="Effets">
+            <svg viewBox="0 0 24 24"><path d="M5 12h4l2-5 2 10 2-5h4"/></svg>
+          </button>
           <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
             <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
           </button>
@@ -246,6 +249,65 @@
               <button id="pedestal-refit" class="wide" type="button">Replacer automatiquement</button>
             </div>
           </div>
+        </section>
+        </div>
+
+        <div class="pane" data-pane="effects">
+        <p class="hint">Chargés à la demande : tant que rien n'est activé, la chaîne n'existe pas.</p>
+
+        <section>
+          <h2>Occlusion ambiante</h2>
+          <label class="check"><input type="checkbox" id="ao-on" /><span>Activer</span></label>
+          <label class="field"><span>Rayon</span>
+            <input type="range" id="ao-radius" min="0.05" max="1.5" step="0.01" value="0.25" /></label>
+          <label class="field"><span>Force</span>
+            <input type="range" id="ao-intensity" min="0" max="2" step="0.02" value="1" /></label>
+        </section>
+
+        <section>
+          <h2>Bloom</h2>
+          <label class="check"><input type="checkbox" id="bloom-on" /><span>Activer</span></label>
+          <label class="field"><span>Force</span>
+            <input type="range" id="bloom-strength" min="0" max="2" step="0.01" value="0.35" /></label>
+          <label class="field"><span>Rayon</span>
+            <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.4" /></label>
+          <label class="field"><span>Seuil</span>
+            <input type="range" id="bloom-threshold" min="0" max="1" step="0.01" value="0.85" /></label>
+        </section>
+
+        <section>
+          <h2>Profondeur de champ</h2>
+          <label class="check"><input type="checkbox" id="dof-on" /><span>Activer</span></label>
+          <label class="field"><span>Mise au point</span>
+            <input type="range" id="dof-focus" min="0.05" max="1.5" step="0.01" value="0.5" /></label>
+          <label class="field"><span>Ouverture</span>
+            <input type="range" id="dof-aperture" min="0" max="0.2" step="0.001" value="0.02" /></label>
+          <label class="field"><span>Flou maximal</span>
+            <input type="range" id="dof-maxblur" min="0" max="0.05" step="0.001" value="0.01" /></label>
+        </section>
+
+        <section>
+          <h2>Étalonnage</h2>
+          <label class="check"><input type="checkbox" id="grade-on" /><span>Activer</span></label>
+          <label class="field"><span>Contraste</span>
+            <input type="range" id="grade-contrast" min="0.5" max="2" step="0.01" value="1" /></label>
+          <label class="field"><span>Saturation</span>
+            <input type="range" id="grade-saturation" min="0" max="2" step="0.01" value="1" /></label>
+          <label class="field"><span>Température</span>
+            <input type="range" id="grade-temperature" min="-1" max="1" step="0.01" value="0" /></label>
+          <label class="field"><span>Vignettage</span>
+            <input type="range" id="grade-vignette" min="0" max="1" step="0.01" value="0.25" /></label>
+          <label class="field"><span>Grain</span>
+            <input type="range" id="grade-grain" min="0" max="0.3" step="0.005" value="0.04" /></label>
+          <label class="field"><span>Aberration chromatique</span>
+            <input type="range" id="grade-aberration" min="0" max="2" step="0.01" value="0" /></label>
+          <label class="field"><span>Netteté</span>
+            <input type="range" id="grade-sharpen" min="0" max="1" step="0.01" value="0.2" /></label>
+        </section>
+
+        <section>
+          <h2>Anticrénelage</h2>
+          <label class="check"><input type="checkbox" id="aa-on" checked /><span>SMAA sur l'image finale</span></label>
         </section>
         </div>
 

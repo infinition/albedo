@@ -208,6 +208,8 @@ export class Viewer {
     this.controls.target.copy(target);
     this.controls.enabled = enabled;
     this.controls.update();
+    // The passes hold the camera they were built with, not the viewer's field
+    this.post?.setCamera(this.camera);
     this.invalidate();
   }
 
@@ -239,6 +241,7 @@ export class Viewer {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     }
+    this.post?.setSize(w, h);
     this.invalidate();
   }
 
@@ -263,7 +266,36 @@ export class Viewer {
     if (this.controls.enableDamping) this.controls.update();
     if (!this.needsRender) return;
     this.needsRender = false;
-    this.renderer.render(this.scene, this.camera);
+    this.draw(dt);
+  }
+
+  /**
+   * One frame, through the effect chain when there is one to go through.
+   *
+   * Grain moves on its own, so the chain asks for a frame of its own accord;
+   * everything else still redraws only when something changed.
+   */
+  draw(dt = 0) {
+    if (this.post?.active) {
+      this.post.render(dt);
+      if (this.post.settings.grade.on && this.post.settings.grade.grain > 0) this.needsRender = true;
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
+  }
+
+  /**
+   * Bring up the effect chain, once, the first time one is asked for.
+   * @returns {Promise<import("./post.js").PostFx>}
+   */
+  async effects() {
+    if (!this.post) {
+      const { PostFx } = await import("./post.js");
+      this.post = await PostFx.create(this);
+      const size = this.renderer.getSize(new THREE.Vector2());
+      this.post.setSize(size.x, size.y);
+    }
+    return this.post;
   }
 
   clear() {
@@ -1010,7 +1042,10 @@ export class Viewer {
       this.camera.updateProjectionMatrix();
     }
     this.frame(new THREE.Box3().setFromObject(this.current));
-    this.renderer.render(this.scene, this.camera);
+    // Through the same chain the window uses, so a thumbnail is the picture the
+    // viewer would show and not a plainer cousin of it.
+    this.post?.setSize(draw, draw);
+    this.draw(0);
 
     const gl = this.renderer.getContext();
     const w = gl.drawingBufferWidth;
