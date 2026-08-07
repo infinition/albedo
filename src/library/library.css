@@ -19,6 +19,21 @@
   transition: opacity 0.16s ease;
 }
 #library.open { opacity: 1; pointer-events: auto; }
+/* With the preview on, the library stops at the strip the viewer draws in */
+body.peeking #library { right: var(--peek, 380px); }
+
+.lib-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+  display: none;
+}
+body.peeking .lib-handle { display: block; }
+.lib-handle:hover { background: var(--accent); opacity: 0.5; }
 
 /* --- bar ------------------------------------------------------------------ */
 
@@ -131,6 +146,10 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* A grid cell and a flex child both size to their content unless told
+     otherwise, so the grid grew past the window instead of scrolling inside
+     it: with many assets there was simply nothing left to scroll. */
+  min-height: 0;
 }
 .lib-filters {
   display: flex;
@@ -146,6 +165,7 @@
 
 .lib-grid {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 14px;

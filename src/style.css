@@ -35,10 +35,37 @@ body {
 
 #app { position: relative; }
 
+#stage {
+  position: absolute;
+  inset: 0;
+}
+/* The preview strip: the library gives up its right edge and the viewer, the
+   real one with its own controls, draws there. Nothing is duplicated. */
+body.peeking #stage {
+  left: auto;
+  width: var(--peek, 380px);
+}
+
 #view {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+#peek-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: #1a1d23;
+  background-image:
+    linear-gradient(45deg, #23272f 25%, transparent 25%),
+    linear-gradient(-45deg, #23272f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #23272f 75%),
+    linear-gradient(-45deg, transparent 75%, #23272f 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
 /* --- floating chrome ------------------------------------------------------ */
@@ -54,6 +81,9 @@ body {
 /* Hide every overlay: a viewer should be able to show only the model. */
 body.clean #chrome,
 body.clean #inspector { opacity: 0; pointer-events: none; }
+
+/* The inspector is wider than the preview strip and would swallow it whole */
+body.peeking #inspector { display: none; }
 
 .ov {
   position: absolute;

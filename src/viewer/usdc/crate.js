@@ -397,6 +397,21 @@ export class CrateFile {
         for (let i = 0; i < count; i++) out[i] = this.tokens[this.view.getUint32(p + i * 4, true)];
         return out;
       }
+      // One matrix per joint is how a skeleton states its bind and rest poses
+      case T.Matrix4d: {
+        const out = new Array(count);
+        for (let i = 0; i < count; i++) {
+          const m = new Float64Array(16);
+          for (let k = 0; k < 16; k++) m[k] = this.view.getFloat64(p + (i * 16 + k) * 8, true);
+          out[i] = m;
+        }
+        return out;
+      }
+      case T.Quatf: {
+        const out = new Float32Array(count * 4);
+        for (let i = 0; i < out.length; i++) out[i] = this.view.getFloat32(p + i * 4, true);
+        return out;
+      }
       default:
         return null;
     }

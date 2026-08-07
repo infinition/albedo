@@ -1301,6 +1301,7 @@ async function toggleLibrary() {
   if (!library) {
     const { createLibrary } = await import("./library/index.js");
     library = createLibrary({ tauri, prefs, onOpen: (path) => openPath(path) });
+    // The preview strip loads into this very viewer, so nothing is duplicated
     library.show();
     return;
   }

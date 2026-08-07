@@ -48,9 +48,12 @@ const SHELL = `
       <option value="size">Taille</option>
       <option value="format">Format</option>
     </select>
-    <label class="lib-size" title="Taille des vignettes">
+    <label class="lib-size" title="Taille des vignettes, Ctrl + molette dans la grille">
       <input type="range" min="84" max="320" step="4" value="132" data-el="zoom" />
     </label>
+    <button class="icon" data-el="peek" title="Volet d'aperçu" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M15 5v14"/></svg>
+    </button>
     <button class="icon" data-el="close" title="Retour au viewer (Échap)">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
@@ -70,6 +73,8 @@ const SHELL = `
     <div class="lib-grid" data-el="grid"></div>
     <div class="lib-detail" data-el="detail"></div>
   </main>
+
+  <div class="lib-handle" data-el="handle" title="Largeur de l'aperçu"></div>
 `;
 
 /**
@@ -103,6 +108,7 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     query: "",
     selected: null,
     open: false,
+    peek: false,
   };
 
   el.sort.value = state.sort;
@@ -438,6 +444,7 @@ export function createLibrary({ tauri, onOpen, prefs }) {
       for (const other of el.grid.children) other.classList.remove("selected");
       node.classList.add("selected");
       paintDetail();
+      if (state.peek) peek(entry);
     });
     node.addEventListener("dblclick", () => open(entry));
     observer.observe(art);
@@ -544,6 +551,70 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     console.warn("[albedo] bibliothèque :", message);
   }
 
+  // --- preview strip -----------------------------------------------------
+  //
+  // One click shows the asset without leaving the grid. The strip is not a
+  // second viewer: the library gives up its right edge and the real one draws
+  // there, with its own navigation, lighting and inspector. A texture is not a
+  // scene, so it is shown as the picture it is.
+
+  let peekTimer = null;
+
+  function peek(entry) {
+    clearTimeout(peekTimer);
+    if (!entry) return;
+    if (entry.kind === "texture") {
+      const image = document.getElementById("peek-image");
+      if (image) {
+        image.src = tauri ? tauri.core.convertFileSrc(entry.path) : entry.path;
+        image.hidden = false;
+      }
+      return;
+    }
+    const image = document.getElementById("peek-image");
+    if (image) image.hidden = true;
+    // A click that only passes through on its way elsewhere should not cost a
+    // full load, so the strip waits to see whether the selection settles.
+    peekTimer = setTimeout(() => onOpen(entry.path, { keepLibrary: true }), 180);
+  }
+
+  function setPeek(on, remember = true) {
+    state.peek = !!on;
+    document.body.classList.toggle("peeking", state.peek);
+    el.peek.classList.toggle("active", state.peek);
+    el.peek.setAttribute("aria-pressed", String(state.peek));
+    if (!state.peek) {
+      const image = document.getElementById("peek-image");
+      if (image) image.hidden = true;
+    }
+    if (remember) prefs?.set?.("libPeek", state.peek);
+    // The viewer sizes itself to its box, which just changed
+    window.dispatchEvent(new Event("resize"));
+    if (state.peek && state.selected) peek(state.selected);
+  }
+
+  el.peek.addEventListener("click", () => setPeek(!state.peek));
+
+  /** Drag the edge; the width is the user's, and it is remembered. */
+  el.handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    el.handle.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const width = Math.min(window.innerWidth - 320, Math.max(220, window.innerWidth - ev.clientX));
+      document.documentElement.style.setProperty("--peek", `${Math.round(width)}px`);
+      window.dispatchEvent(new Event("resize"));
+    };
+    const up = () => {
+      el.handle.releasePointerCapture(e.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const width = parseInt(document.documentElement.style.getPropertyValue("--peek"), 10);
+      if (width) prefs?.set?.("libPeekWidth", width);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+
   // --- wiring ------------------------------------------------------------
   el.search.addEventListener("input", () => {
     state.query = el.search.value;
@@ -555,24 +626,47 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     prefs?.set?.("libSort", state.sort);
     paint();
   });
-  el.zoom.addEventListener("input", () => {
-    el.grid.style.setProperty("--card", `${el.zoom.value}px`);
-    prefs?.set?.("libZoom", Number(el.zoom.value));
-  });
+  function setZoom(px) {
+    const value = Math.min(Number(el.zoom.max) || 320, Math.max(Number(el.zoom.min) || 84, Math.round(px)));
+    el.zoom.value = String(value);
+    el.grid.style.setProperty("--card", `${value}px`);
+    prefs?.set?.("libZoom", value);
+    return value;
+  }
+  el.zoom.addEventListener("input", () => setZoom(Number(el.zoom.value)));
+
+  // Ctrl and the wheel resizes the cards, the gesture every file browser and
+  // map uses. Without the modifier the wheel keeps scrolling the grid.
+  el.grid.addEventListener(
+    "wheel",
+    (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom(Number(el.zoom.value) * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+    },
+    { passive: false }
+  );
   el.close.addEventListener("click", () => hide());
 
   function show() {
     state.open = true;
     host.classList.add("open");
     document.body.classList.add("library-open");
+    if (state.peek) document.body.classList.add("peeking");
     el.search.focus();
     if (!state.roots.length) loadRoots();
+    window.dispatchEvent(new Event("resize"));
   }
 
   function hide() {
     state.open = false;
     host.classList.remove("open");
     document.body.classList.remove("library-open");
+    // The strip belongs to the library; the viewer takes its window back
+    document.body.classList.remove("peeking");
+    const image = document.getElementById("peek-image");
+    if (image) image.hidden = true;
+    window.dispatchEvent(new Event("resize"));
   }
 
   window.addEventListener("keydown", (e) => {
@@ -582,6 +676,12 @@ export function createLibrary({ tauri, onOpen, prefs }) {
       hide();
     }
   });
+
+  const savedWidth = prefs?.get?.("libPeekWidth");
+  if (savedWidth) document.documentElement.style.setProperty("--peek", `${savedWidth}px`);
+  state.peek = !!prefs?.get?.("libPeek");
+  el.peek.classList.toggle("active", state.peek);
+  el.peek.setAttribute("aria-pressed", String(state.peek));
 
   loadRoots();
   // Pictures nothing can reach any more, dropped once, off the critical path

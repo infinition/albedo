@@ -29,7 +29,6 @@ const LANES = 2;
 
 const pending = [];
 let running = 0;
-const urls = new Set();
 let preview = null;
 let previewIdle = null;
 
@@ -55,7 +54,7 @@ function pump() {
 }
 
 export async function thumbnailFor(entry, { call, tauri, size }) {
-  if (entry.kind === "texture") return texturePicture(entry, { tauri });
+  if (entry.kind === "texture") return texturePicture(entry, { call, tauri, size });
 
   const hits = await call("thumbnails_lookup", { paths: [entry.path], size }).catch(() => null);
   const cached = hits?.[0]?.cached;
@@ -67,10 +66,8 @@ export async function thumbnailFor(entry, { call, tauri, size }) {
 
 const srcFor = (path, tauri) => (tauri ? tauri.core.convertFileSrc(path) : path);
 
-/** Drop the object URLs made for exotic textures. */
+/** Let go of the WebGL surface kept for decoding exotic textures. */
 export function releaseThumbnails() {
-  for (const url of urls) URL.revokeObjectURL(url);
-  urls.clear();
   disposePreview();
 }
 
@@ -78,11 +75,24 @@ export function releaseThumbnails() {
 // Textures
 // ---------------------------------------------------------------------------
 
-async function texturePicture(entry, { tauri }) {
+async function texturePicture(entry, { call, tauri, size }) {
   const src = srcFor(entry.path, tauri);
   if (NATIVE.test(entry.path)) return src;
+
+  // The decoded picture joins the models' cache rather than living in memory:
+  // a DDS was otherwise decoded on the GPU again at every visit, and again at
+  // every search that repainted the grid.
+  const hits = await call("thumbnails_lookup", { paths: [entry.path], size }).catch(() => null);
+  const cached = hits?.[0]?.cached;
+  if (cached) return srcFor(cached, tauri);
+
   try {
-    return await decodeExotic(src, entry.ext);
+    const picture = await decodeExotic(src, entry.ext);
+    if (!picture) return null;
+    const stored = await call("thumbnail_save", { path: entry.path, size, data: picture }).catch(
+      () => null
+    );
+    return stored ? srcFor(stored, tauri) : picture;
   } catch (_) {
     return null;
   }
@@ -113,16 +123,12 @@ async function decodeExotic(url, ext) {
   surface.mesh.scale.set(aspect >= 1 ? 1 : aspect, aspect >= 1 ? 1 / aspect : 1, 1);
 
   surface.renderer.render(surface.scene, surface.camera);
-  const blob = await new Promise((resolve) =>
-    surface.renderer.domElement.toBlob(resolve, "image/png")
-  );
+  // A data URL rather than a blob: it is what the cache stores, and it needs no
+  // revoking if the picture never reaches the disk.
+  const picture = surface.renderer.domElement.toDataURL("image/png");
   texture.dispose();
   scheduleDispose();
-  if (!blob) return null;
-
-  const objectUrl = URL.createObjectURL(blob);
-  urls.add(objectUrl);
-  return objectUrl;
+  return picture;
 }
 
 async function loadTexture(url, ext) {

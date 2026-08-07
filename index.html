@@ -8,7 +8,12 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="view"></canvas>
+      <!-- The render surface has its own box so the library can hand it a
+           strip of the window without either one moving the other. -->
+      <div id="stage">
+        <canvas id="view"></canvas>
+        <img id="peek-image" alt="" hidden />
+      </div>
 
       <!-- Empty state ------------------------------------------------------->
       <div id="empty">
