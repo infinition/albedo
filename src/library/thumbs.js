@@ -31,18 +31,38 @@ const pending = [];
 let running = 0;
 let preview = null;
 let previewIdle = null;
+/**
+ * Which repaint the queued work belongs to.
+ *
+ * Every miss costs a process, so a queue of them is a queue of processes. Walk
+ * three folders quickly and the third one waits behind renders nobody will ever
+ * look at. Work is stamped with the repaint that asked for it and dropped when
+ * a newer one arrives.
+ */
+let era = 0;
+
+/** Forget what was asked for before now. Nothing already running is killed. */
+export function cancelPending() {
+  era++;
+  for (const item of pending.splice(0)) item.resolve(null);
+}
 
 /** Run at most LANES renders at a time; the rest wait their turn. */
 function enqueue(job) {
+  const mine = era;
   return new Promise((resolve, reject) => {
-    pending.push({ job, resolve, reject });
+    pending.push({ job, resolve, reject, era: mine });
     pump();
   });
 }
 
 function pump() {
   while (running < LANES && pending.length) {
-    const { job, resolve, reject } = pending.shift();
+    const { job, resolve, reject, era: asked } = pending.shift();
+    if (asked !== era) {
+      resolve(null);
+      continue;
+    }
     running++;
     job()
       .then(resolve, reject)

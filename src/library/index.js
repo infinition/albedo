@@ -1,5 +1,5 @@
 import "./library.css";
-import { thumbnailFor, releaseThumbnails } from "./thumbs.js";
+import { thumbnailFor, releaseThumbnails, cancelPending } from "./thumbs.js";
 
 /**
  * The asset manager.
@@ -75,6 +75,9 @@ const SORTS = {
 
 const SHELL = `
   <div class="lib-bar">
+    <button class="icon lib-drawer" data-el="drawer" title="Dossiers et tags" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
     <span class="lib-title">Bibliothèque</span>
     <label class="lib-search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -487,6 +490,9 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   let observer = null;
 
   function paint() {
+    // Pictures asked for by the previous view are of no use now, and each one
+    // that is still missing costs a process to make.
+    cancelPending();
     const beforeFormat = visibleEntries();
     paintFormats(beforeFormat);
     const list = state.format ? beforeFormat.filter((e) => e.ext === state.format) : beforeFormat;
@@ -797,6 +803,15 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     },
     { passive: false }
   );
+  // On a narrow window the sidebar is a drawer rather than a column
+  el.drawer.addEventListener("click", () => {
+    const open = host.classList.toggle("browsing");
+    el.drawer.setAttribute("aria-pressed", String(open));
+  });
+  // Picking something is the end of browsing, so the drawer gets out of the way
+  el.tree.addEventListener("click", () => host.classList.remove("browsing"));
+  el.tags.addEventListener("click", () => host.classList.remove("browsing"));
+
   el.grid.addEventListener("scroll", growIfNeeded, { passive: true });
   el.close.addEventListener("click", () => hide());
 

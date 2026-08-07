@@ -78,6 +78,8 @@ body.peeking .lib-handle { display: block; }
   pointer-events: none;
 }
 
+.lib-drawer { display: none; place-items: center; }
+
 .lib-size { display: flex; align-items: center; gap: 6px; }
 .lib-size input[type="range"] { width: 96px; }
 
@@ -360,4 +362,37 @@ body.peeking .lib-handle { display: block; }
 
 @media (max-width: 860px) {
   #library { grid-template-columns: 180px 1fr; }
+}
+
+
+/* --- narrow windows -------------------------------------------------------- */
+
+@media (max-width: 980px) {
+  #library { grid-template-columns: 190px 1fr; }
+}
+
+/* Below this the sidebar is half the window, so it becomes a drawer that
+   slides over the grid instead of squeezing it. */
+@media (max-width: 760px) {
+  #library { grid-template-columns: 1fr; grid-template-areas: "bar" "main"; }
+  .lib-side {
+    position: absolute;
+    top: 48px;
+    bottom: 0;
+    left: 0;
+    width: 230px;
+    z-index: 3;
+    background: var(--panel-solid, #16191e);
+    box-shadow: 6px 0 24px rgba(0, 0, 0, 0.45);
+    transform: translateX(-100%);
+    transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+  #library.browsing .lib-side { transform: none; }
+  .lib-drawer { display: grid; }
+  .lib-title { display: none; }
+}
+
+@media (max-width: 560px) {
+  .lib-size, .lib-bar select { display: none; }
+  .lib-detail { flex-wrap: wrap; }
 }

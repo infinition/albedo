@@ -568,8 +568,47 @@ details[open] summary::before { content: "▾ "; }
   to { transform: translateX(400%); }
 }
 
+/* --- narrow windows -------------------------------------------------------
+ *
+ * The overlays sit in the four corners with a scrubber centred between the
+ * bottom two. That holds while there is room for all three; below about nine
+ * hundred pixels the scrubber reaches the navigation controls and they overlap.
+ * Rather than shrink everything into illegibility, the layout gives up the
+ * least useful thing first: the statistics, then the centred position, then the
+ * inspector's habit of sitting beside the model instead of over it.
+ */
+
+@media (max-width: 1100px) {
+  #inspector { width: 264px; }
+  body.inspector .ov-tr { right: calc(264px + var(--gap) * 2); }
+}
+
 @media (max-width: 900px) {
-  #inspector { width: 250px; }
-  #timeline { width: 70vw; }
+  #timeline { width: min(560px, 78vw); }
+  /* Lifted clear of the corner groups, which is cheaper than hiding either */
+  #timeline { bottom: calc(var(--gap) * 2 + 34px); }
+  .ov-br { opacity: 0.55; }
   .empty-formats { display: none; }
+}
+
+@media (max-width: 720px) {
+  :root { --gap: 10px; }
+  #inspector {
+    width: auto;
+    left: var(--gap);
+    transform: translateY(calc(100% + var(--gap)));
+  }
+  #inspector.open { transform: none; }
+  body.inspector .ov-tr { right: var(--gap); }
+  /* A panel that covers the model leaves nothing to look at behind it */
+  body.inspector #chrome { opacity: 0; pointer-events: none; }
+  body.inspector .ov-tr { opacity: 1; pointer-events: auto; }
+  #timeline { width: calc(100vw - var(--gap) * 2); }
+  .ov-br { display: none; }
+  .ov-tl { max-width: calc(100vw - 150px); }
+}
+
+@media (max-height: 520px) {
+  /* A short window has no room for a raised scrubber */
+  #timeline { bottom: var(--gap); width: min(460px, 52vw); }
 }
