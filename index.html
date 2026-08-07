@@ -74,14 +74,28 @@
 
       <!-- Inspector --------------------------------------------------------->
       <aside id="inspector" aria-hidden="true">
+        <nav id="tabs" class="tabs" role="tablist" aria-label="Sections de l'inspecteur">
+          <button class="tab active" type="button" data-pane="render" title="Rendu" aria-label="Rendu">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
+          </button>
+          <button class="tab" type="button" data-pane="matter" title="Matières" aria-label="Matières">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M7 15a7 7 0 0 1 8-6" /></svg>
+          </button>
+          <button class="tab" type="button" data-pane="camera" title="Caméra" aria-label="Caméra">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4v8l6 4" /></svg>
+          </button>
+          <button class="tab" type="button" data-pane="decor" title="Décor" aria-label="Décor">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="4" /><path d="M3 19h18M6 15l3-3 3 3" /></svg>
+          </button>
+          <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
+          </button>
+        </nav>
+
+        <div class="pane active" data-pane="render">
         <section>
           <h2>Canaux</h2>
           <div class="grid" id="channels"></div>
-        </section>
-
-        <section id="materials-section" hidden>
-          <h2>Matériaux</h2>
-          <div id="materials"></div>
         </section>
 
         <section>
@@ -95,7 +109,17 @@
             <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" />
           </label>
         </section>
+        </div>
 
+        <div class="pane" data-pane="matter">
+        <section id="materials-section" hidden>
+          <h2>Matériaux</h2>
+          <div id="materials"></div>
+        </section>
+        <p class="hint" id="matter-empty">Ouvre un modèle pour voir ses matières.</p>
+        </div>
+
+        <div class="pane" data-pane="camera">
         <section>
           <h2>Caméra</h2>
           <div class="row">
@@ -110,7 +134,9 @@
           </label>
           <p class="hint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
         </section>
+        </div>
 
+        <div class="pane" data-pane="decor">
         <section>
           <h2>Environnement</h2>
           <div class="row">
@@ -192,7 +218,9 @@
             </div>
           </div>
         </section>
+        </div>
 
+        <div class="pane" data-pane="scene">
         <section>
           <h2>Périphériques</h2>
           <div class="row">
@@ -218,8 +246,14 @@
 
         <section>
           <h2>Scène</h2>
+          <p id="dimensions" class="hint mono">—</p>
+          <div class="row">
+            <button id="btn-export" class="wide" type="button" disabled>Exporter en glTF</button>
+          </div>
+          <p id="export-note" class="hint"></p>
           <div id="tree" class="tree">—</div>
         </section>
+        </div>
       </aside>
     </div>
     <script type="module" src="/src/main.js"></script>

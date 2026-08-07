@@ -159,8 +159,9 @@ Three things do the work:
   which loads a model in a window that is never shown, renders one square image
   and exits.
 - A disk cache under `%LOCALAPPDATA%\Albedo\thumbnails`, keyed on the path, the
-  size and the modification time, so an edited model misses the cache instead of
-  showing yesterday's picture.
+  size, the modification time and a render epoch, so an edited model misses the
+  cache instead of showing yesterday's picture, and so does every stored image
+  when the viewer itself starts drawing differently.
 
 Every format reader lives in the frontend, so the alternative would have been a
 second renderer in the DLL, kept in step with the first. Delegating means the
@@ -249,6 +250,10 @@ file name and render mode top left, inspector and fullscreen top right,
 navigation bottom left, statistics bottom right, and a timeline at the bottom
 centre that only appears when there is an animation to scrub.
 
+The inspector is five panes behind five icons, one on screen at a time: render,
+matter, camera, decor, scene. It grew to eight stacked sections and reaching the
+stand meant scrolling past the camera. Which pane was open is remembered.
+
 ## Building
 
 ```bash
@@ -280,7 +285,8 @@ confirmed on the real thing.
 | PBR / unlit toggle | [x] | Both buttons drive the channel state |
 | Per material PBR / unlit | [x] | Alligator body unlit while its eyes stay PBR |
 | Unlit keeps vertex colours | [x] | Carried through on a PLY that has them |
-| Unlit keeps alpha and blending | [ ] | Written, not compared side by side on a masked asset |
+| Unlit keeps alpha and blending | [x] | On a model carrying both a cutout and a blend: alpha test, blending, depth write, side and texture all survive |
+| Same materials whatever the container | [x] | The same alligator reports the same roughness and tint as glTF, USDZ and FBX |
 | Eleven inspection channels | [x] | Rendered offscreen one by one: 9 distinct images, the two pairs that match being constants on that model |
 | Point clouds counted in the statistics | [x] | 2000 points reported for PCD and XYZ, which read as an empty scene before |
 | Wireframe, grid, bounding box, skeleton | [x] | Toggles verified |
@@ -358,16 +364,21 @@ confirmed on the real thing.
 - [x] Shell integration: open with, drag and drop, command line
 - [x] No console window, GUI subsystem in every build
 - [x] Windows shell thumbnails, rendered by the viewer itself and cached on disk
+- [x] Export to glTF, so anything readable becomes portable
+- [x] Dimensions, so a file that arrived in the wrong unit says so
+- [x] Environment: studio probe, editable gradient or HDR panorama, with what
+      lights the model kept separate from what sits behind it
+- [x] Settings that outlive the window, in roaming AppData
 
 ### Next
 
 - [ ] **Asset manager.** Grid of thumbnails, folder tree, tags and search over
       a library. The thumbnails it would show already exist.
+- [ ] Custom lights, with the gizmo the stand already uses.
+- [ ] Cross sections, alongside the dimensions already shown.
 - [ ] USD animation and skinning. Geometry, transforms and materials are read;
       time samples and blend shapes are not.
 - [ ] NIF skinning applied at load, rather than showing the bind pose.
-- [ ] Measurement tools: dimensions, cross sections.
-- [ ] Export to glTF, so anything readable becomes portable.
 
 ## Layout
 

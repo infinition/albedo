@@ -131,6 +131,8 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
 
     setTitle(label);
     showStats(stats);
+    showDimensions();
+    $("btn-export").disabled = false;
     $("tree").textContent = viewer.sceneTree();
     paintMaterialList();
     $("empty").classList.add("hidden");
@@ -153,6 +155,26 @@ function setTitle(label, idle = false) {
   const badge = $("file-kind");
   badge.hidden = !kind;
   if (kind) badge.textContent = kind[1];
+}
+
+/**
+ * How big the thing actually is.
+ *
+ * A viewer that never says a size leaves the user guessing whether a model
+ * arrived in metres, centimetres or inches, which is the first thing that goes
+ * wrong when a file moves between packages.
+ */
+function showDimensions() {
+  const box = viewer.boxHelper.box;
+  if (!viewer.current || box.isEmpty()) {
+    $("dimensions").textContent = "—";
+    return;
+  }
+  const n = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(3));
+  const x = box.max.x - box.min.x;
+  const y = box.max.y - box.min.y;
+  const z = box.max.z - box.min.z;
+  $("dimensions").textContent = `${n(x)} × ${n(y)} × ${n(z)} unités`;
 }
 
 function showStats(stats, extra) {
@@ -469,6 +491,7 @@ function paintMaterialList() {
   const holder = $("materials");
   const list = viewer.current ? channels.materials() : [];
   $("materials-section").hidden = list.length === 0;
+  $("matter-empty").hidden = list.length > 0;
   holder.textContent = "";
 
   for (const { uuid, name, textured, alphaLost, invisible, deadVertexColors, hidden } of list) {
@@ -579,6 +602,81 @@ $("opt-exposure").addEventListener("input", (e) => {
   viewer.setExposure(Number(e.target.value));
   prefs.set("exposure", Number(e.target.value));
 });
+
+// --- export ---------------------------------------------------------------
+
+/**
+ * Write the loaded model back out as a binary glTF.
+ *
+ * The point of reading twenty formats is lost if none of them can leave again:
+ * a NIF from 2003 or a binary USD crate becomes a file any modern tool opens.
+ * The scene furniture is left out, only what was loaded is written.
+ */
+async function exportModel() {
+  if (!viewer.current) return;
+  const note = $("export-note");
+  note.textContent = "Export en cours…";
+  try {
+    const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+    const result = await new GLTFExporter().parseAsync(viewer.current, {
+      binary: true,
+      animations: viewer.clips || [],
+      // Skinned models need their bones, and three drops them otherwise
+      includeCustomExtensions: true,
+    });
+    const bytes = new Uint8Array(result);
+    const name = ($("file-name").textContent || "modele").replace(/\.[^.]+$/, "") + ".glb";
+
+    if (tauri) {
+      const path = await tauri.dialog.save({
+        defaultPath: name,
+        filters: [{ name: "glTF binaire", extensions: ["glb"] }],
+      });
+      if (!path) {
+        note.textContent = "";
+        return;
+      }
+      const { writeFile } = await import("@tauri-apps/plugin-fs");
+      await writeFile(path, bytes);
+      note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
+    } else {
+      const url = URL.createObjectURL(new Blob([bytes], { type: "model/gltf-binary" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+      note.textContent = `${name} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
+    }
+  } catch (e) {
+    note.textContent = `Export impossible : ${e.message || e}`;
+    console.warn("[albedo] export glTF:", e);
+  }
+}
+
+$("btn-export").addEventListener("click", exportModel);
+
+// --- inspector tabs -------------------------------------------------------
+
+/**
+ * One subject at a time.
+ *
+ * Eight sections stacked in a narrow column meant scrolling past the camera to
+ * reach the stand. The panes hold exactly the same controls; only one is on
+ * screen, and which one is remembered.
+ */
+function showPane(name, remember = true) {
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.classList.toggle("active", tab.dataset.pane === name);
+  }
+  for (const pane of document.querySelectorAll(".pane")) {
+    pane.classList.toggle("active", pane.dataset.pane === name);
+  }
+  if (remember) prefs.set("pane", name);
+}
+for (const tab of document.querySelectorAll(".tab")) {
+  tab.addEventListener("click", () => showPane(tab.dataset.pane));
+}
 
 // --- camera ---------------------------------------------------------------
 
@@ -887,6 +985,7 @@ $("btn-pedestal").addEventListener("click", async () => {
 /** Put the saved settings back, without writing them out again as we go. */
 function applyPrefs() {
   const p = prefs.all();
+  showPane(p.pane, false);
   $("opt-grid").checked = p.grid;
   viewer.setGrid(p.grid);
   $("opt-bounds").checked = p.bounds;

@@ -56,6 +56,14 @@ const EXTENSIONS: &[&str] = &[
 
 /// How long Explorer is made to wait for a model it has never seen.
 const RENDER_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Bumped whenever the viewer draws differently.
+///
+/// The cache is keyed on the file, which is right until the renderer itself
+/// changes: correcting how USD states roughness, or how bright an environment
+/// lights a model, leaves every stored image showing the old answer with no
+/// reason to expire. Raising this number retires them all at once.
+const RENDER_EPOCH: u32 = 2;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 static MODULE: AtomicIsize = AtomicIsize::new(0);
@@ -162,6 +170,7 @@ fn cache_path(model: &Path, bucket: u32) -> Result<PathBuf> {
     let mut key = model.to_string_lossy().to_lowercase().into_bytes();
     key.extend_from_slice(&stamp.to_le_bytes());
     key.extend_from_slice(&meta.len().to_le_bytes());
+    key.extend_from_slice(&RENDER_EPOCH.to_le_bytes());
 
     let base = std::env::var_os("LOCALAPPDATA").ok_or_else(|| Error::from(E_FAIL))?;
     let dir = PathBuf::from(base).join("Albedo").join("thumbnails");

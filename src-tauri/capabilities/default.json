@@ -10,8 +10,13 @@
     "core:window:allow-start-dragging",
     "core:webview:allow-internal-toggle-devtools",
     "dialog:allow-open",
+    "dialog:allow-save",
     "fs:allow-read-file",
     "fs:default",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "**" }]
+    },
     "core:window:allow-set-fullscreen",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-title",

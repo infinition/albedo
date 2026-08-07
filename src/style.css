@@ -293,6 +293,40 @@ body.inspector .ov-br { opacity: 0; }
 /* Looking around in fly mode: the cursor would only be in the way */
 #view.looking { cursor: none; }
 
+/* One subject at a time: the panel used to be eight sections deep */
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 6px 0 8px;
+  margin-bottom: 4px;
+  background: inherit;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 6px 0;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.tab svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tab:hover { color: var(--fg); }
+.tab.active { background: rgba(255, 255, 255, 0.1); color: var(--fg); }
+.pane { display: none; }
+.pane.active { display: block; }
+
 /* The gradient, shown as itself */
 .strip {
   height: 44px;

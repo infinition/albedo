@@ -14,6 +14,8 @@ const KEY = "albedo.settings";
 const SAVE_DELAY = 400;
 
 export const DEFAULTS = {
+  /** Which inspector pane was open. */
+  pane: "render",
   grid: true,
   bounds: false,
   skeleton: false,
