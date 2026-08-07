@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { releaseMaterials } from "./release.js";
 
 /**
  * Inspection channels.
@@ -93,6 +94,17 @@ export class ChannelView {
   }
 
   reset() {
+    // These maps are the other half of the model's materials: the ones built
+    // per channel, and the originals held on the meshes' behalf while a channel
+    // was showing. The viewer released what was attached; this releases what
+    // was set aside. The checker survives both, being made once and shared by
+    // every UV view there will ever be.
+    const keep = this.viewer.keptTextures();
+    if (checkerTexture) keep.add(checkerTexture);
+    releaseMaterials(
+      [...this.built.values(), ...this.original.values(), ...(this.pristine?.values() || [])],
+      keep
+    );
     this.original.clear();
     this.materialModes.clear();
     this.hiddenMaterials.clear();

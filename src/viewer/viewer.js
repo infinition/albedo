@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { releaseSubtree } from "./release.js";
 
 /** Where the gradient starts before anyone touches it. */
 export const DEFAULT_STOPS = [
@@ -330,7 +331,36 @@ export class Viewer {
     return this.post;
   }
 
+  /**
+   * Textures the scene owns.
+   *
+   * They are reached from a model's materials but do not belong to it, so a
+   * model going away must not take them: the environment would come back black
+   * and the UV checker would come back blank.
+   */
+  keptTextures() {
+    return new Set(
+      [
+        this.studioMap,
+        this.envMap,
+        this.envPanorama,
+        this.panoramaSource,
+        this.gradient,
+        this.framedTexture,
+        this.scene.background,
+        this.scene.environment,
+      ].filter((t) => t && t.isTexture)
+    );
+  }
+
   clear() {
+    // Detaching is not releasing. Without this every model looked at in one
+    // session stayed on the card until the window closed, which the preview
+    // strip turned from a curiosity into a habit.
+    const keep = this.keptTextures();
+    releaseSubtree(this.root, keep);
+    // The helpers are built here rather than loaded, and are just as real
+    releaseSubtree(this.skeletons, keep);
     this.root.clear();
     this.skeletons.clear();
     this.mixer = null;

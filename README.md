@@ -143,6 +143,33 @@ shows, so asking again for the asset on screen is answered by leaving it
 there. Twelve clicks over five assets, two of them plain single clicks: two
 loads.
 
+### Giving memory back
+
+Detaching is not releasing. three keeps the card's side of a geometry, a
+material and a texture until it is told to let go, and dropping an object out
+of the scene drops the JavaScript reference and nothing else. One file a
+session and it never shows. Click through a library with the strip open and
+every model looked at stays resident until the window closes.
+
+Eight loads alternating between two models, counted through the renderer:
+
+| | Geometries | Textures |
+| --- | :---: | :---: |
+| Before, after 8 loads | 8 → 15 | 5 → 20 |
+| After, after 8 loads | 8 | 5 and 7, per model |
+
+The textures in that test are 2048 square, so the leak was measured in
+hundreds of megabytes over a few minutes of browsing.
+
+What must survive is anything the scene owns rather than the model: the
+environment, the backdrop, the gradient, and the UV checker, which is drawn
+once and shared by every model there will ever be. Those are named explicitly,
+because a release that took them would give a black environment and a blank
+checker, and both would look like a different bug. Verified by rendering: the
+same model gives the same picture on the third pass as on the first, 273
+distinct tints either way, and the checker still draws after two other models
+have come and gone.
+
 ### Portable by construction
 
 Tags and notes live in `.albedo/library.json` inside the library, keyed by path
@@ -497,6 +524,7 @@ confirmed on the real thing.
 | --- | :---: | --- |
 | Layout follows its own box, not the window | [x] | Fifty widths from 300 to 1280, viewer and library, nothing overflowing its box |
 | Preview strip follows a single selection | [x] | Twelve clicks over five assets, two single ones: two loads |
+| A model released when the next one loads | [x] | Eight loads: counts flat, picture identical, shared textures intact |
 | Library sidebar becomes a drawer when tight | [x] | Below 760 pixels of library, whatever the window measures |
 
 ### Shell integration
@@ -578,6 +606,7 @@ src/
     textures.js        texture discovery by convention
     navigation.js      orbit, fly, gamepad, SpaceMouse
     post.js            occlusion, bloom, depth of field, grading, grain
+    release.js         giving the card back what a model held
     specgloss.js       KHR_materials_pbrSpecularGlossiness
     usd.js             USD packages and loose layers
     usdc/              binary crate reader
