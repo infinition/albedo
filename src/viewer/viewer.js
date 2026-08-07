@@ -223,10 +223,10 @@ export class Viewer {
   }
 
   /** Match the orthographic box to what the perspective camera would see. */
-  syncOrtho() {
+  syncOrtho(forced) {
     if (!this.ortho) return;
     const el = this.canvas.parentElement;
-    const aspect = (el.clientWidth || 1) / (el.clientHeight || 1);
+    const aspect = forced || (el.clientWidth || 1) / (el.clientHeight || 1);
     const distance = Math.max(1e-4, this.ortho.position.distanceTo(this.controls?.target ?? new THREE.Vector3()));
     const height = 2 * distance * Math.tan((this.fov * Math.PI) / 360);
     const width = height * aspect;
@@ -1305,6 +1305,87 @@ export class Viewer {
     const dh = cropH * scale;
     octx.drawImage(full, minX, minY, cropW, cropH, (size - dw) / 2, (size - dh) / 2, dw, dh);
     return out.toDataURL("image/png");
+  }
+
+  /**
+   * The view as it stands, at any size.
+   *
+   * Not `snapshot`, which re-frames the model into a square for a thumbnail:
+   * this keeps the camera exactly where the user put it and only widens the
+   * sensor when a different shape is asked for, the way a larger back on the
+   * same lens sees more without moving. It goes through whatever is currently
+   * drawing, effect chain included, so the file matches the screen.
+   *
+   * @returns {string} a `data:image/png` URL
+   */
+  photo({ width, height, transparent = false, grid = true, stand = true } = {}) {
+    const gl = this.renderer.getContext();
+    const limit = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 4096;
+    const w = Math.max(16, Math.min(limit, Math.round(width || 1920)));
+    const h = Math.max(16, Math.min(limit, Math.round(height || 1080)));
+
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const before = {
+      background: this.scene.background,
+      grid: this.grid.visible,
+      stand: this.stand.visible,
+      bounds: this.boxHelper.visible,
+      selection: this.selectionHelper.visible,
+      aspect: this.camera.isPerspectiveCamera ? this.camera.aspect : null,
+    };
+
+    if (transparent) this.scene.background = null;
+    this.grid.visible = grid && before.grid;
+    this.stand.visible = stand && before.stand;
+    this.boxHelper.visible = false;
+    this.selectionHelper.visible = false;
+
+    this.renderer.setSize(w, h, false);
+    if (this.camera.isPerspectiveCamera) {
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
+    } else {
+      this.syncOrtho(w / h);
+    }
+    this.post?.setSize(w, h);
+    if (this.post?.active) this.post.render(0);
+    else this.renderer.render(this.scene, this.camera);
+
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+
+    this.scene.background = before.background;
+    this.grid.visible = before.grid;
+    this.stand.visible = before.stand;
+    this.boxHelper.visible = before.bounds;
+    this.selectionHelper.visible = before.selection;
+    if (before.aspect !== null) {
+      this.camera.aspect = before.aspect;
+      this.camera.updateProjectionMatrix();
+    }
+    this.renderer.setSize(size.x, size.y, false);
+    this.post?.setSize(size.x, size.y);
+    this.resize();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(w, h);
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w * 4;
+      const dst = y * w * 4;
+      for (let x = 0; x < w * 4; x += 4) {
+        const a = px[src + x + 3];
+        const scale = a === 0 || a === 255 ? 1 : 255 / a;
+        image.data[dst + x] = Math.min(255, px[src + x] * scale);
+        image.data[dst + x + 1] = Math.min(255, px[src + x + 1] * scale);
+        image.data[dst + x + 2] = Math.min(255, px[src + x + 2] * scale);
+        image.data[dst + x + 3] = a;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    return canvas.toDataURL("image/png");
   }
 
   sceneTree(maxLines = 200) {

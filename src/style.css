@@ -358,6 +358,26 @@ body.inspector .ov-br { opacity: 0; }
 .pane { display: none; }
 .pane.active { display: block; }
 
+/* What the file will hold, at the shape it will hold it */
+.shot-preview {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background-color: #1a1d23;
+  background-image:
+    linear-gradient(45deg, #23272f 25%, transparent 25%),
+    linear-gradient(-45deg, #23272f 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #23272f 75%),
+    linear-gradient(-45deg, transparent 75%, #23272f 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+}
+.shot-preview img { max-width: 100%; max-height: 180px; display: block; border-radius: 4px; }
+
 /* The gradient, shown as itself */
 .strip {
   height: 44px;
@@ -402,7 +422,40 @@ body.inspector .ov-br { opacity: 0; }
   padding: 2px 0;
   font-size: 11px;
 }
-.map-role { width: 74px; color: var(--muted); }
+.map-role { color: var(--muted); }
+.map-names { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.map-names .map-role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.map-source {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.map-stamp {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+}
+.map-stamp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.map-row.muted .map-names, .map-row.muted .map-stamp { opacity: 0.42; }
+.seg.eye { padding: 3px 5px; }
+.seg.eye svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
 .map-name {
   flex: 1;
   min-width: 0;

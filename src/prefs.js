@@ -19,6 +19,12 @@ export const DEFAULTS = {
   /** Cross section: axis, or nothing for a whole model. */
   clipAxis: null,
   clipAt: 0.5,
+  /** Photo mode: the picture asked for, not the one the thumbnail wants. */
+  shotWidth: 1920,
+  shotHeight: 1080,
+  shotAlpha: false,
+  shotGrid: false,
+  shotStand: true,
   grid: true,
   bounds: false,
   skeleton: false,

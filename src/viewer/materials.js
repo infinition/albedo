@@ -155,6 +155,53 @@ export function fixColorSpaces(object) {
  * is the one conversion the inspector offers, so a badly exported window can be
  * put right by hand instead of being written off.
  */
+/**
+ * Repairs, offered as presets, not a shader zoo.
+ *
+ * Marmoset and Substance do not hand out a list of materials to pick from:
+ * they let each channel of one physical model be swapped, and what looks like a
+ * library is a saved set of values. A viewer showing what a file contains has
+ * even less business inventing types. These exist for one reason, which is that
+ * exporters lose things: a refraction that became an opaque slab, a metal that
+ * arrived with no metalness. Each is a starting point the sliders then argue
+ * with, and each can be undone back to what the file said.
+ */
+export const PRESETS = {
+  verre: (m, span) => {
+    m.transmission = 1;
+    m.ior = 1.5;
+    m.roughness = 0.05;
+    m.metalness = 0;
+    m.thickness = span * 0.05;
+    m.transparent = false;
+    m.opacity = 1;
+  },
+  liquide: (m, span) => {
+    m.transmission = 1;
+    m.ior = 1.33;
+    m.roughness = 0.02;
+    m.metalness = 0;
+    m.thickness = span * 0.12;
+    m.transparent = false;
+    m.opacity = 1;
+  },
+  metal: (m) => {
+    m.metalness = 1;
+    m.roughness = Math.min(m.roughness ?? 0.3, 0.25);
+    m.transmission = 0;
+  },
+  irise: (m) => {
+    // Iridescence is a thin film, so it sits on top of whatever is underneath
+    m.iridescence = 1;
+    m.iridescenceIOR = 1.3;
+    m.iridescenceThicknessRange = [100, 400];
+  },
+  verni: (m) => {
+    m.clearcoat = 1;
+    m.clearcoatRoughness = 0.05;
+  },
+};
+
 export function toPhysical(material, { span = 1 } = {}) {
   if (!material || material.isMeshPhysicalMaterial) return material;
   const physical = new THREE.MeshPhysicalMaterial();
@@ -173,6 +220,28 @@ export function toPhysical(material, { span = 1 } = {}) {
   // proportional to the model is what makes it look like glass, and the slider
   // is right there to argue with.
   physical.thickness = span * 0.05;
+  physical.needsUpdate = true;
+  return physical;
+}
+
+/**
+ * Build the material a preset describes, from the one that is there.
+ *
+ * @param {THREE.Material} material
+ * @param {keyof PRESETS} name
+ * @param {{span?: number}} [options] the model's own extent, for thicknesses
+ */
+export function applyPreset(material, name, { span = 1 } = {}) {
+  const recipe = PRESETS[name];
+  if (!recipe) return material;
+  // Always a copy, never the file's own material. On a model that already
+  // carries a physical material the recipe would otherwise write straight into
+  // it, and there would be nothing left to go back to.
+  const physical = material.isMeshPhysicalMaterial
+    ? material.clone()
+    : toPhysical(material, { span });
+  physical.name = material.name;
+  recipe(physical, span);
   physical.needsUpdate = true;
   return physical;
 }

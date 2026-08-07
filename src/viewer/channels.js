@@ -96,6 +96,7 @@ export class ChannelView {
     this.original.clear();
     this.materialModes.clear();
     this.hiddenMaterials.clear();
+    this.pristine?.clear();
     this.built.clear();
     this.mode = "shaded";
   }
@@ -182,15 +183,48 @@ export class ChannelView {
    * The per material choices travel with it: converting a material to glass
    * must not silently un-hide it or send it back to PBR.
    */
-  swapMaterial(uuid, next) {
+  /**
+   * Put the file's own material back.
+   *
+   * Every substitution remembers what it displaced, so a preset is a thing you
+   * try rather than a thing you commit to. An inspection tool that could not
+   * undo would be asking the user to trust it about the file.
+   */
+  restoreMaterial(uuid) {
+    const original = this.pristine?.get(uuid);
+    if (!original) return null;
+    this.pristine.delete(uuid);
+    this.swapMaterial(uuid, original, false);
+    return original;
+  }
+
+  /** Whether this material stands in for one the file actually carries. */
+  isSubstitute(uuid) {
+    return !!this.pristine?.has(uuid);
+  }
+
+  swapMaterial(uuid, next, remember = true) {
     this.viewer.root.traverse((o) => {
       if (!o.isMesh && !o.isSkinnedMesh) return;
       this.remember(o);
       const source = this.original.get(o);
+      const keep = (m) => {
+        if (!m || m.uuid !== uuid) return m;
+        if (remember && next.uuid !== uuid) {
+          this.pristine ||= new Map();
+          // The file's material is what the first substitution displaced; a
+          // second preset on top of the first must not become the thing to
+          // restore, so the origin travels with the chain.
+          const origin = this.pristine.get(uuid) || m;
+          this.pristine.delete(uuid);
+          this.pristine.set(next.uuid, origin);
+        }
+        return next;
+      };
       if (Array.isArray(source)) {
-        this.original.set(o, source.map((m) => (m && m.uuid === uuid ? next : m)));
+        this.original.set(o, source.map(keep));
       } else if (source && source.uuid === uuid) {
-        this.original.set(o, next);
+        this.original.set(o, keep(source));
       }
     });
     if (this.materialModes.has(uuid)) {

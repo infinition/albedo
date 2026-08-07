@@ -9,6 +9,7 @@ import {
   ignoreDeadVertexColors,
   replaceMap,
   toPhysical,
+  applyPreset,
   MAP_SLOTS,
 } from "./viewer/materials.js";
 import { createPrefs } from "./prefs.js";
@@ -43,6 +44,7 @@ const nav = new Navigation(viewer, {
 viewer.onFrame = (dt) => {
   nav.update(dt);
   if (viewer.playing) timelinePaint();
+  watchShotFraming();
 };
 let timelinePaint = () => {};
 
@@ -134,6 +136,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     showDimensions();
     $("btn-export").disabled = false;
     $("btn-snapshot").disabled = false;
+    paintShotPreview();
     // The cut is expressed against the model's own extent, so a new one has to
     // recompute where the plane actually falls.
     viewer.setClipping({});
@@ -359,6 +362,56 @@ const textureLabel = (tex) => {
 const textureSize = (tex) =>
   tex && tex.image && tex.image.width ? `${tex.image.width}×${tex.image.height}` : "—";
 
+/** Where the picture came from, in full, for the tooltip. */
+const textureSource = (tex) => {
+  const src = (tex?.image && tex.image.src) || tex?.userData?.src || "";
+  // A packaged format hands over a decoded bitmap with no address of any kind,
+  // which says something true: the picture came from inside the file.
+  if (!src) return tex?.image ? "intégrée au fichier" : "source inconnue";
+  if (src.startsWith("blob:") || src.startsWith("data:")) return "intégrée au fichier";
+  try {
+    return decodeURIComponent(src.replace(/^https?:\/\/asset\.localhost\//i, ""));
+  } catch (_) {
+    return src;
+  }
+};
+
+/**
+ * A stamp of the texture itself.
+ *
+ * A name and a size do not tell you whether the roughness map is the one you
+ * think. Compressed formats hold no drawable image, so they simply have no
+ * stamp rather than a wrong one.
+ */
+function texturePreview(tex) {
+  const image = tex?.image;
+  if (!image) return null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 36;
+    canvas.height = 36;
+    canvas.getContext("2d").drawImage(image, 0, 0, 36, 36);
+    return canvas.toDataURL("image/png");
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Take one map out of the render, and put it back. */
+function toggleMap(material, slot) {
+  material.userData.hiddenMaps ||= {};
+  const parked = material.userData.hiddenMaps;
+  if (parked[slot]) {
+    material[slot] = parked[slot];
+    delete parked[slot];
+  } else {
+    parked[slot] = material[slot];
+    material[slot] = null;
+  }
+  material.needsUpdate = true;
+  channels.refresh();
+}
+
 async function swapTexture(uuid, slot) {
   const picked = await pickImage();
   if (!picked) return;
@@ -383,28 +436,60 @@ function textureBlock(uuid) {
   box.className = "maps";
   if (!material) return box;
 
-  const present = MAP_SLOTS.filter(([slot]) => material[slot]);
+  const parked = material.userData.hiddenMaps || {};
+  const present = MAP_SLOTS.filter(([slot]) => material[slot] || parked[slot]);
   // With no map at all the albedo slot is still offered: trying one out is the
   // fastest way to tell a missing texture from a black one.
   const slots = present.length ? present : [["map", "Albedo"]];
 
   for (const [slot, label] of slots) {
-    const tex = material[slot];
+    const hidden = !!parked[slot];
+    const tex = material[slot] || parked[slot];
     const row = document.createElement("div");
-    row.className = "map-row";
+    row.className = "map-row" + (hidden ? " muted" : "");
 
+    const stamp = document.createElement("span");
+    stamp.className = "map-stamp";
+    const preview = texturePreview(tex);
+    if (preview) {
+      const img = document.createElement("img");
+      img.src = preview;
+      img.alt = "";
+      stamp.appendChild(img);
+    }
+
+    const names = document.createElement("span");
+    names.className = "map-names";
     const role = document.createElement("span");
     role.className = "map-role";
     role.textContent = label;
-
     const name = document.createElement("span");
     name.className = "map-name";
     name.textContent = textureLabel(tex);
-    name.title = textureLabel(tex);
+    const source = textureSource(tex);
+    name.title = `${textureLabel(tex)}\n${source}`;
+    const where = document.createElement("span");
+    where.className = "map-source";
+    where.textContent = source;
+    where.title = source;
+    names.append(role, name, where);
 
     const size = document.createElement("span");
     size.className = "map-size mono";
     size.textContent = textureSize(tex);
+
+    const eye = document.createElement("button");
+    eye.type = "button";
+    eye.className = "seg eye" + (hidden ? "" : " active");
+    eye.title = hidden ? "Remettre dans le rendu" : "Retirer du rendu";
+    eye.innerHTML = hidden
+      ? '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.4 5.3A9.8 9.8 0 0112 5c5 0 9 4.5 9 7a12 12 0 01-2.4 3.3M6.3 6.9A12.6 12.6 0 003 12c0 2.5 4 7 9 7 1.2 0 2.3-.2 3.3-.7"/></svg>'
+      : '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+    eye.disabled = !tex;
+    eye.addEventListener("click", () => {
+      toggleMap(material, slot);
+      paintMaterialList();
+    });
 
     const swap = document.createElement("button");
     swap.type = "button";
@@ -412,7 +497,7 @@ function textureBlock(uuid) {
     swap.textContent = tex ? "Remplacer" : "Choisir";
     swap.addEventListener("click", () => swapTexture(uuid, slot));
 
-    row.append(role, name, size, swap);
+    row.append(stamp, names, size, eye, swap);
     box.appendChild(row);
   }
 
@@ -462,27 +547,56 @@ function textureBlock(uuid) {
     slider("Rugosité", material.roughness ?? 0.5, 0, 1, 0.01, (v) => {
       material.roughness = v;
     });
-  } else {
-    // A standard material cannot transmit light whatever its settings, so the
-    // repair of a lost refraction has to start by changing what it is.
-    const glass = document.createElement("button");
-    glass.type = "button";
-    glass.className = "seg";
-    glass.textContent = "En faire du verre";
-    glass.title = "Convertir en matériau physique, transmission et IOR réglables";
-    glass.addEventListener("click", () => {
-      const box = viewer.boxHelper.box;
-      const physical = toPhysical(material, {
-        span: box.isEmpty() ? 1 : box.max.distanceTo(box.min),
+  }
+
+  // Presets repair what an exporter lost. They are not a list of material
+  // types: the file decides what a thing is, and each of these can be undone.
+  const presets = document.createElement("div");
+  presets.className = "map-row";
+  const label = document.createElement("span");
+  label.className = "map-role";
+  label.textContent = "Préréglage";
+  const group = document.createElement("div");
+  group.className = "segment";
+  for (const [name, text] of [
+    ["verre", "Verre"],
+    ["liquide", "Liquide"],
+    ["metal", "Métal"],
+    ["irise", "Irisé"],
+    ["verni", "Verni"],
+  ]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg";
+    b.textContent = text;
+    b.addEventListener("click", () => {
+      const bounds = viewer.boxHelper.box;
+      const next = applyPreset(material, name, {
+        span: bounds.isEmpty() ? 1 : bounds.max.distanceTo(bounds.min),
       });
-      channels.swapMaterial(uuid, physical);
-      selectedMaterial = physical.uuid;
+      channels.swapMaterial(uuid, next);
+      selectedMaterial = next.uuid;
       paintMaterialList();
     });
-    const row = document.createElement("div");
-    row.className = "map-row";
-    row.appendChild(glass);
-    box.appendChild(row);
+    group.appendChild(b);
+  }
+  presets.append(label, group);
+  box.appendChild(presets);
+
+  if (channels.isSubstitute(uuid)) {
+    const back = document.createElement("div");
+    back.className = "map-row";
+    const revert = document.createElement("button");
+    revert.type = "button";
+    revert.className = "seg";
+    revert.textContent = "Rétablir le matériau du fichier";
+    revert.addEventListener("click", () => {
+      const original = channels.restoreMaterial(uuid);
+      if (original) selectedMaterial = original.uuid;
+      paintMaterialList();
+    });
+    back.appendChild(revert);
+    box.appendChild(back);
   }
   return box;
 }
@@ -715,6 +829,142 @@ async function saveSnapshot() {
 
 $("btn-snapshot").addEventListener("click", saveSnapshot);
 
+// --- photo ----------------------------------------------------------------
+//
+// The thumbnail path re-frames the model into a square, which is right for an
+// icon and wrong for a picture: what the user framed is what the file should
+// hold. This keeps the camera and only changes the size of the sensor.
+
+const shot = { width: 1920, height: 1080 };
+let shotTimer = null;
+
+function shotOptions() {
+  return {
+    width: shot.width,
+    height: shot.height,
+    transparent: $("shot-alpha").checked,
+    grid: $("shot-grid").checked,
+    stand: $("shot-stand").checked,
+  };
+}
+
+/**
+ * Follow the camera while the photo pane is open.
+ *
+ * The preview is a render, so it is not made on every frame: the debounce means
+ * nothing happens while the view is being moved, and one picture is made when
+ * it settles. Off the pane, nothing is made at all.
+ */
+let shotFraming = 0;
+function watchShotFraming() {
+  const pane = document.querySelector('.pane[data-pane="photo"]');
+  if (!pane?.classList.contains("active") || !viewer.current) return;
+  const m = viewer.camera.matrixWorld.elements;
+  const signature = m[12] + m[13] * 3 + m[14] * 7 + m[0] * 11 + m[5] * 13;
+  if (Math.abs(signature - shotFraming) < 1e-6) return;
+  shotFraming = signature;
+  paintShotPreview();
+}
+
+/** A small render of the very same call, so the framing is never a guess. */
+function paintShotPreview() {
+  clearTimeout(shotTimer);
+  shotTimer = setTimeout(() => {
+    if (!viewer.current) return;
+    const wide = shot.width >= shot.height;
+    const preview = { ...shotOptions() };
+    const side = 260;
+    preview.width = wide ? side : Math.round((side * shot.width) / shot.height);
+    preview.height = wide ? Math.round((side * shot.height) / shot.width) : side;
+    try {
+      $("shot-preview").src = viewer.photo(preview);
+    } catch (e) {
+      console.warn("[albedo] aperçu photo:", e);
+    }
+  }, 90);
+}
+
+function setShotSize(width, height, remember = true) {
+  shot.width = Math.max(64, Math.min(8192, Math.round(width)));
+  shot.height = Math.max(64, Math.min(8192, Math.round(height)));
+  $("shot-width").value = String(shot.width);
+  $("shot-height").value = String(shot.height);
+  $("shot-note").textContent = `${shot.width} × ${shot.height}, cadrage de la vue`;
+  if (remember) {
+    prefs.set("shotWidth", shot.width);
+    prefs.set("shotHeight", shot.height);
+  }
+  paintShotPreview();
+}
+
+/** Keep the height and give the picture the asked-for shape. */
+function setShotRatio(ratio, id) {
+  for (const other of ["shot-view", "shot-11", "shot-169", "shot-43"]) {
+    $(other).classList.toggle("active", other === id);
+  }
+  const box = viewer.renderer.getSize(new (Object.getPrototypeOf(viewer.boxHelper.box.min).constructor)());
+  const base = ratio === null ? box.x / box.y : ratio;
+  setShotSize(Math.round(shot.height * base), shot.height);
+}
+
+$("shot-view").addEventListener("click", () => setShotRatio(null, "shot-view"));
+$("shot-11").addEventListener("click", () => setShotRatio(1, "shot-11"));
+$("shot-169").addEventListener("click", () => setShotRatio(16 / 9, "shot-169"));
+$("shot-43").addEventListener("click", () => setShotRatio(4 / 3, "shot-43"));
+
+for (const [id, times] of [["shot-x1", 1], ["shot-x2", 2], ["shot-x4", 4]]) {
+  $(id).addEventListener("click", () => {
+    const box = viewer.renderer.getSize(
+      new (Object.getPrototypeOf(viewer.boxHelper.box.min).constructor)()
+    );
+    setShotSize(box.x * times, box.y * times);
+  });
+}
+
+for (const id of ["shot-width", "shot-height"]) {
+  $(id).addEventListener("change", () =>
+    setShotSize(Number($("shot-width").value), Number($("shot-height").value))
+  );
+}
+for (const id of ["shot-alpha", "shot-grid", "shot-stand"]) {
+  $(id).addEventListener("change", () => {
+    prefs.set(
+      { "shot-alpha": "shotAlpha", "shot-grid": "shotGrid", "shot-stand": "shotStand" }[id],
+      $(id).checked
+    );
+    paintShotPreview();
+  });
+}
+
+$("shot-save").addEventListener("click", async () => {
+  if (!viewer.current) return;
+  const note = $("shot-note");
+  try {
+    const url = viewer.photo(shotOptions());
+    const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0));
+    const name = ($("file-name").textContent || "albedo").replace(/\.[^.]+$/, "") + ".png";
+    if (tauri) {
+      const path = await tauri.dialog.save({
+        defaultPath: name,
+        filters: [{ name: "Image PNG", extensions: ["png"] }],
+      });
+      if (!path) return;
+      const { writeFile } = await import("@tauri-apps/plugin-fs");
+      await writeFile(path, bytes);
+      note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
+    } else {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      note.textContent = name;
+    }
+  } catch (e) {
+    note.textContent = `Photo impossible : ${e.message || e}`;
+    console.warn("[albedo] photo:", e);
+  }
+});
+
 // --- inspector tabs -------------------------------------------------------
 
 /**
@@ -725,6 +975,8 @@ $("btn-snapshot").addEventListener("click", saveSnapshot);
  * screen, and which one is remembered.
  */
 function showPane(name, remember = true) {
+  // The preview is a render; it is only worth making while it is on screen
+  if (name === "photo") paintShotPreview();
   for (const tab of document.querySelectorAll(".tab")) {
     tab.classList.toggle("active", tab.dataset.pane === name);
   }
@@ -1055,6 +1307,10 @@ $("btn-pedestal").addEventListener("click", async () => {
 function applyPrefs() {
   const p = prefs.all();
   showPane(p.pane, false);
+  $("shot-alpha").checked = p.shotAlpha;
+  $("shot-grid").checked = p.shotGrid;
+  $("shot-stand").checked = p.shotStand;
+  setShotSize(p.shotWidth, p.shotHeight, false);
   $("clip-at").value = String(p.clipAt);
   viewer.setClipping({ at: p.clipAt });
   setClipping(p.clipAxis, false);

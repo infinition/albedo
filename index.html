@@ -97,6 +97,9 @@
           <button class="tab" type="button" data-pane="effects" title="Effets" aria-label="Effets">
             <svg viewBox="0 0 24 24"><path d="M5 12h4l2-5 2 10 2-5h4"/></svg>
           </button>
+          <button class="tab" type="button" data-pane="photo" title="Photo" aria-label="Photo">
+            <svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
           <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
             <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
           </button>
@@ -343,6 +346,41 @@
         <section>
           <h2>Anticrénelage</h2>
           <label class="check"><input type="checkbox" id="aa-on" checked /><span>SMAA sur l'image finale</span></label>
+        </section>
+        </div>
+
+        <div class="pane" data-pane="photo">
+        <section>
+          <h2>Photo</h2>
+          <div class="shot-preview"><img id="shot-preview" alt="" /></div>
+          <p id="shot-note" class="hint">Le cadrage est celui de la vue.</p>
+          <div class="row">
+            <div class="segment" role="group" aria-label="Format">
+              <button id="shot-view" class="seg active" type="button" title="Le rapport de la fenêtre">Vue</button>
+              <button id="shot-11" class="seg" type="button" title="Carré">1:1</button>
+              <button id="shot-169" class="seg" type="button" title="Panoramique">16:9</button>
+              <button id="shot-43" class="seg" type="button" title="Classique">4:3</button>
+            </div>
+          </div>
+          <div class="row">
+            <label class="field" style="flex:1"><span>Largeur</span>
+              <input type="number" id="shot-width" min="64" max="8192" step="16" value="1920" /></label>
+            <label class="field" style="flex:1"><span>Hauteur</span>
+              <input type="number" id="shot-height" min="64" max="8192" step="16" value="1080" /></label>
+          </div>
+          <div class="row">
+            <div class="segment" role="group" aria-label="Multiplicateur">
+              <button id="shot-x1" class="seg" type="button" title="Taille de la vue">×1</button>
+              <button id="shot-x2" class="seg" type="button" title="Le double">×2</button>
+              <button id="shot-x4" class="seg" type="button" title="Le quadruple">×4</button>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="shot-alpha" /><span>Fond détouré</span></label>
+          <label class="check"><input type="checkbox" id="shot-grid" /><span>Garder la grille</span></label>
+          <label class="check"><input type="checkbox" id="shot-stand" checked /><span>Garder le socle</span></label>
+          <div class="row">
+            <button id="shot-save" class="wide" type="button">Enregistrer la photo</button>
+          </div>
         </section>
         </div>
 
