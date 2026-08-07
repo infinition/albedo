@@ -208,6 +208,7 @@ export class PostFx {
       { GTAOPass },
       { BokehPass },
       { SMAAPass },
+      { OutlinePass },
     ] = await Promise.all([
       import("three/examples/jsm/postprocessing/EffectComposer.js"),
       import("three/examples/jsm/postprocessing/RenderPass.js"),
@@ -217,10 +218,11 @@ export class PostFx {
       import("three/examples/jsm/postprocessing/GTAOPass.js"),
       import("three/examples/jsm/postprocessing/BokehPass.js"),
       import("three/examples/jsm/postprocessing/SMAAPass.js"),
+      import("three/examples/jsm/postprocessing/OutlinePass.js"),
     ]);
     return new PostFx(viewer, {
       EffectComposer, RenderPass, OutputPass, ShaderPass,
-      UnrealBloomPass, GTAOPass, BokehPass, SMAAPass,
+      UnrealBloomPass, GTAOPass, BokehPass, SMAAPass, OutlinePass,
     });
   }
 
@@ -245,17 +247,30 @@ export class PostFx {
     this.dof = new P.BokehPass(viewer.scene, viewer.camera, { ...DEFAULTS.dof });
     this.output = new P.OutputPass();
     this.grade = new P.ShaderPass(GradeShader);
+    // Drawn on the finished picture rather than in the light: an outline is a
+    // statement about what is selected, not about how the surface reflects, so
+    // grading it would tint the very mark that has to stay recognisable.
+    this.outlinePass = new P.OutlinePass(size, viewer.scene, viewer.camera);
+    this.outlinePass.edgeStrength = 6;
+    this.outlinePass.edgeGlow = 0;
+    this.outlinePass.edgeThickness = 1.4;
+    this.outlinePass.pulsePeriod = 0;
+    this.outlinePass.visibleEdgeColor.set("#ffb454");
+    // The hidden edge shows through the model, which is how a selection on the
+    // far side of a shape is still findable.
+    this.outlinePass.hiddenEdgeColor.set("#5c4626");
     this.aa = new P.SMAAPass(width, height);
 
     this.grade.uniforms.resolution.value.set(width, height);
 
-    for (const pass of [this.render0, this.ao, this.bloom, this.dof, this.output, this.grade, this.aa]) {
+    for (const pass of [this.render0, this.ao, this.bloom, this.dof, this.output, this.grade, this.outlinePass, this.aa]) {
       this.composer.addPass(pass);
     }
     this.ao.enabled = false;
     this.bloom.enabled = false;
     this.dof.enabled = false;
     this.grade.enabled = false;
+    this.outlinePass.enabled = false;
     this.aa.enabled = DEFAULTS.aa.on;
     this.setSize(width, height);
     this.syncBackdrop();
@@ -270,7 +285,21 @@ export class PostFx {
    */
   get active() {
     const s = this.settings;
-    return s.ao.on || s.bloom.on || s.dof.on || s.grade.on;
+    return s.ao.on || s.bloom.on || s.dof.on || s.grade.on || this.outlinePass.selectedObjects.length > 0;
+  }
+
+  /**
+   * Ring what is selected.
+   *
+   * A bounding box says roughly where a thing is and nothing about its shape,
+   * which on a mesh threaded through the middle of a model is no answer at all.
+   * An outline follows the silhouette exactly, so what is highlighted is what
+   * was picked.
+   */
+  outline(objects) {
+    this.outlinePass.selectedObjects = objects || [];
+    this.outlinePass.enabled = this.outlinePass.selectedObjects.length > 0;
+    this.viewer.invalidate();
   }
 
   setSize(width, height) {
@@ -278,6 +307,7 @@ export class PostFx {
     this.ao.setSize(width, height);
     this.bloom.setSize(width, height);
     this.aa.setSize(width, height);
+    this.outlinePass.setSize(width, height);
     this.grade.uniforms.resolution.value.set(width, height);
   }
 
@@ -286,6 +316,7 @@ export class PostFx {
     this.render0.camera = camera;
     this.ao.camera = camera;
     this.dof.camera = camera;
+    this.outlinePass.renderCamera = camera;
   }
 
   /**

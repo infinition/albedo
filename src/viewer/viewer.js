@@ -135,10 +135,8 @@ export class Viewer {
     this.boxHelper.visible = false;
     this.scene.add(this.boxHelper);
 
-    // Which part of the model a material covers, shown while it is selected
-    this.selectionHelper = new THREE.Box3Helper(new THREE.Box3(), 0xffb454);
-    this.selectionHelper.visible = false;
-    this.scene.add(this.selectionHelper);
+    /** The meshes one material covers, ringed while it is selected. */
+    this.selected = [];
 
     /** Turntable speed in radians per second; zero means still. */
     this.spin = 0;
@@ -337,7 +335,8 @@ export class Viewer {
     this.skeletons.clear();
     this.mixer = null;
     this.current = null;
-    this.selectionHelper.visible = false;
+    this.selected = [];
+    this.post?.outline([]);
     this.invalidate();
   }
 
@@ -348,16 +347,44 @@ export class Viewer {
    * model each one covers. Pass nothing to clear.
    */
   highlight(meshes) {
-    if (!meshes || !meshes.length) {
-      this.selectionHelper.visible = false;
+    const wanted = meshes && meshes.length ? [...meshes] : [];
+    this.selected = wanted;
+    // The box is gone: it said roughly where a thing was and nothing about its
+    // shape, which on a mesh threaded through the middle of a model is no
+    // answer. The outline follows the silhouette, and lives in the effect
+    // chain, so it is brought up the first time something is picked.
+    if (!wanted.length && !this.post) {
       this.invalidate();
       return;
     }
-    const box = new THREE.Box3();
-    for (const mesh of meshes) box.union(new THREE.Box3().setFromObject(mesh));
-    this.selectionHelper.box.copy(box);
-    this.selectionHelper.visible = !box.isEmpty();
-    this.invalidate();
+    this.effects().then((fx) => fx.outline(wanted));
+  }
+
+  /**
+   * What the pointer is over, or nothing.
+   *
+   * Only what is drawn counts: a hidden mesh, a helper and the stand are all in
+   * the scene and none of them is the model.
+   * @param {number} x normalised device coordinate
+   * @param {number} y normalised device coordinate
+   */
+  pick(x, y) {
+    if (!this.current) return null;
+    this._ray ||= new THREE.Raycaster();
+    this._ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
+    const hits = this._ray.intersectObject(this.root, true);
+    for (const hit of hits) {
+      const o = hit.object;
+      if (!o.visible || (!o.isMesh && !o.isSkinnedMesh)) continue;
+      let ancestor = o.parent;
+      let shown = true;
+      while (ancestor && shown) {
+        if (!ancestor.visible) shown = false;
+        ancestor = ancestor.parent;
+      }
+      if (shown) return hit;
+    }
+    return null;
   }
 
   /**
@@ -1330,7 +1357,7 @@ export class Viewer {
       grid: this.grid.visible,
       stand: this.stand.visible,
       bounds: this.boxHelper.visible,
-      selection: this.selectionHelper.visible,
+      selection: this.selected,
       aspect: this.camera.isPerspectiveCamera ? this.camera.aspect : null,
     };
 
@@ -1338,7 +1365,7 @@ export class Viewer {
     this.grid.visible = grid && before.grid;
     this.stand.visible = stand && before.stand;
     this.boxHelper.visible = false;
-    this.selectionHelper.visible = false;
+    this.post?.outline([]);
 
     this.renderer.setSize(w, h, false);
     if (this.camera.isPerspectiveCamera) {
@@ -1358,7 +1385,7 @@ export class Viewer {
     this.grid.visible = before.grid;
     this.stand.visible = before.stand;
     this.boxHelper.visible = before.bounds;
-    this.selectionHelper.visible = before.selection;
+    if (before.selection?.length) this.post?.outline(before.selection);
     if (before.aspect !== null) {
       this.camera.aspect = before.aspect;
       this.camera.updateProjectionMatrix();

@@ -318,6 +318,22 @@ function setRenderMode(mode) {
 /** Which material the inspector has open, by uuid. */
 let selectedMaterial = null;
 
+/**
+ * Choose a material, from the panel or from the model.
+ *
+ * Both routes end here so the two can never disagree about what is selected:
+ * clicking a surface ticks its row, and clicking its row rings the surface.
+ * @param {string|null} uuid
+ */
+function selectMaterial(uuid) {
+  const next = uuid && uuid !== selectedMaterial ? uuid : null;
+  if (next === selectedMaterial) return;
+  selectedMaterial = next;
+  paintMaterialList();
+  // Picking a surface is a question about its matter, so show the answer
+  if (next) showPane("matter");
+}
+
 function highlightSelection() {
   if (!selectedMaterial || !viewer.current) {
     viewer.highlight(null);
@@ -640,10 +656,7 @@ function paintMaterialList() {
     label.classList.toggle("warn", !!defect);
     label.classList.toggle("selected", uuid === selectedMaterial);
     label.title = defect ? `${name} : ${defect}` : textured ? `${name} (texturé)` : name;
-    label.addEventListener("click", () => {
-      selectedMaterial = selectedMaterial === uuid ? null : uuid;
-      paintMaterialList();
-    });
+    label.addEventListener("click", () => selectMaterial(uuid));
 
     const group = document.createElement("div");
     group.className = "segment";
@@ -1464,7 +1477,8 @@ $("anim-select").addEventListener("change", (e) => selectClip(Number(e.target.va
 
 // --- opening --------------------------------------------------------------
 
-$("btn-open").addEventListener("click", async () => {
+/** Ask for a model, through the shell when there is one. */
+async function openFile() {
   if (tauri) {
     const picked = await tauri.dialog.open({
       multiple: false,
@@ -1474,7 +1488,12 @@ $("btn-open").addEventListener("click", async () => {
     return;
   }
   browserPicker.click();
-});
+}
+
+// Two ways in, and neither may be the only one: the empty state's link goes
+// away with the first model, so the chrome carries the same action for good.
+$("btn-open").addEventListener("click", openFile);
+$("btn-open-file").addEventListener("click", openFile);
 
 // --- browser fallback -----------------------------------------------------
 // Running `npm run dev` alone (no Tauri shell) stays useful for UI work.
@@ -1776,6 +1795,63 @@ $("light-colour").addEventListener("input", (e) => {
   }
 }
 
+
+// --- picking --------------------------------------------------------------
+
+/**
+ * Click a part of the model to select it.
+ *
+ * The pointer is also how the camera is turned, so a click is only a click when
+ * it barely moved: dragging to orbit past a mesh must not select it. A hit
+ * selects the material that surface actually uses, which for a mesh carrying
+ * several is the one the triangle belongs to, not the first in the list.
+ * Clicking nothing clears the selection, since that is what pointing at empty
+ * space means.
+ */
+{
+  const stage = $("view");
+  let down = null;
+
+  stage.addEventListener("pointerdown", (e) => {
+    down = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+  });
+
+  stage.addEventListener("pointerup", (e) => {
+    if (!down || e.button !== 0) return;
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+    down = null;
+    // Fly mode holds the pointer for looking around; a click there is not a pick
+    if (moved > 4 || nav.mode !== "orbit") return;
+
+    const box = stage.getBoundingClientRect();
+    const hit = viewer.pick(
+      ((e.clientX - box.left) / box.width) * 2 - 1,
+      -((e.clientY - box.top) / box.height) * 2 + 1
+    );
+    if (!hit) {
+      selectMaterial(null);
+      return;
+    }
+    const material = materialOfHit(hit);
+    selectMaterial(material ? material.uuid : null);
+  });
+}
+
+/**
+ * Which material a ray actually landed on.
+ *
+ * The rendered material is not always the authored one: an inspection channel
+ * swaps every material for a flat stand-in, and the panel lists the originals.
+ * The mesh remembers what it came with, so the answer is looked up there.
+ */
+function materialOfHit(hit) {
+  const mesh = hit.object;
+  const source = channels.original.get(mesh) ?? mesh.material;
+  if (!Array.isArray(source)) return source;
+  const group = hit.face?.materialIndex ?? 0;
+  return source[group] ?? source[0];
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
   if (library?.isOpen && e.code !== "KeyB") return;
@@ -1808,7 +1884,15 @@ window.addEventListener("keydown", (e) => {
     case "Digit3": applyChannel("normalMap"); break;
     case "Digit4": applyChannel("roughness"); break;
     case "Digit5": applyChannel("uv"); break;
-    case "KeyO": hud.setMode("orbit"); break;
+    case "KeyO":
+      // The same key opens a file with the modifier and orbits without it
+      if (e.ctrlKey) {
+        e.preventDefault();
+        openFile();
+      } else {
+        hud.setMode("orbit");
+      }
+      break;
     case "KeyV": hud.setMode("fly"); break;
     // Fly holds the mouse, so leaving it needs a key that is never a movement
     // one. Escape usually never reaches us, the webview eats it to release the
