@@ -556,6 +556,16 @@ npm run tauri build  # release build and NSIS installer
 `tauri build` also builds the thumbnail provider and puts it beside the
 executable, since the installer registers it there.
 
+When working on the provider itself, register it through
+`tools\install-thumbnail-provider.ps1` rather than by pointing `regsvr32` at the
+build tree. Explorer loads a shell extension into its own process and keeps it
+loaded, so a provider registered where cargo writes means the desktop holds the
+very file the next build has to replace: three builds in a row failed on it
+here, each one needing Explorer restarted. The script stamps a copy into
+`%LOCALAPPDATA%\Albedo\shell` and registers that, so Explorer holds something
+nothing rebuilds. Run it again after rebuilding the provider; the viewer's own
+frontend needs nothing from it.
+
 The installer registers file associations, so "Open with" works for every
 supported format.
 

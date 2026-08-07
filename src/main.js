@@ -2109,6 +2109,23 @@ function recordAfter() {
   paintHistory();
 }
 
+/** Drop every entry about an object, and about anything inside it. */
+function forgetHistoryOf(object) {
+  const inside = (o) => {
+    let node = o;
+    while (node) {
+      if (node === object) return true;
+      node = node.parent;
+    }
+    return false;
+  };
+  const keep = (entry) => !inside(entry.before.object);
+  history.past = history.past.filter(keep);
+  history.future = history.future.filter(keep);
+  if (pendingPose && inside(pendingPose.object)) pendingPose = null;
+  paintHistory();
+}
+
 function paintHistory() {
   $("undo").disabled = !history.past.length;
   $("redo").disabled = !history.future.length;
@@ -2315,6 +2332,10 @@ function paintParts() {
     drop.disabled = entry === viewer.parts[0];
     drop.addEventListener("click", () => {
       if (selectedPart === entry) selectedPart = null;
+      // An undo that pushes a pose onto an object no longer in the scene, and
+      // whose buffers have just been given back, restores nothing and says it
+      // did. The entries that named it go with it.
+      forgetHistoryOf(entry.object);
       viewer.removePart(entry);
       channels.reset();
       applyChannel(currentChannel);
