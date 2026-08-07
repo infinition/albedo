@@ -18,6 +18,46 @@ import { thumbnailFor, releaseThumbnails } from "./thumbs.js";
 
 const SIDECAR_VERSION = 1;
 const SAVE_DELAY = 600;
+const SEARCH_DELAY = 130;
+
+/**
+ * Cards are added a page at a time.
+ *
+ * A library of twenty thousand files is not unusual, and building a card for
+ * every one of them means a hundred thousand nodes laid out before the first
+ * one is visible, thrown away and built again at the next keystroke. Only what
+ * can be reached is built; the rest follows the scrollbar.
+ */
+const PAGE = 240;
+
+/**
+ * Icons, drawn rather than shipped.
+ *
+ * A handful of paths in the stroke style the rest of the window already uses
+ * costs nothing to load, scales to any density and takes the colour of the text
+ * it sits next to, which an icon font or a sprite sheet would each complicate.
+ */
+const ICONS = {
+  chevron: '<path d="M9.5 6.5l5.5 5.5-5.5 5.5"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.5 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  folderOpen:
+    '<path d="M3 18V7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.5 7H19a2 2 0 0 1 2 2v1"/><path d="M3.6 18.4l2-7.4h16.2l-2 7.4a1 1 0 0 1-1 .6H4.6a1 1 0 0 1-1-.6z"/>',
+  drive:
+    '<rect x="3" y="4.5" width="18" height="6.5" rx="2"/><rect x="3" y="13" width="18" height="6.5" rx="2"/><path d="M6.8 7.75h.01M6.8 16.25h.01"/>',
+  tag: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.83 0l-6.17-6.17A2 2 0 0 1 3.8 13V5.8A1.8 1.8 0 0 1 5.6 4h7.2a2 2 0 0 1 1.43.6l6.37 6.37a2 2 0 0 1 0 2.43z"/><circle cx="8.4" cy="8.4" r="1.2"/>',
+  cube: '<path d="M12 2.6l8.5 4.7v9.4L12 21.4 3.5 16.7V7.3z"/><path d="M12 12l8.5-4.7M12 12v9.4M12 12L3.5 7.3"/>',
+  image:
+    '<rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.6" cy="10" r="1.6"/><path d="M20.4 15.6L16 11.2l-8.6 8.3"/>',
+};
+
+const icon = (name, cls = "") => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", cls ? `ico ${cls}` : "ico");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = ICONS[name] || "";
+  return svg;
+};
 
 const bytes = (n) => {
   if (n < 1024) return `${n} o`;
@@ -107,6 +147,10 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     sort: prefs?.get?.("libSort") || "name",
     query: "",
     selected: null,
+    /** Folder paths the tree is showing the inside of. */
+    expanded: new Set(),
+    /** Which slice of the result is on screen. */
+    page: { list: [], shown: 0 },
     open: false,
     peek: false,
   };
@@ -159,7 +203,9 @@ export function createLibrary({ tauri, onOpen, prefs }) {
       row.className = "lib-item" + (state.root?.path === root.path ? " active" : "");
       row.title = root.path;
       const name = document.createElement("span");
+      name.className = "label";
       name.textContent = root.name;
+      row.appendChild(icon("drive"));
       const drop = document.createElement("span");
       drop.className = "drop";
       drop.textContent = "✕";
@@ -269,31 +315,98 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   }
 
   // --- sidebar lists -----------------------------------------------------
+  /**
+   * The folder tree, derived from the files rather than from the walk.
+   *
+   * The scan only reports folders that directly hold something, so a library
+   * laid out as `chars/hero/body.glb` reported `chars/hero` and never `chars`:
+   * the tree had holes in it and the top level was missing. Rebuilding it from
+   * the relative paths puts every intermediate level back, and gives each one a
+   * count of everything at or below it, which is the number a person actually
+   * wants when deciding where to look.
+   */
+  function buildTree(entries) {
+    const root = { name: "Tout", path: null, children: new Map(), count: entries.length };
+    for (const entry of entries) {
+      const parts = entry.rel.split("/");
+      parts.pop(); // the file itself
+      let node = root;
+      let path = "";
+      for (const part of parts) {
+        path = path ? `${path}/${part}` : part;
+        if (!node.children.has(part)) {
+          node.children.set(part, { name: part, path, children: new Map(), count: 0 });
+        }
+        node = node.children.get(part);
+        node.count++;
+      }
+    }
+    return root;
+  }
+
   function paintTree() {
     el.tree.textContent = "";
-    const all = document.createElement("button");
-    all.className = "lib-item" + (state.folder === null ? " active" : "");
-    all.textContent = "Tout";
-    all.addEventListener("click", () => {
-      state.folder = null;
-      paintTree();
-      paint();
-    });
-    el.tree.appendChild(all);
+    const tree = buildTree(state.entries);
 
-    for (const folder of state.folders) {
-      const row = document.createElement("button");
-      row.className = "lib-item" + (state.folder === folder ? " active" : "");
-      row.style.setProperty("--depth", String(folder.split("/").length));
-      row.textContent = folder.split("/").pop();
-      row.title = folder;
-      row.addEventListener("click", () => {
-        state.folder = state.folder === folder ? null : folder;
+    // Whatever is selected must be reachable without hunting for it. Its
+    // ancestors only: forcing the folder itself open as well meant a selected
+    // folder could not be collapsed, since it reopened on the next paint.
+    if (state.folder) {
+      const parts = state.folder.split("/");
+      for (let i = 1; i < parts.length; i++) state.expanded.add(parts.slice(0, i).join("/"));
+    }
+
+    const row = (node, depth) => {
+      const line = document.createElement("div");
+      line.className = "lib-row";
+      line.style.setProperty("--depth", String(depth));
+
+      const hasChildren = node.children.size > 0;
+      const open = node.path === null || state.expanded.has(node.path);
+
+      const twist = document.createElement("button");
+      twist.className = "twist" + (open ? " open" : "");
+      twist.type = "button";
+      if (hasChildren) {
+        twist.appendChild(icon("chevron"));
+        twist.title = open ? "Replier" : "Déplier";
+        twist.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (open) state.expanded.delete(node.path);
+          else state.expanded.add(node.path);
+          paintTree();
+        });
+      } else {
+        twist.disabled = true;
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "lib-item" + (state.folder === node.path ? " active" : "");
+      button.title = node.path || "Toute la bibliothèque";
+      button.append(
+        icon(node.path === null ? "drive" : open && hasChildren ? "folderOpen" : "folder"),
+        Object.assign(document.createElement("span"), { textContent: node.name, className: "label" })
+      );
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = String(node.count);
+      button.appendChild(count);
+      button.addEventListener("click", () => {
+        state.folder = state.folder === node.path ? null : node.path;
         paintTree();
         paint();
       });
-      el.tree.appendChild(row);
-    }
+
+      line.append(twist, button);
+      el.tree.appendChild(line);
+
+      if (!open) return;
+      const kids = [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+      for (const child of kids) row(child, depth + 1);
+    };
+
+    row(tree, 0);
   }
 
   function paintTags() {
@@ -312,7 +425,7 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     for (const [tag, n] of [...counts].sort((a, b) => b[1] - a[1])) {
       const b = document.createElement("button");
       b.className = "lib-tag" + (state.tag === tag ? " active" : "");
-      b.textContent = `${tag} ${n}`;
+      b.append(icon("tag"), document.createTextNode(`${tag} ${n}`));
       b.addEventListener("click", () => {
         state.tag = state.tag === tag ? null : tag;
         paintTags();
@@ -392,6 +505,7 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     );
 
     el.grid.textContent = "";
+    el.grid.scrollTop = 0;
     if (!list.length) {
       const empty = document.createElement("div");
       empty.className = "lib-empty";
@@ -399,14 +513,42 @@ export function createLibrary({ tauri, onOpen, prefs }) {
         ? "Rien ne correspond."
         : "Ajoute un dossier pour commencer.";
       el.grid.appendChild(empty);
+      state.page = { list: [], shown: 0 };
       paintDetail();
       return;
     }
 
-    const frag = document.createDocumentFragment();
-    for (const entry of list) frag.appendChild(card(entry));
-    el.grid.appendChild(frag);
+    state.page = { list, shown: 0 };
+    grow();
     paintDetail();
+  }
+
+  /**
+   * Add the next page of cards.
+   *
+   * Twenty thousand cards is a hundred thousand nodes laid out before the first
+   * one is visible, thrown away and built again at the next keystroke. Only what
+   * the scrollbar can reach is built.
+   */
+  function grow() {
+    const { list, shown } = state.page;
+    if (shown >= list.length) return;
+    const frag = document.createDocumentFragment();
+    const until = Math.min(shown + PAGE, list.length);
+    for (let i = shown; i < until; i++) frag.appendChild(card(list[i]));
+    el.grid.appendChild(frag);
+    state.page.shown = until;
+  }
+
+  /** Keep filling while the end of the grid is in sight. */
+  function growIfNeeded() {
+    if (state.page.shown >= state.page.list.length) return;
+    const room = el.grid.scrollHeight - el.grid.scrollTop - el.grid.clientHeight;
+    if (room < el.grid.clientHeight) {
+      grow();
+      // A short list may not reach the bottom even after a page
+      requestAnimationFrame(growIfNeeded);
+    }
   }
 
   function card(entry) {
@@ -417,6 +559,8 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     const art = document.createElement("div");
     art.className = "card-art" + (entry.kind === "texture" ? " texture" : "");
     art._entry = entry;
+
+    art.appendChild(icon(entry.kind === "texture" ? "image" : "cube", "placeholder"));
 
     const ext = document.createElement("span");
     ext.className = "card-ext";
@@ -466,6 +610,7 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     spin.remove();
     if (!src) return;
 
+    art.querySelector(".placeholder")?.remove();
     const img = document.createElement("img");
     img.loading = "lazy";
     img.decoding = "async";
@@ -616,9 +761,15 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   });
 
   // --- wiring ------------------------------------------------------------
+  // Repainting on every keystroke rebuilds the whole grid while someone is
+  // still typing the word; a short wait costs nothing and saves all of it.
+  let searchTimer = null;
   el.search.addEventListener("input", () => {
-    state.query = el.search.value;
-    paint();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.query = el.search.value;
+      paint();
+    }, SEARCH_DELAY);
   });
   el.search.addEventListener("keydown", (e) => e.stopPropagation());
   el.sort.addEventListener("change", () => {
@@ -646,6 +797,7 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     },
     { passive: false }
   );
+  el.grid.addEventListener("scroll", growIfNeeded, { passive: true });
   el.close.addEventListener("click", () => hide());
 
   function show() {
