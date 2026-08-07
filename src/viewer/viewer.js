@@ -921,51 +921,82 @@ export class Viewer {
    */
   async setGizmo(mode, onChange, target = this.pedestal) {
     if (!mode || !target) {
+      this.gizmoReady = null;
+      this.gizmoBuiltFor = null;
       if (this.gizmo) {
         this.gizmo.detach();
-        this.scene.remove(this.gizmoHelper);
         this.gizmo.dispose();
         this.gizmo = null;
         this.gizmoHelper = null;
       }
+      // Everything of that kind, not just the one currently held. Putting the
+      // handles away has to mean the view is clear of them whatever happened
+      // before, or "escape closes it" is a promise with an exception in it.
+      // Matched on the flag: the helper's `type` is the inherited "Object3D",
+      // so a check on the name silently matched nothing and leaked every one.
+      for (const stray of this.scene.children.filter((o) => o.isTransformControlsRoot)) {
+        this.scene.remove(stray);
+      }
       this.invalidate();
       return;
     }
-    if (!this.gizmo || this.gizmoCamera !== this.camera) {
-      // The handles belong to one camera; switching projection rebuilds them
-      if (this.gizmo) {
-        this.scene.remove(this.gizmoHelper);
-        this.gizmo.dispose();
-      }
-      const { TransformControls } = await import(
-        "three/examples/jsm/controls/TransformControls.js"
-      );
-      this.gizmo = new TransformControls(this.camera, this.canvas);
-      this.gizmoCamera = this.camera;
-      this.gizmoHelper = this.gizmo.getHelper();
-      this.scene.add(this.gizmoHelper);
-      this.gizmo.addEventListener("change", () => this.invalidate());
-      // Fires on every step of a drag, which is where a number is wanted: not
-      // knowing what you started from and by how much it has moved is the whole
-      // complaint about dragging a handle blind.
-      this.gizmo.addEventListener("objectChange", () =>
-        this.onGizmoDrag?.("move", this.gizmo.object)
-      );
-      // Dragging a handle must not also orbit the camera behind it
-      this.gizmo.addEventListener("dragging-changed", (e) => {
-        this.controls.enabled = !e.value;
-        // Announced before and after, so whatever is keeping a history can take
-        // its snapshot of the object as it was rather than as it ended up.
-        this.onGizmoDrag?.(e.value ? "start" : "end", this.gizmo.object);
-        if (e.value) this.gizmo.__moving = this.gizmo.object;
-        if (!e.value && this.onGizmoChange) this.onGizmoChange(this.pedestalPlacing());
-      });
+    // One construction however many calls arrive before it finishes. The await
+    // below used to sit inside the branch that tests for an existing gizmo, so
+    // pressing G then R while the module was still loading let both calls
+    // through: each built its own controls and added its own helper, and the
+    // one that lost the race stayed in the scene, attached where the object's
+    // origin was before it got recentred. That was the second, offset gizmo.
+    // Claimed synchronously, before the await. Testing gizmoCamera here was no
+    // better than testing gizmo: both are only set once the build has finished,
+    // so every call arriving in the meantime still saw a camera that did not
+    // match and started a build of its own.
+    if (!this.gizmoReady || this.gizmoBuiltFor !== this.camera) {
+      this.gizmoBuiltFor = this.camera;
+      this.gizmoReady = this.buildGizmo();
     }
+    await this.gizmoReady;
+
     this.onGizmoChange = onChange;
     this.gizmo.setMode(mode);
     this.recentreOrigin(target);
     this.gizmo.attach(target);
     this.invalidate();
+  }
+
+  /** The handles themselves, built once per camera. */
+  async buildGizmo() {
+    // The handles belong to one camera; switching projection rebuilds them.
+    // Any helper still in the scene goes, whoever put it there.
+    if (this.gizmo) {
+      this.gizmo.detach();
+      this.gizmo.dispose();
+      this.gizmo = null;
+    }
+    for (const stray of this.scene.children.filter((o) => o.isTransformControlsRoot)) {
+      this.scene.remove(stray);
+    }
+    const { TransformControls } = await import(
+      "three/examples/jsm/controls/TransformControls.js"
+    );
+    this.gizmo = new TransformControls(this.camera, this.canvas);
+    this.gizmoCamera = this.camera;
+    this.gizmoHelper = this.gizmo.getHelper();
+    this.scene.add(this.gizmoHelper);
+    this.gizmo.addEventListener("change", () => this.invalidate());
+    // Fires on every step of a drag, which is where a number is wanted: not
+    // knowing what you started from and by how much it has moved is the whole
+    // complaint about dragging a handle blind.
+    this.gizmo.addEventListener("objectChange", () =>
+      this.onGizmoDrag?.("move", this.gizmo.object)
+    );
+    // Dragging a handle must not also orbit the camera behind it
+    this.gizmo.addEventListener("dragging-changed", (e) => {
+      this.controls.enabled = !e.value;
+      // Announced before and after, so whatever is keeping a history can take
+      // its snapshot of the object as it was rather than as it ended up.
+      this.onGizmoDrag?.(e.value ? "start" : "end", this.gizmo.object);
+      if (!e.value && this.onGizmoChange) this.onGizmoChange(this.pedestalPlacing());
+    });
   }
 
   /**
