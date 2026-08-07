@@ -936,6 +936,7 @@ export class Viewer {
   setModel(object, animations = []) {
     this.ensureEnvironment();
     this.clear();
+    this.root.rotation.set(0, 0, 0);
     this.root.add(object);
     this.current = object;
 
@@ -1185,6 +1186,49 @@ export class Viewer {
   applyLights(saved) {
     for (const entry of [...this.lights]) this.removeLight(entry.id);
     for (const item of saved || []) this.addLight(item.kind, item);
+  }
+
+
+  /**
+   * Turn the model on an axis, in quarter turns.
+   *
+   * Exporters disagree about which way is up, and a converter that assumes the
+   * wrong one hands over a model lying on its side or standing on its head.
+   * Nothing in the file says which of the two happened, so the only honest
+   * answer is a control: quarter turns, because that is what the mistake always
+   * is, and cumulative, so a wrong guess is undone by carrying on.
+   *
+   * @param {"x"|"y"|"z"} axis
+   * @param {number} quarters signed, usually one or minus one
+   */
+  turnModel(axis, quarters = 1) {
+    if (!this.current) return;
+    this.root.rotation[axis] += (Math.PI / 2) * quarters;
+    // Keep it readable rather than letting it wander to large numbers
+    this.root.rotation[axis] = Math.round(this.root.rotation[axis] / (Math.PI / 2)) * (Math.PI / 2);
+    this.afterOrientation();
+  }
+
+  resetOrientation() {
+    this.root.rotation.set(0, 0, 0);
+    this.afterOrientation();
+  }
+
+  /** @returns {{x: number, y: number, z: number}} in degrees */
+  orientation() {
+    const deg = (r) => Math.round((r * 180) / Math.PI) % 360;
+    return { x: deg(this.root.rotation.x), y: deg(this.root.rotation.y), z: deg(this.root.rotation.z) };
+  }
+
+  /** Everything that was measured against the old pose has to be measured again. */
+  afterOrientation() {
+    this.root.updateMatrixWorld(true);
+    if (!this.current) return;
+    const box = new THREE.Box3().setFromObject(this.current);
+    this.boxHelper.box.copy(box);
+    this.scaleGrid(box);
+    this.replaceLights();
+    this.invalidate();
   }
 
   stats() {

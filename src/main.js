@@ -149,6 +149,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     setTitle(label);
     showStats(stats);
     showDimensions();
+    paintOrientation();
     $("btn-export").disabled = false;
     $("btn-snapshot").disabled = false;
     paintShotPreview();
@@ -1808,6 +1809,47 @@ $("light-colour").addEventListener("input", (e) => {
   }
 }
 
+
+
+// --- orientation ----------------------------------------------------------
+
+/**
+ * Quarter turns on each axis.
+ *
+ * A converter that guesses the wrong up axis hands over a model on its side or
+ * upside down, and the file itself never says which happened. Six buttons and a
+ * reset settle it in one click, which is cheaper than asking anyone to re-export.
+ */
+function paintOrientation() {
+  const o = viewer.orientation();
+  const parts = [["X", o.x], ["Y", o.y], ["Z", o.z]].filter(([, v]) => v !== 0);
+  $("orient-value").textContent = parts.length
+    ? parts.map(([a, v]) => `${a} ${v > 180 ? v - 360 : v}°`).join(" · ")
+    : "Aucune rotation";
+}
+
+for (const [axis, quarters, label] of [
+  ["x", 1, "X +"], ["x", -1, "X −"],
+  ["y", 1, "Y +"], ["y", -1, "Y −"],
+  ["z", 1, "Z +"], ["z", -1, "Z −"],
+]) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = label;
+  b.title = `Quart de tour sur ${axis.toUpperCase()}`;
+  b.addEventListener("click", () => {
+    viewer.turnModel(axis, quarters);
+    paintOrientation();
+    showDimensions();
+  });
+  $("orient-buttons").appendChild(b);
+}
+
+$("orient-reset").addEventListener("click", () => {
+  viewer.resetOrientation();
+  paintOrientation();
+  showDimensions();
+});
 
 // --- picking --------------------------------------------------------------
 

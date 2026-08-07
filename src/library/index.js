@@ -150,6 +150,10 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     sort: prefs?.get?.("libSort") || "name",
     query: "",
     selected: null,
+    /** Every chosen entry, by relative path. */
+    chosen: new Set(),
+    /** Where a range extends from. */
+    anchor: null,
     /** Folder paths the tree is showing the inside of. */
     expanded: new Set(),
     /** Which slice of the result is on screen. */
@@ -246,6 +250,8 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     state.tag = null;
     state.format = null;
     state.selected = null;
+    state.chosen.clear();
+    state.anchor = null;
     prefs?.set?.("libRoot", root.path);
     paintRoots();
     el.grid.innerHTML = `<div class="lib-empty"><div class="lib-spin" style="margin:0 auto"></div></div>`;
@@ -559,7 +565,8 @@ export function createLibrary({ tauri, onOpen, prefs }) {
 
   function card(entry) {
     const node = document.createElement("button");
-    node.className = "card" + (state.selected?.rel === entry.rel ? " selected" : "");
+    node.className = "card" + (state.chosen.has(entry.rel) ? " selected" : "");
+    node._rel = entry.rel;
     node.type = "button";
 
     const art = document.createElement("div");
@@ -589,16 +596,43 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     sub.textContent = bytes(entry.size);
 
     node.append(art, name, sub);
-    node.addEventListener("click", () => {
-      state.selected = entry;
-      for (const other of el.grid.children) other.classList.remove("selected");
-      node.classList.add("selected");
+    node.addEventListener("click", (e) => {
+      // Plain click replaces, control adds or removes, shift takes the run
+      // between the anchor and here, which is what every file list does.
+      if (e.shiftKey && state.anchor) {
+        const list = state.page.list;
+        const from = list.findIndex((x) => x.rel === state.anchor);
+        const to = list.findIndex((x) => x.rel === entry.rel);
+        if (from >= 0 && to >= 0) {
+          const [a, b] = from < to ? [from, to] : [to, from];
+          if (!e.ctrlKey && !e.metaKey) state.chosen.clear();
+          for (let i = a; i <= b; i++) state.chosen.add(list[i].rel);
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        if (state.chosen.has(entry.rel)) state.chosen.delete(entry.rel);
+        else state.chosen.add(entry.rel);
+        state.anchor = entry.rel;
+      } else {
+        state.chosen.clear();
+        state.chosen.add(entry.rel);
+        state.anchor = entry.rel;
+      }
+      state.selected = state.chosen.has(entry.rel) ? entry : null;
+      paintChosen();
       paintDetail();
-      if (state.peek) peek(entry);
+      // The preview shows one thing; with several chosen it stays on the last
+      if (state.peek && state.selected) peek(entry);
     });
     node.addEventListener("dblclick", () => open(entry));
     observer.observe(art);
     return node;
+  }
+
+  /** Which cards are ringed, without rebuilding any of them. */
+  function paintChosen() {
+    for (const node of el.grid.children) {
+      if (node._rel) node.classList.toggle("selected", state.chosen.has(node._rel));
+    }
   }
 
   /** Fill a card once it comes into view, never before. */
@@ -626,38 +660,56 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   }
 
   // --- detail bar --------------------------------------------------------
+  /**
+   * The bar under the grid, which acts on everything chosen.
+   *
+   * Tagging one asset at a time is fine for one asset. A library is sorted in
+   * runs, so a tag typed once has to land on the whole run: the count in the
+   * bar is what says how many it will reach.
+   */
   function paintDetail() {
+    const chosen = [...state.chosen];
     const entry = state.selected;
-    el.detail.classList.toggle("open", !!entry);
+    el.detail.classList.toggle("open", chosen.length > 0);
     el.detail.textContent = "";
-    if (!entry) return;
+    if (!chosen.length) return;
 
+    const many = chosen.length > 1;
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = entry.name;
-    name.title = entry.path;
+    name.textContent = many ? `${chosen.length} éléments` : entry?.name ?? chosen[0];
+    name.title = many ? chosen.slice(0, 20).join(String.fromCharCode(10)) : entry?.path ?? "";
 
     const meta = document.createElement("span");
     meta.className = "meta";
-    const date = new Date(entry.modified * 1000);
-    meta.textContent = `${entry.ext.toUpperCase()} · ${bytes(entry.size)} · ${date.toLocaleDateString("fr-FR")}`;
+    if (many) {
+      const total = state.entries.filter((x) => state.chosen.has(x.rel)).reduce((n, x) => n + x.size, 0);
+      meta.textContent = bytes(total);
+    } else if (entry) {
+      const date = new Date(entry.modified * 1000);
+      meta.textContent = `${entry.ext.toUpperCase()} · ${bytes(entry.size)} · ${date.toLocaleDateString("fr-FR")}`;
+    }
+
+    // A tag shown here is one every chosen asset carries; removing it removes
+    // it from all of them, which is the only reading that is not a surprise.
+    const shared = chosen
+      .map((rel) => tagsOf(rel))
+      .reduce((all, tags) => all.filter((t) => tags.includes(t)), tagsOf(chosen[0]).slice());
 
     const chips = document.createElement("span");
-    chips.style.display = "flex";
-    chips.style.gap = "5px";
-    chips.style.flexWrap = "wrap";
-    for (const tag of tagsOf(entry.rel)) {
+    chips.style.cssText = "display:flex;gap:5px;flex-wrap:wrap";
+    for (const tag of shared) {
       const chip = document.createElement("span");
       chip.className = "chip";
       chip.append(tag);
       const drop = document.createElement("button");
       drop.textContent = "✕";
-      drop.title = "Retirer";
+      drop.title = many ? `Retirer de ${chosen.length} éléments` : "Retirer";
       drop.addEventListener("click", () => {
-        removeTag(entry.rel, tag);
+        for (const rel of chosen) removeTag(rel, tag);
         paintDetail();
         paintTags();
-        paint();
+        paintChosen();
       });
       chip.appendChild(drop);
       chips.appendChild(chip);
@@ -665,27 +717,29 @@ export function createLibrary({ tauri, onOpen, prefs }) {
 
     const input = document.createElement("input");
     input.className = "tag-input";
-    input.placeholder = "Ajouter un tag, Entrée";
+    input.placeholder = many ? `Tag pour ${chosen.length} éléments, Entrée` : "Ajouter un tag, Entrée";
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key !== "Enter" || !input.value.trim()) return;
-      addTag(entry.rel, input.value);
+      for (const rel of chosen) addTag(rel, input.value);
       input.value = "";
       paintDetail();
       paintTags();
-      paint();
+      paintChosen();
     });
 
     const spacer = document.createElement("span");
     spacer.className = "lib-spacer";
 
-    const openIt = document.createElement("button");
-    openIt.className = "wide";
-    openIt.style.width = "auto";
-    openIt.textContent = "Ouvrir";
-    openIt.addEventListener("click", () => open(entry));
-
-    el.detail.append(name, meta, chips, input, spacer, openIt);
+    el.detail.append(name, meta, chips, input, spacer);
+    if (!many && entry) {
+      const openIt = document.createElement("button");
+      openIt.className = "wide";
+      openIt.style.width = "auto";
+      openIt.textContent = "Ouvrir";
+      openIt.addEventListener("click", () => open(entry));
+      el.detail.appendChild(openIt);
+    }
   }
 
   async function open(entry) {
