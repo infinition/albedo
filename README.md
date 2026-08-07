@@ -409,6 +409,21 @@ The inspector is five panes behind five icons, one on screen at a time: render,
 matter, camera, decor, scene. It grew to eight stacked sections and reaching the
 stand meant scrolling past the camera. Which pane was open is remembered.
 
+Every slider states its value, to as many decimals as its own step implies: a
+slider that moves in whole degrees never shows a fraction, one that moves in
+thousandths never hides what it did. The readouts are attached rather than
+written into the markup, because thirty seven sliders is thirty seven chances
+to forget one and the next one added would start out silent.
+
+What the keyboard changes is said out loud, once, in a pill at the top of the
+view that fades on its own. Half of what the keys do happens off screen: the
+grid goes, the lens narrows, the interface hides, and the only evidence is the
+picture, which is what you were looking at instead of the controls. Dragging
+the lens or rolling the wheel counts as one message that keeps counting, so
+the field of view and the zoom read as a number rather than a queue. Zoom is a
+percentage of the framing `F` gives, since a distance in world units would
+mean nothing.
+
 Right click gives no web menu. Reload, print, save image and inspect are offers
 about a web page, and half of them are ways to lose what is on screen. The
 canvas never showed one, since the orbit controls refuse the event to keep the

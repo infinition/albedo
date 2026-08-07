@@ -1026,6 +1026,9 @@ export class Viewer {
     const dir = new THREE.Vector3(1, 0.55, 1).normalize();
     this.camera.position.copy(center).addScaledVector(dir, dist);
     this.controls.target.copy(center);
+    // The distance that shows the whole model, kept so zoom has something to be
+    // a percentage of. A number of world units would mean nothing to anyone.
+    this.framedDistance = dist;
     if (this.camera.isOrthographicCamera) {
       this.syncOrtho();
     } else {
@@ -1038,6 +1041,19 @@ export class Viewer {
     }
     this.controls.update();
     this.invalidate();
+  }
+
+  /**
+   * How close the camera sits, as a percentage of the framing `F` gives.
+   *
+   * A hundred is the whole model in view; more is closer. Null while nothing is
+   * framed, so a caller shows nothing rather than a number about nothing.
+   */
+  zoomPercent() {
+    if (!this.framedDistance) return null;
+    const d = this.camera.position.distanceTo(this.controls.target);
+    if (!(d > 0)) return null;
+    return Math.round((this.framedDistance / d) * 100);
   }
 
   /** Re-frame the model currently in the scene. */

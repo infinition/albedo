@@ -19,6 +19,70 @@ import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 
 const $ = (id) => document.getElementById(id);
 const app = $("app");
+
+/**
+ * Say what just changed, once, and get out of the way.
+ *
+ * Half of what the keyboard does happens off screen: the grid goes, the lens
+ * narrows, the interface hides, and the only evidence is the picture itself,
+ * which is exactly what you were looking at instead of the controls. A call
+ * while one is already up replaces it and restarts the clock, so dragging the
+ * lens reads as one number counting rather than a queue of messages.
+ */
+let toastTimer = null;
+function toast(text, ms = 1100) {
+  const el = $("toast");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), ms);
+}
+
+/**
+ * Every slider says what it is set to.
+ *
+ * Attached rather than written into the markup: thirty six sliders is thirty
+ * six chances to forget one, and the next one added would start out silent.
+ * The number of decimals comes from the step, so a slider that moves in whole
+ * degrees never shows a fraction and one that moves in thousandths never hides
+ * what it did.
+ */
+function decimalsOf(step) {
+  const s = String(step ?? "");
+  const dot = s.indexOf(".");
+  return dot < 0 ? 0 : s.length - dot - 1;
+}
+
+function wireSliderValues(scope) {
+  for (const input of scope.querySelectorAll('input[type="range"]')) {
+    if (input.dataset.novalue !== undefined) continue;
+    const label = input.closest("label");
+    // A dozen sliders state their value already, in their own units and from
+    // wherever the value actually changes, a lens drag included. Those keep it.
+    if (!label || label.querySelector(".mono")) continue;
+    const out = document.createElement("span");
+    out.className = "slider-value";
+    label.appendChild(out);
+    input._readout = out;
+    input.addEventListener("input", () => showSliderValue(input));
+    showSliderValue(input);
+  }
+}
+
+function showSliderValue(input) {
+  const out = input._readout;
+  if (!out) return;
+  const n = Number(input.value);
+  out.textContent = `${n.toFixed(decimalsOf(input.step))}${input.dataset.unit || ""}`;
+}
+
+/** After anything sets values behind the sliders' backs, prefs above all. */
+function refreshSliderValues() {
+  for (const input of $("inspector").querySelectorAll('input[type="range"]')) showSliderValue(input);
+}
+
+const labelOfChannel = (id) => CHANNELS.find((c) => c.id === id)?.label || id;
 const viewer = new Viewer($("view"));
 const channels = new ChannelView(viewer);
 
@@ -32,12 +96,16 @@ const nav = new Navigation(viewer, {
   onFov: (fov) => {
     $("opt-fov").value = String(Math.round(fov));
     $("fov-value").textContent = `${Math.round(fov)}°`;
+    // The panel is usually shut while the lens is being dragged, and the drag
+    // is the one gesture where the number is the whole point.
+    toast(`Champ ${Math.round(fov)}°`);
     prefs.set("fov", Math.round(fov));
   },
   // Shift and drag turns the environment when the environment is the light
   onEnvRotate: (deg) => {
     $("env-rotation").value = String(deg);
     $("rot-value").textContent = `${deg}°`;
+    toast(`Environnement ${deg}°`);
     prefs.set("environmentRotation", deg);
   },
 });
@@ -46,7 +114,28 @@ viewer.onFrame = (dt) => {
   nav.update(dt);
   if (viewer.playing) timelinePaint();
   watchShotFraming();
+  // Read after the controls have run, not on the wheel event: damping spreads
+  // one notch over several frames, so the number on the event is not yet true.
+  if (performance.now() < zoomAnnounceUntil) {
+    const percent = viewer.zoomPercent();
+    if (percent !== null) toast(`Zoom ${percent} %`);
+  }
 };
+
+/**
+ * The wheel is unambiguously a zoom, which is why it is the hook rather than
+ * the controls' change event: that one also fires for every orbit and every
+ * pan, and a number that appears whenever the camera moves is noise.
+ */
+let zoomAnnounceUntil = 0;
+$("view").addEventListener(
+  "wheel",
+  () => {
+    if (nav.mode !== "orbit") return;
+    zoomAnnounceUntil = performance.now() + 600;
+  },
+  { passive: true }
+);
 let timelinePaint = () => {};
 
 let tauri = null;
@@ -1164,6 +1253,10 @@ function paintGradient(remember = true) {
     at.max = "1";
     at.step = "0.01";
     at.value = String(stop.at);
+    // The one slider with nothing to state: where the stop sits is drawn in the
+    // strip right above it, at the size of the strip rather than of a number.
+    at.dataset.novalue = "";
+    at.title = "Position de la couleur dans le dégradé";
     at.addEventListener("input", () => {
       stop.at = Number(at.value);
       refreshGradient();
@@ -1406,6 +1499,9 @@ function applyPrefs() {
   if (p.environment !== "studio") useEnvironment(p.environment, p.environmentPath, false);
   else viewer.applyBackground();
   if (p.pedestal) usePedestal(p.pedestal, false);
+  // Setting `value` fires no input event, so the readouts would still be
+  // showing the markup's defaults and quietly disagreeing with the sliders.
+  refreshSliderValues();
 }
 
 /** The tuning of a device outlives the session that found it. */
@@ -1943,21 +2039,25 @@ window.addEventListener("keydown", (e) => {
     case "KeyH":
       // show nothing but the model
       document.body.classList.toggle("clean");
+      toast(document.body.classList.contains("clean") ? "Interface masquée · H" : "Interface visible");
       break;
     case "KeyF":
       if (e.ctrlKey || e.altKey) return;
       e.preventDefault();
       viewer.frameCurrent();
+      toast("Cadré · 100 %");
       break;
     case "F11":
       e.preventDefault();
       hud.toggleFullscreen();
       break;
-    case "Digit1": applyChannel("shaded"); break;
-    case "Digit2": applyChannel("albedo"); break;
-    case "Digit3": applyChannel("normalMap"); break;
-    case "Digit4": applyChannel("roughness"); break;
-    case "Digit5": applyChannel("uv"); break;
+    // The toast lives here rather than in applyChannel, which also runs on every
+    // model load and on restoring a preference: neither is news.
+    case "Digit1": applyChannel("shaded"); toast(labelOfChannel("shaded")); break;
+    case "Digit2": applyChannel("albedo"); toast(labelOfChannel("albedo")); break;
+    case "Digit3": applyChannel("normalMap"); toast(labelOfChannel("normalMap")); break;
+    case "Digit4": applyChannel("roughness"); toast(labelOfChannel("roughness")); break;
+    case "Digit5": applyChannel("uv"); toast(labelOfChannel("uv")); break;
     case "KeyO":
       // The same key opens a file with the modifier and orbits without it
       if (e.ctrlKey) {
@@ -1965,9 +2065,13 @@ window.addEventListener("keydown", (e) => {
         openFile();
       } else {
         hud.setMode("orbit");
+        toast("Orbite");
       }
       break;
-    case "KeyV": hud.setMode("fly"); break;
+    case "KeyV":
+      hud.setMode("fly");
+      toast("Vol · Échap pour sortir");
+      break;
     // Fly holds the mouse, so leaving it needs a key that is never a movement
     // one. Escape usually never reaches us, the webview eats it to release the
     // pointer, which the navigation already reads as the way out; this covers
@@ -1976,23 +2080,38 @@ window.addEventListener("keydown", (e) => {
     case "KeyG":
       $("opt-grid").checked = !$("opt-grid").checked;
       viewer.setGrid($("opt-grid").checked);
+      toast($("opt-grid").checked ? "Grille affichée" : "Grille masquée");
       break;
     case "KeyT":
-      if (nav.mode === "orbit") toggleTurntable();
+      if (nav.mode === "orbit") {
+        toggleTurntable();
+        toast(viewer.spin ? "Rotation continue" : "Rotation arrêtée");
+      }
       break;
-    case "KeyU": toggleUnlit(); break;
+    case "KeyU":
+      toggleUnlit();
+      toast(currentChannel === "unlit" ? "Unlit" : "PBR");
+      break;
     case "KeyB":
       e.preventDefault();
       toggleLibrary();
       break;
-    case "KeyR": nav.resetRoll(); break;
+    case "KeyR":
+      nav.resetRoll();
+      toast("Roulis remis à plat");
+      break;
     case "KeyW":
       if (!e.ctrlKey && nav.mode === "orbit") {
         $("opt-wireframe").checked = !$("opt-wireframe").checked;
         channels.setWireframe($("opt-wireframe").checked);
+        toast($("opt-wireframe").checked ? "Fil de fer" : "Fil de fer coupé");
       }
       break;
     default:
       break;
   }
 });
+
+// Last, so every restored preference and every saved effect setting is already
+// in the inputs and the first number shown is the one in force.
+wireSliderValues($("inspector"));

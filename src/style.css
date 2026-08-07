@@ -307,8 +307,61 @@ body.inspector .ov-br { opacity: 0; }
 .check input { accent-color: var(--accent); width: 14px; height: 14px; margin: 0; }
 
 .field { display: block; padding: 6px 0; }
-.field > span { display: block; color: var(--muted); margin-bottom: 2px; }
+/* Name on the left, number on the right. The dozen sliders that already stated
+   their value did it inline after the name, where it read as part of the name;
+   this puts them where the generated ones go, so the column is one column. */
+.field > span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.field > span > .mono { font-size: 10.5px; color: var(--fg); opacity: 0.72; }
+.field:hover > span > .mono { opacity: 1; color: var(--accent); }
 .field input[type="range"] { width: 100%; }
+
+/* A slider without its number is a slider you have to guess at. The readout is
+   placed rather than inserted, so it works the same whether the label puts its
+   text above the slider or beside it, and no markup had to be rearranged. */
+label:has(> input[type="range"]) { position: relative; }
+.slider-value {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--fg);
+  opacity: 0.72;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+label:hover > .slider-value,
+label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
+
+/* --- what just changed ----------------------------------------------------- */
+
+#toast {
+  position: absolute;
+  top: calc(var(--gap) + 4px);
+  left: 50%;
+  transform: translate(-50%, -6px);
+  z-index: 12;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(12, 14, 18, 0.82);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
 
 .row { display: flex; gap: 8px; align-items: center; }
 
@@ -602,7 +655,7 @@ details[open] summary::before { content: "▾ "; }
   /* Not on :root, which would answer for the whole window, and not on #stage
      either: a container query styles descendants, never the container itself.
      These two hold everything that reads the variable. */
-  #chrome, #inspector { --gap: 10px; }
+  #chrome, #inspector, #toast { --gap: 10px; }
   #inspector {
     width: auto;
     left: var(--gap);
