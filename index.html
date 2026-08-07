@@ -191,6 +191,37 @@
             <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1" />
           </label>
 
+          <h2 style="margin-top:18px">Lumières</h2>
+          <div id="lights-list"></div>
+          <div class="row">
+            <select id="light-kind" class="quiet">
+              <option value="directional">Directionnelle</option>
+              <option value="point">Ponctuelle</option>
+              <option value="spot">Projecteur</option>
+            </select>
+            <button id="light-add" class="seg" type="button" title="Ajouter une lumière">Ajouter</button>
+          </div>
+          <div id="light-editor" hidden>
+            <label class="field"><span>Intensité <span id="light-power-value" class="mono">2.0</span></span>
+              <input type="range" id="light-power" min="0" max="20" step="0.1" value="2" /></label>
+            <label class="field"><span>Azimut <span id="light-azimuth-value" class="mono">45°</span></span>
+              <input type="range" id="light-azimuth" min="-180" max="180" step="1" value="45" /></label>
+            <label class="field"><span>Hauteur <span id="light-elevation-value" class="mono">35°</span></span>
+              <input type="range" id="light-elevation" min="-89" max="89" step="1" value="35" /></label>
+            <label class="field"><span>Distance <span id="light-distance-value" class="mono">2.5×</span></span>
+              <input type="range" id="light-distance" min="0.5" max="8" step="0.1" value="2.5" /></label>
+            <div id="light-cone" hidden>
+              <label class="field"><span>Ouverture <span id="light-angle-value" class="mono">35°</span></span>
+                <input type="range" id="light-angle" min="5" max="80" step="1" value="35" /></label>
+              <label class="field"><span>Bord <span id="light-penumbra-value" class="mono">0.4</span></span>
+                <input type="range" id="light-penumbra" min="0" max="1" step="0.02" value="0.4" /></label>
+            </div>
+            <div class="row">
+              <input type="color" id="light-colour" class="swatch" value="#ffffff" />
+              <button id="light-remove" class="seg" type="button" title="Retirer cette lumière">Retirer</button>
+            </div>
+          </div>
+
           <div id="env-framing" hidden>
             <label class="field">
               <span>Zoom <span id="zoom-value" class="mono">1.0×</span></span>

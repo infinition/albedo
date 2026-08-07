@@ -117,6 +117,15 @@ export class Viewer {
     this.keyLight.position.set(3, 6, 4);
     this.scene.add(this.keyLight);
 
+    // Lights the user adds, kept in their own group so clearing a model never
+    // takes the rig with it.
+    this.rig = new THREE.Group();
+    this.scene.add(this.rig);
+    this.lights = [];
+    this.lightHelper = null;
+    this.selectedLight = null;
+    this._lightSeq = 0;
+
     this.grid = new THREE.GridHelper(10, 20, 0x3a4150, 0x272c35);
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.7;
@@ -906,6 +915,8 @@ export class Viewer {
       object.traverse((o) => box.expandByPoint(p.setFromMatrixPosition(o.matrixWorld)));
     }
     this.boxHelper.box.copy(box);
+    // The rig is placed against the model, so a new file is lit the same way
+    this.replaceLights();
     this.frame(box);
     this.scaleGrid(box);
 
@@ -964,6 +975,161 @@ export class Viewer {
     this.grid.position.y = box.min.y;
     this.grid.visible = this._gridVisible !== false;
     this.scene.add(this.grid);
+  }
+
+
+  // ---------------------------------------------------------------------------
+  // Extra lights
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Lights the user adds on top of the environment.
+   *
+   * Placed by azimuth and elevation rather than by coordinates, the way a light
+   * dome works in Marmoset or a three point rig is described on paper: a light
+   * belongs at a bearing and a height around the subject, and should stay there
+   * when the next model is a different size. The distance is a multiple of the
+   * model's own radius for the same reason.
+   */
+  addLight(kind = "directional", patch = {}) {
+    const id = ++this._lightSeq;
+    const entry = {
+      id,
+      kind,
+      name: patch.name || `Lumière ${this.lights.length + 1}`,
+      colour: patch.colour || "#ffffff",
+      intensity: patch.intensity ?? (kind === "directional" ? 2 : 12),
+      azimuth: patch.azimuth ?? 45,
+      elevation: patch.elevation ?? 35,
+      distance: patch.distance ?? 2.5,
+      angle: patch.angle ?? 35,
+      penumbra: patch.penumbra ?? 0.4,
+      enabled: patch.enabled !== false,
+    };
+    entry.object = this.makeLight(entry);
+    this.rig.add(entry.object);
+    if (entry.object.target) this.rig.add(entry.object.target);
+    this.lights.push(entry);
+    this.placeLight(entry);
+    this.invalidate();
+    return entry;
+  }
+
+  makeLight(entry) {
+    const colour = new THREE.Color(entry.colour);
+    if (entry.kind === "point") return new THREE.PointLight(colour, entry.intensity);
+    if (entry.kind === "spot") {
+      const spot = new THREE.SpotLight(colour, entry.intensity);
+      spot.angle = THREE.MathUtils.degToRad(entry.angle);
+      spot.penumbra = entry.penumbra;
+      return spot;
+    }
+    return new THREE.DirectionalLight(colour, entry.intensity);
+  }
+
+  /** Put a light where its bearing, height and distance say it belongs. */
+  placeLight(entry) {
+    const box = this.boxHelper.box;
+    const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3);
+    const azimuth = THREE.MathUtils.degToRad(entry.azimuth);
+    const elevation = THREE.MathUtils.degToRad(entry.elevation);
+    const reach = radius * entry.distance;
+
+    entry.object.position.set(
+      centre.x + reach * Math.cos(elevation) * Math.sin(azimuth),
+      centre.y + reach * Math.sin(elevation),
+      centre.z + reach * Math.cos(elevation) * Math.cos(azimuth)
+    );
+    if (entry.object.target) {
+      entry.object.target.position.copy(centre);
+      entry.object.target.updateMatrixWorld();
+    }
+    if (entry.kind === "point" || entry.kind === "spot") {
+      // Reach past the model, otherwise the far side falls off to nothing
+      entry.object.distance = reach * 4;
+      entry.object.decay = 2;
+    }
+    this.invalidate();
+  }
+
+  /** Every light follows the model it lights, so a new file is lit the same. */
+  replaceLights() {
+    for (const entry of this.lights) this.placeLight(entry);
+    if (this.lightHelper) this.lightHelper.update?.();
+  }
+
+  setLight(id, patch) {
+    const entry = this.lights.find((l) => l.id === id);
+    if (!entry) return null;
+    Object.assign(entry, patch);
+
+    // Changing the kind means a different object, not a different setting
+    if (patch.kind && patch.kind !== entry.object.type.toLowerCase().replace("light", "")) {
+      this.rig.remove(entry.object);
+      if (entry.object.target) this.rig.remove(entry.object.target);
+      entry.object.dispose?.();
+      entry.object = this.makeLight(entry);
+      this.rig.add(entry.object);
+      if (entry.object.target) this.rig.add(entry.object.target);
+      if (this.selectedLight === id) this.showLightHelper(id);
+    }
+    entry.object.color.set(entry.colour);
+    entry.object.intensity = entry.intensity;
+    entry.object.visible = entry.enabled;
+    if (entry.object.isSpotLight) {
+      entry.object.angle = THREE.MathUtils.degToRad(entry.angle);
+      entry.object.penumbra = entry.penumbra;
+    }
+    this.placeLight(entry);
+    this.lightHelper?.update?.();
+    return entry;
+  }
+
+  removeLight(id) {
+    const index = this.lights.findIndex((l) => l.id === id);
+    if (index < 0) return;
+    const [entry] = this.lights.splice(index, 1);
+    this.rig.remove(entry.object);
+    if (entry.object.target) this.rig.remove(entry.object.target);
+    entry.object.dispose?.();
+    if (this.selectedLight === id) this.showLightHelper(null);
+    this.invalidate();
+  }
+
+  /** Draw where a light is, while it is the one being edited. */
+  showLightHelper(id) {
+    if (this.lightHelper) {
+      this.rig.remove(this.lightHelper);
+      this.lightHelper.dispose?.();
+      this.lightHelper = null;
+    }
+    this.selectedLight = id;
+    const entry = this.lights.find((l) => l.id === id);
+    if (!entry) {
+      this.invalidate();
+      return;
+    }
+    const radius = Math.max(this.boxHelper.box.getSize(new THREE.Vector3()).length() / 20, 0.01);
+    if (entry.object.isDirectionalLight) {
+      this.lightHelper = new THREE.DirectionalLightHelper(entry.object, radius, 0xffb454);
+    } else if (entry.object.isSpotLight) {
+      this.lightHelper = new THREE.SpotLightHelper(entry.object, 0xffb454);
+    } else {
+      this.lightHelper = new THREE.PointLightHelper(entry.object, radius, 0xffb454);
+    }
+    this.rig.add(this.lightHelper);
+    this.invalidate();
+  }
+
+  /** What to write down, without the three objects. */
+  lightState() {
+    return this.lights.map(({ object, ...rest }) => rest);
+  }
+
+  applyLights(saved) {
+    for (const entry of [...this.lights]) this.removeLight(entry.id);
+    for (const item of saved || []) this.addLight(item.kind, item);
   }
 
   stats() {

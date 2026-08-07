@@ -254,6 +254,49 @@ remove it by hand:
 regsvr32 /u "%LOCALAPPDATA%\Programs\Albedo\albedo_thumbnails.dll"
 ```
 
+## Lighting and effects
+
+### Lights
+
+The environment does most of the work, and on top of it any number of lights
+can be added: directional, point or spot. Each is placed by bearing, height and
+distance rather than by coordinates, the way a light dome is described in
+Marmoset or a three point rig is described on paper. The distance is a multiple
+of the model's own radius, so a rig set up on a bolt still makes sense on a
+building, and every light is re-placed against whatever model is opened next.
+
+Selecting a light draws its helper, which is the only way to tell where a
+directional light comes from without moving it and watching what changes.
+
+### Post-processing
+
+The chain follows what Marmoset and Sketchfab put in front of an artist,
+because those are the pictures a viewer gets compared against:
+
+| Effect | Notes |
+| --- | --- |
+| Ambient occlusion | GTAO, the ground truth flavour rather than the older screen space one |
+| Bloom | Threshold, strength and radius |
+| Depth of field | Focus given as a fraction of the subject's depth, so the slider means the same thing on any model |
+| Grading | Contrast, saturation, temperature |
+| Vignette, grain, chromatic aberration, sharpening | One pass, since five would each cost a full screen read |
+| Antialiasing | SMAA, on the final pixels |
+
+Two rules set the order. Occlusion, bloom and depth of field are optical and
+belong in linear light, before tone mapping. Grading, vignette, grain and
+sharpening are darkroom work and belong after it, on the picture as it will be
+seen. Antialiasing comes last of all.
+
+None of it is loaded until an effect is switched on, and switching everything
+off returns the renderer to drawing straight to the canvas: measured identical,
+pixel for pixel, to never having enabled anything.
+
+One trap worth recording. three does not tone map the clear colour, and the
+chain ends in a pass that tone maps everything, backdrop included, so enabling
+an effect dropped the default background from 20,22,26 to 5,6,8. The colour fed
+to the chain is pre-compensated by inverting the tone curve, so the backdrop
+you picked is the backdrop you see either way.
+
 ## Navigation
 
 Two modes share one camera.
@@ -347,6 +390,11 @@ confirmed on the real thing.
 | On demand rendering, idle window costs nothing | [x] | Frame loop only runs on invalidation |
 | Generated studio lighting, no HDRI shipped | [x] | RoomEnvironment through PMREM |
 | Phong and Lambert converted to PBR | [x] | FBX white veil gone, 4 materials converted |
+| Specular read from the file, not invented | [x] | Same alligator: GLB and FBX render pixel for pixel identically |
+| USD shader inputs routed by connection | [x] | A normal map can no longer land in the albedo slot |
+| Effect chain, and nothing until it is asked for | [x] | Absent before the first tick, identical to base when switched off |
+| Backdrop unchanged by the chain | [x] | 20,22,26 with occlusion, bloom and depth of field |
+| Custom lights: add, place, colour, remove | [x] | Luminance moves with power and bearing, returns on removal |
 | Colour space correction | [x] | Base colour sRGB, data maps linear |
 | PBR / unlit toggle | [x] | Both buttons drive the channel state |
 | Per material PBR / unlit | [x] | Alligator body unlit while its eyes stay PBR |
@@ -436,6 +484,8 @@ confirmed on the real thing.
 - [x] Shell integration: open with, drag and drop, command line
 - [x] No console window, GUI subsystem in every build
 - [x] Asset manager: libraries, grid, folder tree, tags, filters, search
+- [x] Custom lights: directional, point and spot, placed on a dome
+- [x] Post-processing: occlusion, bloom, depth of field, grading, grain, SMAA
 - [x] Windows shell thumbnails, rendered by the viewer itself and cached on disk
 - [x] Export to glTF, so anything readable becomes portable
 - [x] Save the view as a PNG, clear background, no overlays
@@ -447,8 +497,6 @@ confirmed on the real thing.
 
 ### Next
 
-- [ ] Custom lights, with the gizmo the stand already uses. The fill light is
-      already steerable, coloured and dimmable; what is missing is more of them.
 - [ ] USD animation and skinning. Geometry, transforms and materials are read;
       time samples and blend shapes are not.
 - [ ] NIF skinning applied at load, rather than showing the bind pose.

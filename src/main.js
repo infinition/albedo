@@ -1373,6 +1373,119 @@ for (const [group, key, id] of POST_CONTROLS) {
   }
 }
 
+
+// --- custom lights --------------------------------------------------------
+
+/**
+ * The light rig.
+ *
+ * A light is placed by bearing and height around the subject rather than by
+ * coordinates, so it stays where it was put when the next model is a different
+ * size. Selecting one draws its helper, which is the only way to tell where a
+ * directional light is coming from without moving it and watching.
+ */
+let selectedLight = null;
+
+const LIGHT_FIELDS = [
+  ["intensity", "light-power", "light-power-value", (v) => v.toFixed(1)],
+  ["azimuth", "light-azimuth", "light-azimuth-value", (v) => `${v | 0}°`],
+  ["elevation", "light-elevation", "light-elevation-value", (v) => `${v | 0}°`],
+  ["distance", "light-distance", "light-distance-value", (v) => `${v.toFixed(1)}×`],
+  ["angle", "light-angle", "light-angle-value", (v) => `${v | 0}°`],
+  ["penumbra", "light-penumbra", "light-penumbra-value", (v) => v.toFixed(2)],
+];
+
+function saveLights() {
+  prefs.set("lights", viewer.lightState());
+}
+
+function paintLights() {
+  const list = $("lights-list");
+  list.textContent = "";
+  for (const entry of viewer.lights) {
+    const row = document.createElement("div");
+    row.className = "mat-row";
+
+    const on = document.createElement("input");
+    on.type = "checkbox";
+    on.checked = entry.enabled;
+    on.title = "Allumer ou éteindre";
+    on.addEventListener("change", () => {
+      viewer.setLight(entry.id, { enabled: on.checked });
+      saveLights();
+    });
+
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "mat-name";
+    name.style.cursor = "pointer";
+    name.textContent = `${entry.name} · ${{ directional: "dir", point: "pt", spot: "proj" }[entry.kind]}`;
+    name.addEventListener("click", () => selectLight(entry.id));
+
+    const swatch = document.createElement("span");
+    swatch.style.cssText = `width:12px;height:12px;border-radius:3px;background:${entry.colour};border:1px solid var(--line)`;
+
+    row.append(on, name, swatch);
+    if (selectedLight === entry.id) row.style.background = "rgba(255,255,255,0.06)";
+    list.appendChild(row);
+  }
+  $("light-editor").hidden = selectedLight === null;
+}
+
+function selectLight(id) {
+  selectedLight = viewer.lights.some((l) => l.id === id) ? id : null;
+  viewer.showLightHelper(selectedLight);
+  const entry = viewer.lights.find((l) => l.id === selectedLight);
+  if (entry) {
+    for (const [key, input, label, format] of LIGHT_FIELDS) {
+      $(input).value = String(entry[key]);
+      $(label).textContent = format(entry[key]);
+    }
+    $("light-colour").value = entry.colour;
+    $("light-cone").hidden = entry.kind !== "spot";
+  }
+  paintLights();
+}
+
+$("light-add").addEventListener("click", () => {
+  const entry = viewer.addLight($("light-kind").value);
+  selectLight(entry.id);
+  saveLights();
+});
+
+$("light-remove").addEventListener("click", () => {
+  if (selectedLight === null) return;
+  viewer.removeLight(selectedLight);
+  selectedLight = null;
+  selectLight(null);
+  saveLights();
+});
+
+for (const [key, input, label, format] of LIGHT_FIELDS) {
+  $(input).addEventListener("input", (e) => {
+    if (selectedLight === null) return;
+    const value = Number(e.target.value);
+    $(label).textContent = format(value);
+    viewer.setLight(selectedLight, { [key]: value });
+    saveLights();
+  });
+}
+
+$("light-colour").addEventListener("input", (e) => {
+  if (selectedLight === null) return;
+  viewer.setLight(selectedLight, { colour: e.target.value });
+  paintLights();
+  saveLights();
+});
+
+{
+  const saved = prefs.get("lights");
+  if (saved?.length) {
+    viewer.applyLights(saved);
+    paintLights();
+  }
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
   if (library?.isOpen && e.code !== "KeyB") return;
