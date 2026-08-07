@@ -620,8 +620,11 @@ export function createLibrary({ tauri, onOpen, prefs }) {
       state.selected = state.chosen.has(entry.rel) ? entry : null;
       paintChosen();
       paintDetail();
-      // The preview shows one thing; with several chosen it stays on the last
-      if (state.peek && state.selected) peek(entry);
+      // The strip shows one asset, so it only follows a selection of one.
+      // Building a selection is not a request to look at each thing put in it:
+      // every control-click used to load another model into the viewer, and a
+      // run taken with shift loaded them one after another.
+      if (state.peek && state.chosen.size === 1 && state.selected) peek(state.selected);
     });
     node.addEventListener("dblclick", () => open(entry));
     observer.observe(art);
@@ -764,10 +767,19 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   // scene, so it is shown as the picture it is.
 
   let peekTimer = null;
+  /**
+   * What the strip already shows.
+   *
+   * Nothing else can change the viewer while the library is up, so asking for
+   * the asset already on screen is answered by leaving it there rather than by
+   * loading it again. Cleared on the way out, where that stops being true.
+   */
+  let peeked = null;
 
   function peek(entry) {
     clearTimeout(peekTimer);
-    if (!entry) return;
+    if (!entry || entry.rel === peeked) return;
+    peeked = entry.rel;
     if (entry.kind === "texture") {
       const image = document.getElementById("peek-image");
       if (image) {
@@ -887,6 +899,10 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     document.body.classList.remove("peeking");
     const image = document.getElementById("peek-image");
     if (image) image.hidden = true;
+    // Out here the viewer answers to someone else, so what it holds is no
+    // longer known and the next preview has to load rather than assume.
+    peeked = null;
+    clearTimeout(peekTimer);
     window.dispatchEvent(new Event("resize"));
   }
 
