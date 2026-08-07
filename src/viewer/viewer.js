@@ -98,11 +98,11 @@ export class Viewer {
 
     this.controls = this.makeControls(this.camera);
 
-    // Neutral studio lighting, generated: no HDRI to ship, no license to track
+    // Neutral studio lighting, generated: no HDRI to ship, no license to track.
+    // Built on demand, see studio(): an empty viewport has nothing to light.
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.studioMap = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.envMap = this.studioMap;
-    this.scene.environment = this.envMap;
+    this.studioMap = null;
+    this.envMap = null;
     this.envKind = "studio";
     this.envPanorama = null;
     this.panoramaSource = null;
@@ -530,13 +530,32 @@ export class Viewer {
    * The studio probe is a generated room, not merely the fill light: it is what
    * makes a PBR material readable without shipping an HDRI.
    */
+  /**
+   * The generated studio light, built the first time something needs it.
+   *
+   * Building it runs a PMREM pass over a small scene, which is real GPU work
+   * with nothing on screen to justify it: an empty viewport is lit by nothing
+   * at all. Deferring it to the first model gets the window painted sooner.
+   */
+  studio() {
+    if (!this.studioMap) {
+      this.studioMap = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    }
+    return this.studioMap;
+  }
+
+  /** Called once a model arrives, since that is what needs lighting. */
+  ensureEnvironment() {
+    if (!this.scene.environment) this.applyLighting();
+  }
+
   applyLighting() {
     const source =
       this.envKind === "image" ? this.panoramaSource : this.envKind === "gradient" ? this.gradient : null;
     const wanted = source && this.envLighting !== false ? source : null;
 
     if (this.envMap && this.envMap !== this.studioMap) this.envMap.dispose();
-    this.envMap = wanted ? this.pmrem.fromEquirectangular(wanted).texture : this.studioMap;
+    this.envMap = wanted ? this.pmrem.fromEquirectangular(wanted).texture : this.studio();
     this.scene.environment = this.envMap;
     this.invalidate();
   }
@@ -822,6 +841,7 @@ export class Viewer {
 
   /** Put a loaded object in the scene, frame it, and collect its stats. */
   setModel(object, animations = []) {
+    this.ensureEnvironment();
     this.clear();
     this.root.add(object);
     this.current = object;

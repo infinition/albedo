@@ -1,16 +1,4 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
-import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
-import { ColladaLoader } from "three/examples/jsm/loaders/ColladaLoader.js";
-import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
-import { SpecularGlossinessExtension } from "./specgloss.js";
 
 export const SUPPORTED = [
   "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf",
@@ -74,11 +62,19 @@ export function siblingManager(url, resolveSibling) {
 
 let gltfLoader = null;
 
-function getGLTFLoader(renderer, manager) {
+async function getGLTFLoader(renderer, manager) {
   if (gltfLoader) {
     gltfLoader.manager = manager;
     return gltfLoader;
   }
+  const [{ GLTFLoader }, { DRACOLoader }, { KTX2Loader }, { MeshoptDecoder }, { SpecularGlossinessExtension }] =
+    await Promise.all([
+      import("three/examples/jsm/loaders/GLTFLoader.js"),
+      import("three/examples/jsm/loaders/DRACOLoader.js"),
+      import("three/examples/jsm/loaders/KTX2Loader.js"),
+      import("three/examples/jsm/libs/meshopt_decoder.module.js"),
+      import("./specgloss.js"),
+    ]);
   const draco = new DRACOLoader().setDecoderPath(
     "https://www.gstatic.com/draco/versioned/decoders/1.5.6/"
   );
@@ -121,14 +117,20 @@ export async function loadModel(
     }
     case "glb":
     case "gltf": {
-      const gltf = await getGLTFLoader(renderer, manager).loadAsync(url, progress);
+      const loader = await getGLTFLoader(renderer, manager);
+      const gltf = await loader.loadAsync(url, progress);
       return { object: gltf.scene, animations: gltf.animations || [] };
     }
     case "fbx": {
+      const { FBXLoader } = await import("three/examples/jsm/loaders/FBXLoader.js");
       const obj = await new FBXLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: obj.animations || [] };
     }
     case "obj": {
+      const [{ OBJLoader }, { MTLLoader }] = await Promise.all([
+        import("three/examples/jsm/loaders/OBJLoader.js"),
+        import("three/examples/jsm/loaders/MTLLoader.js"),
+      ]);
       const loader = new OBJLoader(manager);
       // An .mtl next to the .obj is the usual convention; ignore it if absent
       const mtlUrl = url.replace(/\.obj(\?|#|$)/i, ".mtl$1");
@@ -145,6 +147,7 @@ export async function loadModel(
       return { object: obj, animations: [] };
     }
     case "stl": {
+      const { STLLoader } = await import("three/examples/jsm/loaders/STLLoader.js");
       const geo = await new STLLoader(manager).loadAsync(url, progress);
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(
@@ -155,6 +158,7 @@ export async function loadModel(
       return { object: mesh, animations: [] };
     }
     case "ply": {
+      const { PLYLoader } = await import("three/examples/jsm/loaders/PLYLoader.js");
       const geo = await new PLYLoader(manager).loadAsync(url, progress);
       geo.computeVertexNormals();
       const mesh = new THREE.Mesh(
@@ -169,10 +173,12 @@ export async function loadModel(
       return { object: mesh, animations: [] };
     }
     case "dae": {
+      const { ColladaLoader } = await import("three/examples/jsm/loaders/ColladaLoader.js");
       const res = await new ColladaLoader(manager).loadAsync(url, progress);
       return { object: res.scene, animations: res.scene.animations || [] };
     }
     case "3mf": {
+      const { ThreeMFLoader } = await import("three/examples/jsm/loaders/3MFLoader.js");
       const obj = await new ThreeMFLoader(manager).loadAsync(url, progress);
       return { object: obj, animations: [] };
     }
