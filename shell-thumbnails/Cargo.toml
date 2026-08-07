@@ -1,0 +1,37 @@
+[package]
+name = "albedo-thumbnails"
+version = "0.1.0"
+edition = "2021"
+description = "Windows shell thumbnail provider for Albedo"
+authors = ["Fabien Polly"]
+
+[lib]
+name = "albedo_thumbnails"
+# rlib as well, so the cache and sizing rules can be unit tested
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+windows-registry = "0.5"
+# The implement macro expands to `windows_core::` paths, so the crate has to be
+# in scope by that name and not only through the `windows` re-export.
+windows-core = "0.61"
+
+[dependencies.windows]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+]
+
+# Explorer loads this into its own process, so a panic must never be allowed to
+# unwind into it: the entry points catch instead, which needs unwinding kept on.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
