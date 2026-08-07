@@ -963,8 +963,37 @@ export class Viewer {
     }
     this.onGizmoChange = onChange;
     this.gizmo.setMode(mode);
+    this.recentreOrigin(target);
     this.gizmo.attach(target);
     this.invalidate();
+  }
+
+  /**
+   * Move an object's origin to the middle of its own geometry.
+   *
+   * The handles sit at the origin, and an exporter has no reason to have put
+   * that anywhere near the shape: a model authored around a corner of its own
+   * bounding box, or moved once already, shows its handles floating off to one
+   * side. Worse than looking wrong, it turns wrong, since a rotation is about
+   * the origin and one that far out swings the model through an arc instead of
+   * turning it on the spot.
+   *
+   * Nothing moves on screen. The children go one way in local space and the
+   * object goes the other in its parent's, which cancel exactly; only the point
+   * everything is measured from has changed. A single mesh has no children to
+   * shift, so it keeps the origin its geometry was authored with.
+   */
+  recentreOrigin(object) {
+    if (!object || !object.children.length) return;
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return;
+    object.updateMatrixWorld(true);
+    const local = object.worldToLocal(box.getCenter(new THREE.Vector3()));
+    // Already there, and repeating the arithmetic would only add drift
+    if (local.lengthSq() < 1e-12) return;
+    for (const child of object.children) child.position.sub(local);
+    object.position.add(local.clone().multiply(object.scale).applyQuaternion(object.quaternion));
+    object.updateMatrixWorld(true);
   }
 
   /**

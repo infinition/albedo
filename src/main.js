@@ -2522,6 +2522,13 @@ window.addEventListener("keyup", (e) => {
       -((e.clientY - box.top) / box.height) * 2 + 1
     );
     if (!hit) {
+      // A handle is not part of the model, so a click on one lands here as a
+      // click on nothing and would put away the very thing being aimed at.
+      // The controls name the axis under the pointer, which is the tell.
+      if (viewer.gizmo?.axis || viewer.gizmo?.dragging) return;
+      // Clicking off the model puts the handles away, the way clicking off
+      // anything dismisses it. Escape does the same from the keyboard.
+      if (editMode) setEditMode(null);
       selectMaterial(null);
       return;
     }

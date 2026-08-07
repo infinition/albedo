@@ -436,6 +436,21 @@ act immediately, and a mode to enter first reads as a feature that is broken
 rather than as a feature with a doorway. Shift is free for this because it only
 means anything else while a handle is already being dragged.
 
+The handles sit at the middle of the shape, not at whatever point the exporter
+called the origin. Those are rarely the same: on a candle model the origin is
+at zero and the geometry sits twenty centimetres below it, so the handles
+floated off to one side. That is worse than untidy, because a rotation is about
+the origin and one that far out swings the model through an arc instead of
+turning it on the spot. The origin is moved to the centre when a handle
+attaches, and nothing moves on screen: the children go one way and the object
+goes the other, which cancel exactly. Measured, the bounding box before and
+after is identical to four decimals.
+
+Escape puts the handles away, and so does clicking off the model, the way
+clicking off anything dismisses it. A click on a handle does not, which needed
+saying in code: a handle is not part of the model, so a click on one arrives as
+a click on nothing.
+
 The numbers are there too, readable and writable: position, rotation in
 degrees, and scale, three fields to a row. A handle is quick and never exact, a
 field is exact and never quick, and a transform wants both. While a handle is
