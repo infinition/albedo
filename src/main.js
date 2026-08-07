@@ -208,6 +208,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
   // dropped in from a browser picker can never be mistaken for a file on disk
   // and offered up for overwriting.
   openedPath = null;
+  selectedPart = null;
   setEditMode(null);
   try {
     const { object, animations, info } = await loadModel(url, {
@@ -220,7 +221,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     fixColorSpaces(object);
     ignoreDeadVertexColors(object);
     ensureAoUv(object);
-    const stats = viewer.setModel(object, animations);
+    const stats = viewer.setModel(object, animations, label || "");
     nav.calibrate(viewer.boxHelper.box);
     channels.reset();
     selectedMaterial = null;
@@ -244,6 +245,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     showStats(stats);
     showDimensions();
     paintOrientation();
+    paintParts();
     paintSaveButtons();
     $("btn-export").disabled = false;
     $("btn-snapshot").disabled = false;
@@ -2019,18 +2021,80 @@ let editMode = null;
  * pivot and no reparenting. A material covering several meshes has no single
  * transform to offer, so that falls back to the model and says so.
  */
+/** The imported object the handles are aimed at, when one is chosen. */
+let selectedPart = null;
+
 function editTarget() {
   if (!viewer.current) return null;
+  // A chosen object wins: with several files in the scene, moving one of them
+  // is the whole point, and it is a more useful answer than a surface.
+  if (selectedPart && viewer.parts.includes(selectedPart)) return selectedPart.object;
   const meshes = selectedMaterial ? channels.usersOf(selectedMaterial).meshes : [];
   return meshes.length === 1 ? meshes[0] : viewer.root;
 }
 
-function paintEditTarget() {
+function editTargetName() {
   const target = editTarget();
-  const whole = !target || target === viewer.root;
-  $("edit-target").textContent = whole
-    ? "Cible : le modèle entier"
-    : `Cible : ${target.name || "la surface choisie"}`;
+  if (!target || target === viewer.root) return "la scène entière";
+  if (selectedPart && target === selectedPart.object) return selectedPart.name || "l'objet choisi";
+  return target.name || "la surface choisie";
+}
+
+function paintEditTarget() {
+  $("edit-target").textContent = `Cible : ${editTargetName()}`;
+}
+
+/**
+ * What the scene is made of.
+ *
+ * Only shown once there is more than one thing in it: a single opened file
+ * needs no list to tell it apart from the others.
+ */
+function paintParts() {
+  const list = $("parts-list");
+  list.textContent = "";
+  if (viewer.parts.length < 2) return;
+  for (const entry of viewer.parts) {
+    const row = document.createElement("div");
+    row.className = "mat-row";
+
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "mat-name" + (selectedPart === entry ? " active" : "");
+    name.style.textAlign = "left";
+    name.textContent = entry.name || "(sans nom)";
+    name.title = "Viser cet objet avec les poignées";
+    name.addEventListener("click", () => {
+      selectedPart = selectedPart === entry ? null : entry;
+      selectMaterial(null);
+      paintParts();
+      if (editMode) setEditMode(editMode);
+      else paintEditTarget();
+    });
+
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "seg";
+    drop.textContent = "×";
+    drop.title = "Retirer de la scène";
+    // The first entry is the file that was opened, and removing it would leave
+    // a window that says it is showing a file it no longer holds.
+    drop.disabled = entry === viewer.parts[0];
+    drop.addEventListener("click", () => {
+      if (selectedPart === entry) selectedPart = null;
+      viewer.removePart(entry);
+      channels.reset();
+      applyChannel(currentChannel);
+      paintParts();
+      paintMaterialList();
+      showStats(viewer.stats());
+      if (editMode) setEditMode(editMode);
+      toast(`${entry.name || "Objet"} retiré`);
+    });
+
+    row.append(name, drop);
+    list.appendChild(row);
+  }
 }
 
 function setEditMode(mode) {
@@ -2048,8 +2112,7 @@ function setEditMode(mode) {
   paintEditTarget();
   if (editMode) {
     const label = { translate: "Déplacer", rotate: "Tourner", scale: "Échelle" }[editMode];
-    const whole = !target || target === viewer.root;
-    toast(`${label} · ${whole ? "modèle entier" : "surface choisie"} · Maj pour les crans`);
+    toast(`${label} · ${editTargetName()} · Maj pour les crans`);
   } else {
     paintOrientation();
     showDimensions();
@@ -2080,6 +2143,7 @@ function paintSaveButtons() {
   const over = $("save-over");
   const canOverwrite = has && !!openedPath && WRITABLE.test(openedPath);
   $("save-transform").disabled = !has;
+  $("part-import").disabled = !has || !tauri;
   over.disabled = !canOverwrite;
   over.title = canOverwrite
     ? `Remplacer ${openedPath.split(/[\\/]/).pop()}, sans retour possible`
@@ -2087,6 +2151,61 @@ function paintSaveButtons() {
       ? "Albedo écrit du glTF ; ce fichier est dans un autre format, passe par Enregistrer sous"
       : "Aucun fichier sur le disque";
 }
+
+/**
+ * Bring another file in beside the one already open.
+ *
+ * The same loader and the same corrections as a plain open, because an
+ * imported model is not a lesser one: it gets its materials normalised, its
+ * colour spaces fixed and its textures found exactly as the first did.
+ */
+async function importPart(path) {
+  if (!tauri || !viewer.current) return;
+  setBusy(true);
+  try {
+    const url = tauri.core.convertFileSrc(path);
+    const name = path.split(/[\\/]/).pop();
+    const findTextures = async (names) => {
+      const found = await tauri.core.invoke("find_textures", { modelPath: path, names });
+      return (found || []).map((f) => ({ name: f.name, url: tauri.core.convertFileSrc(f.path) }));
+    };
+    const { object } = await loadModel(url, {
+      renderer: viewer.renderer,
+      findTextures,
+      resolveSibling: siblingResolver(path),
+    });
+    normalizeMaterials(object);
+    fixColorSpaces(object);
+    ignoreDeadVertexColors(object);
+    ensureAoUv(object);
+    const entry = viewer.addPart(object, name);
+    selectedPart = entry;
+    // The scene changed underneath the channel copies and the material list
+    channels.reset();
+    applyChannel(currentChannel);
+    paintParts();
+    paintMaterialList();
+    showStats(viewer.stats());
+    showDimensions();
+    if (editMode) setEditMode(editMode);
+    else paintEditTarget();
+    toast(`${name} importé · E pour le placer`);
+  } catch (e) {
+    console.error("[albedo] import :", e);
+    toast(`Import impossible : ${e?.message || e}`);
+  } finally {
+    setBusy(false);
+  }
+}
+
+$("part-import").addEventListener("click", async () => {
+  if (!viewer.current) return;
+  const picked = await tauri?.dialog?.open({
+    multiple: false,
+    filters: [{ name: "Modèles 3D", extensions: SUPPORTED }],
+  });
+  if (picked) await importPart(picked);
+});
 
 $("save-transform").addEventListener("click", async () => {
   $("save-note").textContent = "";

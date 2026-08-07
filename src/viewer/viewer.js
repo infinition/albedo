@@ -149,6 +149,17 @@ export class Viewer {
     this.root = new THREE.Group();
     this.scene.add(this.root);
 
+    /**
+     * What the scene is made of, in the order it arrived.
+     *
+     * The first entry is the file that was opened; the rest were imported into
+     * it. Statistics, picking, the material list and the export already read
+     * the whole group, so this list exists to name the pieces and to say which
+     * one the handles act on, not to hold the geometry twice.
+     * @type {{object: any, name: string}[]}
+     */
+    this.parts = [];
+
     // The stand lives outside the model's group: it must survive loading
     // another file, and it must never be counted as part of what was opened.
     this.stand = new THREE.Group();
@@ -363,6 +374,7 @@ export class Viewer {
     releaseSubtree(this.skeletons, keep);
     this.root.clear();
     this.skeletons.clear();
+    this.parts = [];
     this.mixer = null;
     this.current = null;
     this.selected = [];
@@ -977,12 +989,13 @@ export class Viewer {
   }
 
   /** Put a loaded object in the scene, frame it, and collect its stats. */
-  setModel(object, animations = []) {
+  setModel(object, animations = [], name = "") {
     this.ensureEnvironment();
     this.clear();
     this.root.rotation.set(0, 0, 0);
     this.root.add(object);
     this.current = object;
+    this.parts = [{ object, name }];
 
     // Each model starts from the user's own preference, not the last model's
     this.skeletons.visible = this._skeletonVisible === true;
@@ -1070,10 +1083,51 @@ export class Viewer {
     return Math.round((this.framedDistance / d) * 100);
   }
 
-  /** Re-frame the model currently in the scene. */
+  /** Everything in the scene, not just the file that was opened. */
+  sceneBox() {
+    return new THREE.Box3().setFromObject(this.root);
+  }
+
+  /** Re-frame what is in the scene. */
   frameCurrent() {
     if (!this.current) return;
-    this.frame(new THREE.Box3().setFromObject(this.current));
+    this.frame(this.sceneBox());
+  }
+
+  /**
+   * Bring another file into the scene beside the one already there.
+   *
+   * Placed where it was authored rather than centred on what is already here:
+   * two files that were made to go together arrive together, and one that was
+   * not is a thing to move, which is what the handles are for. Framing is left
+   * alone on purpose, since jumping the camera on every import would lose the
+   * view being worked in.
+   *
+   * @returns {{object: any, name: string}} the entry, for a list to name
+   */
+  addPart(object, name = "") {
+    this.root.add(object);
+    const entry = { object, name };
+    this.parts.push(entry);
+    if (!this.current) this.current = object;
+    this.scaleGrid(this.sceneBox());
+    this.invalidate();
+    return entry;
+  }
+
+  /** Take one back out, and give the card back what it held. */
+  removePart(entry) {
+    const index = this.parts.indexOf(entry);
+    if (index < 0) return;
+    this.parts.splice(index, 1);
+    if (this.gizmo && this.gizmo.object === entry.object) this.setGizmo(null);
+    releaseSubtree(entry.object, this.keptTextures());
+    this.root.remove(entry.object);
+    // The opened file leaving means there is no primary any more; whatever is
+    // left is still a scene, and the guards elsewhere ask only whether one
+    // exists at all.
+    if (this.current === entry.object) this.current = this.parts[0]?.object || null;
+    this.invalidate();
   }
 
 

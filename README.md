@@ -444,6 +444,27 @@ exactly a quarter turn. They are named for what they do to the model now,
 tipping it forward or laying it on its side, rather than for the axis they turn
 about. Nobody looking at a model on its side is thinking in axes.
 
+### More than one file at a time
+
+Another model can be brought in beside the one already open, moved into place
+with the same handles, and written out with it. It goes through the same loader
+and the same corrections as a plain open, because an imported model is not a
+lesser one: its materials are normalised, its colour spaces fixed and its
+textures found exactly as the first file's were.
+
+Less had to change than the shape of the thing suggests. Statistics, picking,
+the material list and the export already read the whole group rather than the
+opened object, so they were already scene-wide; what assumed a single file was
+the framing and the idea of "the file". The list of parts names the pieces and
+says which one the handles are aimed at. It holds no geometry, and it only
+appears once there is more than one thing to tell apart.
+
+The opened file cannot be removed, since a window that says it is showing a
+file it no longer holds is worse than one that refuses. Anything imported can,
+and removing it gives the card back what it held: measured, a scene taken to
+two models and back reports the same triangles, the same bounding box and the
+same texture count as before the import.
+
 ### Saving a correction
 
 A model that arrives upside down can be stood up and written back out, as glTF,
@@ -589,6 +610,8 @@ confirmed on the real thing.
 | Edit mode, three handles, Blender keys | [x] | Modal G R S exercised, snapping on and off with shift, grid and roll recovered on exit |
 | A correction survives being written out | [x] | Model laid on its side, exported and read back still on its side |
 | Overwrite the original | [ ] | Written and permitted, exercised only through the save-as path in a browser |
+| Several models in one scene | [x] | Statistics, box and memory add up on import and come back exactly on removal |
+| Import through the file dialog | [ ] | Written; the dialog needs the shell, so only the viewer side was exercised |
 | Library sidebar becomes a drawer when tight | [x] | Below 760 pixels of library, whatever the window measures |
 
 ### Shell integration
