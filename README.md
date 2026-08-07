@@ -409,6 +409,13 @@ The inspector is five panes behind five icons, one on screen at a time: render,
 matter, camera, decor, scene. It grew to eight stacked sections and reaching the
 stand meant scrolling past the camera. Which pane was open is remembered.
 
+Right click gives no web menu. Reload, print, save image and inspect are offers
+about a web page, and half of them are ways to lose what is on screen. The
+canvas never showed one, since the orbit controls refuse the event to keep the
+right drag for the camera, which is why it only ever appeared over the library
+and the inspector. Text fields keep theirs: cut, copy and paste on a search box
+is what every native window does, and nothing else on screen is editable.
+
 ### Narrow is a property of the box, not of the window
 
 Every breakpoint asks the box it belongs to how wide that box is, through

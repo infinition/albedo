@@ -1519,6 +1519,25 @@ browserPicker.addEventListener("change", () => {
   if (f) open(URL.createObjectURL(f) + "#." + f.name.split(".").pop(), f.name);
 });
 
+// The webview's own menu has no business here. Reload, print, save image and
+// inspect are offers about a web page, and Albedo is not one: half of them do
+// nothing useful and the rest are ways to lose what is on screen. The canvas
+// was already clear of it, since the orbit controls refuse the event to keep
+// right drag for the camera, which is exactly why it only ever showed up over
+// the library and the inspector.
+//
+// Text fields keep theirs. Cut, copy and paste on a search box or a tag field
+// is what every native window does, and taking it away would be its own kind of
+// wrong. Nothing else on screen is editable.
+const TEXT_ENTRY = new Set(["text", "search", "number", "url", "email", "tel", "password"]);
+window.addEventListener("contextmenu", (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLElement)) return void e.preventDefault();
+  // A slider and a checkbox are inputs too, and neither has anything to paste
+  const typed = el instanceof HTMLInputElement && TEXT_ENTRY.has(el.type);
+  if (!typed && el.tagName !== "TEXTAREA" && !el.isContentEditable) e.preventDefault();
+}, true); // capture: a handler below that stops propagation must not reopen it
+
 // DOM-level drag & drop is registered in both modes: without a dragover that
 // calls preventDefault the webview shows a "forbidden" cursor, even when Tauri
 // is the one that will actually deliver the drop.
