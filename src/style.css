@@ -38,6 +38,13 @@ body {
 #stage {
   position: absolute;
   inset: 0;
+  /* Everything the viewer draws asks this box how wide it is, not the window.
+     The two stopped being the same thing the day the library learned to hand
+     the viewer a strip of its right edge: a four hundred pixel strip in a wide
+     window would otherwise lay out its inspector, its scrubber and its overlays
+     as though it still had the whole screen. */
+  container-type: inline-size;
+  container-name: stage;
 }
 /* The preview strip: the library gives up its right edge and the viewer, the
    real one with its own controls, draws there. Nothing is duplicated. */
@@ -101,7 +108,7 @@ body.clean #inspector { opacity: 0; pointer-events: none; }
 
 /* the render toggle sits in this group, so the padding is asymmetric: text
    breathes on the left, the buttons keep the 4px the other overlays use */
-.ov-tl { top: var(--gap); left: var(--gap); padding: 4px 4px 4px 11px; gap: 8px; max-width: 52vw; }
+.ov-tl { top: var(--gap); left: var(--gap); padding: 4px 4px 4px 11px; gap: 8px; max-width: 52cqw; }
 .ov-tl .seg { padding: 4px 10px; font-size: 12px; }
 .ov-tr { top: var(--gap); right: var(--gap); }
 .ov-bl { bottom: var(--gap); left: var(--gap); }
@@ -205,7 +212,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   left: 50%;
   bottom: var(--gap);
   transform: translateX(-50%);
-  width: min(620px, 60vw);
+  width: min(620px, 60cqw);
   padding: 4px 10px 4px 4px;
   gap: 10px;
 }
@@ -578,21 +585,24 @@ details[open] summary::before { content: "▾ "; }
  * inspector's habit of sitting beside the model instead of over it.
  */
 
-@media (max-width: 1100px) {
+@container stage (max-width: 1100px) {
   #inspector { width: 264px; }
   body.inspector .ov-tr { right: calc(264px + var(--gap) * 2); }
 }
 
-@media (max-width: 900px) {
-  #timeline { width: min(560px, 78vw); }
+@container stage (max-width: 900px) {
+  #timeline { width: min(560px, 78cqw); }
   /* Lifted clear of the corner groups, which is cheaper than hiding either */
   #timeline { bottom: calc(var(--gap) * 2 + 34px); }
   .ov-br { opacity: 0.55; }
   .empty-formats { display: none; }
 }
 
-@media (max-width: 720px) {
-  :root { --gap: 10px; }
+@container stage (max-width: 720px) {
+  /* Not on :root, which would answer for the whole window, and not on #stage
+     either: a container query styles descendants, never the container itself.
+     These two hold everything that reads the variable. */
+  #chrome, #inspector { --gap: 10px; }
   #inspector {
     width: auto;
     left: var(--gap);
@@ -603,12 +613,15 @@ details[open] summary::before { content: "▾ "; }
   /* A panel that covers the model leaves nothing to look at behind it */
   body.inspector #chrome { opacity: 0; pointer-events: none; }
   body.inspector .ov-tr { opacity: 1; pointer-events: auto; }
-  #timeline { width: calc(100vw - var(--gap) * 2); }
+  #timeline { width: calc(100cqw - var(--gap) * 2); }
   .ov-br { display: none; }
-  .ov-tl { max-width: calc(100vw - 150px); }
+  .ov-tl { max-width: calc(100cqw - 150px); }
 }
 
+/* Height stays a window question: the strip runs the full height of the window,
+   so the two answers are the same one and asking the container would mean size
+   containment on both axes for nothing. */
 @media (max-height: 520px) {
   /* A short window has no room for a raised scrubber */
-  #timeline { bottom: var(--gap); width: min(460px, 52vw); }
+  #timeline { bottom: var(--gap); width: min(460px, 52cqw); }
 }

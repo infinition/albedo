@@ -9,14 +9,28 @@
   position: absolute;
   inset: 0;
   z-index: 20;
-  display: grid;
-  grid-template-rows: 48px 1fr;
-  grid-template-columns: 232px 1fr;
-  grid-template-areas: "bar bar" "side main";
   background: var(--bg);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.16s ease;
+  /* The breakpoints at the end of this file ask this box how wide it is rather
+     than the window, because the two part company as soon as the preview strip
+     takes the right edge: a library squeezed into half a wide window would
+     otherwise keep the layout of a wide window. */
+  container-type: inline-size;
+  container-name: library;
+}
+.lib-shell {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  /* minmax rather than a bare fraction: a track sized `1fr` still refuses to go
+     below the minimum width of what it holds, and the toolbar alone asks for
+     five hundred pixels. The grid would then be wider than the box that
+     contains it and push its own right edge off screen. */
+  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-areas: "bar bar" "side main";
 }
 #library.open { opacity: 1; pointer-events: auto; }
 /* With the preview on, the library stops at the strip the viewer draws in */
@@ -53,7 +67,9 @@ body.peeking .lib-handle { display: block; }
   position: relative;
   display: flex;
   align-items: center;
-  min-width: 180px;
+  /* Low enough that the toolbar never asks for more room than the box it sits
+     in, at any width the preview strip can leave it. */
+  min-width: 150px;
   max-width: 340px;
   flex: 1;
 }
@@ -360,21 +376,16 @@ body.peeking .lib-handle { display: block; }
 .chip button { padding: 0 2px; color: var(--muted); background: none; border: none; cursor: pointer; }
 .chip button:hover { color: var(--fg); background: none; }
 
-@media (max-width: 860px) {
-  #library { grid-template-columns: 180px 1fr; }
+/* --- narrow libraries ------------------------------------------------------ */
+
+@container library (max-width: 980px) {
+  .lib-shell { grid-template-columns: 190px minmax(0, 1fr); }
 }
 
-
-/* --- narrow windows -------------------------------------------------------- */
-
-@media (max-width: 980px) {
-  #library { grid-template-columns: 190px 1fr; }
-}
-
-/* Below this the sidebar is half the window, so it becomes a drawer that
+/* Below this the sidebar is half the box, so it becomes a drawer that
    slides over the grid instead of squeezing it. */
-@media (max-width: 760px) {
-  #library { grid-template-columns: 1fr; grid-template-areas: "bar" "main"; }
+@container library (max-width: 760px) {
+  .lib-shell { grid-template-columns: minmax(0, 1fr); grid-template-areas: "bar" "main"; }
   .lib-side {
     position: absolute;
     top: 48px;
@@ -390,9 +401,19 @@ body.peeking .lib-handle { display: block; }
   #library.browsing .lib-side { transform: none; }
   .lib-drawer { display: grid; }
   .lib-title { display: none; }
+  /* The field gives up its floor so the bar fits: a search box narrower than
+     its placeholder still takes what is typed into it, whereas a bar wider
+     than its box pushes its own last button out of reach. */
+  .lib-search { min-width: 0; }
 }
 
-@media (max-width: 560px) {
+@container library (max-width: 560px) {
   .lib-size, .lib-bar select { display: none; }
   .lib-detail { flex-wrap: wrap; }
+}
+
+/* Tighter than this the kinds are the first thing to go: the format chips over
+   the grid filter the same thing and are already on screen. */
+@container library (max-width: 420px) {
+  .lib-bar .segment { display: none; }
 }

@@ -73,7 +73,11 @@ const SORTS = {
   format: (a, b) => a.ext.localeCompare(b.ext) || a.name.localeCompare(b.name, "fr"),
 };
 
+// One box inside the host, because the breakpoints below rearrange this grid
+// and a container query styles descendants, never the container itself. The
+// host measures, the shell reacts.
 const SHELL = `
+  <div class="lib-shell">
   <div class="lib-bar">
     <button class="icon lib-drawer" data-el="drawer" title="Dossiers et tags" aria-pressed="false">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -118,6 +122,7 @@ const SHELL = `
   </main>
 
   <div class="lib-handle" data-el="handle" title="Largeur de l'aperçu"></div>
+  </div>
 `;
 
 /**

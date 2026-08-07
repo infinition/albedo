@@ -129,6 +129,20 @@ does not render its own: the two would drift, and a file would end up with two
 different pictures depending on where you looked at it. Browsing a folder in
 Albedo therefore warms the icons in Explorer, and the other way round.
 
+### The preview strip
+
+The library can give up its right edge, and the viewer draws there. Not a
+second viewer, the real one: its own navigation, lighting, inspector and
+render modes, in a strip whose width is yours to drag and is remembered.
+
+The strip follows a selection of one. Selecting is not the same act as
+looking: control click adds, shift takes the run between the anchor and the
+card, and none of that loads anything, because building a selection is not a
+request to see each thing put into it. It also remembers what it already
+shows, so asking again for the asset on screen is answered by leaving it
+there. Twelve clicks over five assets, two of them plain single clicks: two
+loads.
+
 ### Portable by construction
 
 Tags and notes live in `.albedo/library.json` inside the library, keyed by path
@@ -368,6 +382,29 @@ The inspector is five panes behind five icons, one on screen at a time: render,
 matter, camera, decor, scene. It grew to eight stacked sections and reaching the
 stand meant scrolling past the camera. Which pane was open is remembered.
 
+### Narrow is a property of the box, not of the window
+
+Every breakpoint asks the box it belongs to how wide that box is, through
+container queries, rather than asking the window. The two stopped being the
+same thing the day the library learned to hand the viewer a strip of its right
+edge. A four hundred pixel strip in a wide window would otherwise lay out its
+inspector, its scrubber and its overlays as though it still had the whole
+screen, and the library squeezed into the half left over would keep the
+posture of a wide one.
+
+So the viewer lays its inspector over the model below 720 pixels of stage
+whatever the window measures, and the library turns its sidebar into a drawer
+below 760 pixels of library. Swept across fifty widths from 300 to 1280 with
+the strip taking the difference: nothing wider than the box holding it at any
+of them, and the close button reachable at every width. Two things had to give
+for that last part, a toolbar that asked for more room than it was given and a
+`1fr` track that refuses to shrink below its contents.
+
+A container cannot be styled by its own query, only its descendants can, which
+shows in two places: the library's grid moved one element inward, and the
+stage hands its spacing down to the two overlays that read it rather than
+setting it on itself.
+
 ## Building
 
 ```bash
@@ -454,6 +491,14 @@ confirmed on the real thing.
 | SpaceMouse on real hardware | [ ] | No device available. Axis directions may need the inversion toggles |
 | Fullscreen | [ ] | Wired to the Tauri window, not exercised |
 
+### Interface
+
+| Feature | Status | Evidence |
+| --- | :---: | --- |
+| Layout follows its own box, not the window | [x] | Fifty widths from 300 to 1280, viewer and library, nothing overflowing its box |
+| Preview strip follows a single selection | [x] | Twelve clicks over five assets, two single ones: two loads |
+| Library sidebar becomes a drawer when tight | [x] | Below 760 pixels of library, whatever the window measures |
+
 ### Shell integration
 
 | Feature | Status | Evidence |
@@ -469,8 +514,7 @@ confirmed on the real thing.
 
 | Feature | Status |
 | --- | :---: |
-| Asset manager, grid, tree, tags | [ ] not started |
-| USD animation and skinning | [ ] not started |
+| USD animation and skinning | [ ] the rig decodes, the pose does not compose |
 | NIF skinning applied at load | [ ] not started |
 
 ## Roadmap
@@ -520,7 +564,12 @@ confirmed on the real thing.
 ```
 src/
   main.js              application wiring
+  prefs.js             settings that outlive the window
   ui/controls.js       overlays, inspector, timeline
+  library/
+    index.js           asset manager, loaded on first use
+    thumbs.js          pictures, shared with the Explorer cache
+    library.css        its own stylesheet, in the same lazy chunk
   viewer/
     viewer.js          scene host, on demand rendering
     loaders.js         format dispatch
@@ -528,6 +577,7 @@ src/
     materials.js       PBR normalisation
     textures.js        texture discovery by convention
     navigation.js      orbit, fly, gamepad, SpaceMouse
+    post.js            occlusion, bloom, depth of field, grading, grain
     specgloss.js       KHR_materials_pbrSpecularGlossiness
     usd.js             USD packages and loose layers
     usdc/              binary crate reader
