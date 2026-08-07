@@ -290,7 +290,62 @@ body.inspector .ov-br { opacity: 0; }
   color: var(--muted);
   font-size: 12px;
 }
+/* Looking around in fly mode: the cursor would only be in the way */
+#view.looking { cursor: none; }
+
+/* The gradient, shown as itself */
+.strip {
+  height: 44px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+.swatch {
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+}
+#gradient-stops .map-row input[type="range"] { flex: 1; }
+#gradient-stops .seg:disabled { opacity: 0.35; cursor: default; }
+
+/* A material whose declared transparency has no source left in the file */
+.mat-name.warn { color: #e0a84a; }
+.mat-name {
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.mat-name.selected { color: var(--fg); }
 .mat-row .seg { padding: 3px 8px; font-size: 11px; }
+
+/* Textures of the selected material */
+.maps {
+  margin: 2px 0 8px 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+.map-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+.map-role { width: 74px; color: var(--muted); }
+.map-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-size { color: var(--muted); }
 .wide { width: 100%; }
 
 button.wide,

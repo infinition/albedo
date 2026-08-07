@@ -107,10 +107,14 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
     const material = new THREE.MeshStandardMaterial({
       name: materialPath.split("/").pop(),
       color: 0xffffff,
-      roughness: 0.85,
+      // UsdPreviewSurface's own defaults, so a file that states nothing lands
+      // where the specification says it should.
+      roughness: 0.5,
       metalness: 0,
-      envMapIntensity: 0.6,
+      envMapIntensity: 1,
     });
+    let glossiness = null;
+    let hasRoughness = false;
 
     // Walk the shader network below the material and take what is useful.
     for (const spec of crate.specs) {
@@ -123,7 +127,9 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
         if (url) {
           const texture = url.isTexture ? url : new THREE.TextureLoader().load(url);
           texture.colorSpace = THREE.SRGBColorSpace;
-          texture.flipY = false;
+          // USD st coordinates start at the bottom left of the image, which is
+          // three's default orientation. Forcing flipY off is the glTF
+          // convention and turns every USD texture upside down.
           texture.wrapS = THREE.RepeatWrapping;
           texture.wrapT = THREE.RepeatWrapping;
           material.map = texture;
@@ -134,7 +140,18 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
         if (c && c.length >= 3) material.color.setRGB(c[0], c[1], c[2]);
       } else if (name === "inputs:roughness") {
         const v = crate.value(fields.default);
-        if (typeof v === "number") material.roughness = v;
+        if (typeof v === "number") {
+          material.roughness = v;
+          hasRoughness = true;
+        }
+      } else if (name === "inputs:glossiness") {
+        // UsdPreviewSurface has two workflows, and half the packages in the
+        // wild use the specular one: it states glossiness where the other
+        // states roughness. Ignoring it left every such surface at the default,
+        // which on a rough hide reads as a white sheen of reflected
+        // environment that the file never asked for.
+        const v = crate.value(fields.default);
+        if (typeof v === "number") glossiness = v;
       } else if (name === "inputs:metallic") {
         const v = crate.value(fields.default);
         if (typeof v === "number") material.metalness = v;
@@ -145,6 +162,12 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
           material.opacity = v;
         }
       }
+    }
+
+    // Applied after the walk: the two workflows can both appear in one file,
+    // and an explicit roughness is the more direct statement of the two.
+    if (glossiness !== null && !hasRoughness) {
+      material.roughness = Math.min(1, Math.max(0, 1 - glossiness));
     }
 
     materials.set(materialPath, material);

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:thumbnails": "cargo build --release --manifest-path shell-thumbnails/Cargo.toml",
+    "build:all": "npm run build:thumbnails && npm run build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

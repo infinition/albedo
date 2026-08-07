@@ -87,15 +87,25 @@ export const ACTIONS = {
 };
 
 export class Navigation {
-  constructor(viewer, { onAction, onDevice } = {}) {
+  constructor(viewer, { onAction, onDevice, onMode, onFov, onEnvRotate } = {}) {
     this.viewer = viewer;
     this.onAction = onAction || (() => {});
     this.onDevice = onDevice || (() => {});
+    /** Fired while the lens is being opened or closed by a drag. */
+    this.onFov = onFov || (() => {});
+    /** Fired while the environment is being turned by a drag. */
+    this.onEnvRotate = onEnvRotate || (() => {});
+    /** Fired whenever the mode changes, including when it changes itself. */
+    this.onMode = onMode || (() => {});
+    /**
+     * Something able to hold the cursor at the window level, when there is a
+     * shell to ask. `{ grab(on), show(on), recenter() }`, all fire and forget.
+     */
+    this.pointer = null;
     this.mode = "orbit";
     this.speed = 1; // world units per second, rescaled per model
     this.pressed = new Set();
     this.look = { x: 0, y: 0, roll: 0 };
-    this.pointerLocked = false;
     this.gamepadIndex = null;
     this.gamepadName = null;
     this.spaceNav = null;
@@ -127,18 +137,69 @@ export class Navigation {
     window.addEventListener("keyup", (e) => this.pressed.delete(e.code));
     window.addEventListener("blur", () => this.pressed.clear());
 
+    // Looking around in fly mode.
+    //
+    // The webview's own pointer capture is not used: it answers with a banner
+    // telling the user to press Escape, and no page can dismiss it. The shell
+    // can hold the cursor at the window level instead, which is the same effect
+    // with no notice; the cursor is hidden and pushed back to the middle before
+    // it can reach an edge, so the view turns without end.
+    //
+    // In a plain browser there is no such shell, and looking falls back to
+    // holding the button.
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    let recentring = false;
+
+    const freeLook = () => this.mode === "fly" && !!this.pointer;
+
     canvas.addEventListener("mousedown", (e) => {
-      if (this.mode !== "fly" || e.button !== 0) return;
-      canvas.requestPointerLock();
+      if (this.mode !== "fly" || e.button !== 0 || freeLook()) return;
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      canvas.classList.add("looking");
     });
-    document.addEventListener("pointerlockchange", () => {
-      this.pointerLocked = document.pointerLockElement === canvas;
+    window.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      canvas.classList.remove("looking");
     });
     document.addEventListener("mousemove", (e) => {
-      if (this.mode !== "fly" || !this.pointerLocked) return;
-      this.look.x -= e.movementX * 0.0022;
-      this.look.y = clamp(this.look.y - e.movementY * 0.0022, -HALF_PI, HALF_PI);
+      if (this.mode !== "fly") return;
+      if (!freeLook() && !dragging) return;
+      if (recentring) {
+        // The jump we asked for ourselves is not a movement of the hand
+        recentring = false;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        return;
+      }
+      this.look.x -= (e.clientX - lastX) * 0.0022;
+      this.look.y = clamp(this.look.y - (e.clientY - lastY) * 0.0022, -HALF_PI, HALF_PI);
+      lastX = e.clientX;
+      lastY = e.clientY;
       this.applyLook();
+
+      if (!freeLook()) return;
+      const margin = 120;
+      const nearEdge =
+        e.clientX < margin ||
+        e.clientY < margin ||
+        e.clientX > window.innerWidth - margin ||
+        e.clientY > window.innerHeight - margin;
+      if (nearEdge) {
+        recentring = true;
+        this.pointer.recenter();
+      }
+    });
+    // A window that loses focus must not keep the cursor: alt-tab has to work.
+    window.addEventListener("blur", () => {
+      if (this.mode === "fly") this.releasePointer();
+    });
+    window.addEventListener("focus", () => {
+      if (this.mode === "fly") this.holdPointer();
     });
     canvas.addEventListener(
       "wheel",
@@ -150,6 +211,56 @@ export class Navigation {
       },
       { passive: false }
     );
+
+    // Modified drags: Shift swings the key light, Ctrl opens or closes the
+    // lens. Both listen on the window in the capture phase so they run before
+    // the orbit rig, which would otherwise turn the camera at the same time.
+    // Orbit only: Ctrl already means "faster" while flying.
+    let lightDrag = false;
+    let fovDrag = false;
+    let modX = 0;
+    let modY = 0;
+    let fovStart = 45;
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (this.mode !== "orbit" || e.button !== 0 || e.target !== canvas) return;
+        if (!e.shiftKey && !e.ctrlKey) return;
+        lightDrag = e.shiftKey;
+        fovDrag = !e.shiftKey && e.ctrlKey;
+        modX = e.clientX;
+        modY = e.clientY;
+        fovStart = viewer.fov;
+        viewer.controls.enabled = false;
+        e.stopPropagation();
+      },
+      true
+    );
+    window.addEventListener("pointermove", (e) => {
+      if (lightDrag) {
+        // Turn whatever is doing the lighting. Under a panorama the fill is
+        // beside the point, and swinging it would look like nothing happened.
+        if (viewer.lightsFromEnvironment()) {
+          this.onEnvRotate(viewer.rotateEnvironment(-(e.clientX - modX) * 0.4));
+        } else {
+          viewer.orbitLight((e.clientX - modX) * 0.008, (e.clientY - modY) * 0.008);
+        }
+        modX = e.clientX;
+        modY = e.clientY;
+        return;
+      }
+      if (!fovDrag) return;
+      // Pulling towards you narrows the lens, the way a zoom ring reads
+      const fov = clamp(fovStart + (e.clientY - modY) * 0.2, 10, 100);
+      viewer.setFov(fov);
+      this.onFov(fov);
+    });
+    window.addEventListener("pointerup", () => {
+      if (!lightDrag && !fovDrag) return;
+      lightDrag = false;
+      fovDrag = false;
+      viewer.controls.enabled = this.mode === "orbit";
+    });
 
     window.addEventListener("gamepadconnected", (e) => {
       this.gamepadIndex = e.gamepad.index;
@@ -184,8 +295,31 @@ export class Navigation {
     this.speed = Math.max(size.length() / 6, 1e-4);
   }
 
+  /**
+   * Take the cursor at the window level, when running under the shell.
+   *
+   * `pointer` is supplied by the application: navigation knows nothing about
+   * the desktop framework, it only knows there is or is not something able to
+   * hold a cursor.
+   */
+  holdPointer() {
+    if (!this.pointer) return;
+    this.pointer.grab(true);
+    this.pointer.show(false);
+    this.pointer.recenter();
+  }
+
+  releasePointer() {
+    if (!this.pointer) return;
+    this.pointer.grab(false);
+    this.pointer.show(true);
+  }
+
   setMode(mode) {
+    if (mode === this.mode) return;
     this.mode = mode;
+    // Fly is a free camera: the orbit rig would otherwise keep pulling the
+    // view back towards its target every time the mouse moved.
     this.viewer.controls.enabled = mode === "orbit";
     if (mode === "fly") {
       const dir = new THREE.Vector3();
@@ -193,9 +327,21 @@ export class Navigation {
       this.look.x = Math.atan2(-dir.x, -dir.z);
       this.look.y = Math.asin(clamp(dir.y, -1, 1));
       this.look.roll = 0;
-    } else if (document.pointerLockElement) {
-      document.exitPointerLock();
+      this.holdPointer();
+    } else {
+      this.releasePointer();
+      this.viewer.canvas.classList.remove("looking");
+      // Orbit turns around what it is aimed at, so the target follows the
+      // camera home instead of being wherever the flight started.
+      const c = this.viewer.controls;
+      const dir = new THREE.Vector3();
+      this.viewer.camera.getWorldDirection(dir);
+      const reach = c.target.distanceTo(this.viewer.camera.position) || 1;
+      c.target.copy(this.viewer.camera.position).addScaledVector(dir, reach);
+      this.viewer.camera.up.set(0, 1, 0);
+      c.update();
     }
+    this.onMode(mode);
     this.viewer.invalidate();
   }
 

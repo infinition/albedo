@@ -6,19 +6,21 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5183",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:all",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Albedo",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
         "minHeight": 500,
         "dragDropEnabled": true,
-        "decorations": true
+        "decorations": true,
+        "visible": false
       }
     ],
     "security": {
@@ -47,9 +49,14 @@
         "role": "Viewer"
       }
     ],
+    "resources": {
+      "../shell-thumbnails/target/release/albedo_thumbnails.dll": "albedo_thumbnails.dll",
+      "icons/albedo-file.ico": "albedo-file.ico"
+    },
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "installer-hooks.nsi"
       }
     }
   }

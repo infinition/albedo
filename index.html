@@ -52,6 +52,9 @@
           <button id="btn-frame" class="icon" type="button" title="Recadrer (F)">
             <svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" /><circle cx="12" cy="12" r="3" /></svg>
           </button>
+          <button id="btn-turntable" class="icon" type="button" title="Rotation continue (T)" aria-pressed="false">
+            <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" /></svg>
+          </button>
           <span id="devices" class="devices"></span>
         </div>
 
@@ -91,6 +94,103 @@
             <span>Exposition</span>
             <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" />
           </label>
+        </section>
+
+        <section>
+          <h2>Caméra</h2>
+          <div class="row">
+            <div class="segment" role="group" aria-label="Projection">
+              <button id="proj-persp" class="seg active" type="button" title="Perspective">Perspective</button>
+              <button id="proj-ortho" class="seg" type="button" title="Orthographique">Ortho</button>
+            </div>
+          </div>
+          <label class="field">
+            <span>Champ <span id="fov-value" class="mono">45°</span></span>
+            <input type="range" id="opt-fov" min="10" max="100" step="1" value="45" />
+          </label>
+          <p class="hint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
+        </section>
+
+        <section>
+          <h2>Environnement</h2>
+          <div class="row">
+            <div class="segment" role="group" aria-label="Environnement">
+              <button id="env-studio" class="seg active" type="button" title="Éclairage neutre généré">Studio</button>
+              <button id="env-gradient" class="seg" type="button" title="Fond en dégradé">Dégradé</button>
+              <button id="env-image" class="seg" type="button" title="Panorama 360, HDR ou image">Image</button>
+            </div>
+          </div>
+          <p id="env-file" class="hint">Aucun panorama</p>
+          <div class="row" id="env-image-tools" hidden>
+            <button id="env-replace" class="seg" type="button" title="Choisir une autre image">Remplacer</button>
+            <button id="env-clear" class="seg" type="button" title="Revenir à l'éclairage studio">Retirer</button>
+          </div>
+          <label class="check"><input type="checkbox" id="env-background" checked /><span>Fond visible</span></label>
+          <label class="check"><input type="checkbox" id="env-lighting" checked /><span>Éclaire la scène</span></label>
+          <label class="check"><input type="checkbox" id="key-light" checked /><span>Lumière d'appoint</span></label>
+          <label class="field">
+            <span>Intensité de l'éclairage <span id="env-intensity-value" class="mono">1.0</span></span>
+            <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1" />
+          </label>
+
+          <div id="env-framing" hidden>
+            <label class="field">
+              <span>Zoom <span id="zoom-value" class="mono">1.0×</span></span>
+              <input type="range" id="env-zoom" min="1" max="4" step="0.05" value="1" />
+            </label>
+            <label class="field">
+              <span>Rotation <span id="rot-value" class="mono">0°</span></span>
+              <input type="range" id="env-rotation" min="-180" max="180" step="1" value="0" />
+            </label>
+            <label class="field">
+              <span>Flou</span>
+              <input type="range" id="env-blur" min="0" max="1" step="0.01" value="0" />
+            </label>
+          </div>
+
+          <div id="gradient-editor" hidden>
+            <div id="gradient-strip" class="strip" title="Le dégradé, de haut en bas"></div>
+            <div id="gradient-stops"></div>
+            <div class="row">
+              <button id="gradient-add" class="seg" type="button">Ajouter une couleur</button>
+            </div>
+            <label class="field">
+              <span>Teinte <span id="hue-value" class="mono">0°</span></span>
+              <input type="range" id="grad-hue" min="-180" max="180" step="1" value="0" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Luminosité du fond</span>
+            <input type="range" id="bg-brightness" min="0" max="3" step="0.05" value="1" />
+          </label>
+        </section>
+
+        <section>
+          <h2>Socle</h2>
+          <div class="row">
+            <button id="btn-pedestal" class="wide" type="button">Choisir un socle</button>
+          </div>
+          <p id="pedestal-file" class="hint">Aucun socle</p>
+          <div id="pedestal-tools" hidden>
+            <div class="row">
+              <div class="segment" role="group" aria-label="Rendu du socle">
+                <button id="stand-pbr" class="seg active" type="button" title="Éclairé par l'environnement">PBR</button>
+                <button id="stand-unlit" class="seg" type="button" title="Texture telle quelle">Unlit</button>
+              </div>
+            </div>
+            <div class="row">
+              <div class="segment" role="group" aria-label="Gizmo">
+                <button id="giz-move" class="seg" type="button" title="Déplacer">Déplacer</button>
+                <button id="giz-rotate" class="seg" type="button" title="Tourner">Tourner</button>
+                <button id="giz-scale" class="seg" type="button" title="Échelle">Échelle</button>
+                <button id="giz-off" class="seg active" type="button" title="Masquer le gizmo">Aucun</button>
+              </div>
+            </div>
+            <div class="row">
+              <button id="pedestal-refit" class="wide" type="button">Replacer automatiquement</button>
+            </div>
+          </div>
         </section>
 
         <section>

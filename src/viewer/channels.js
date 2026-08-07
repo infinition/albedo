@@ -85,6 +85,8 @@ export class ChannelView {
     this.original = new Map(); // mesh -> material(s)
     /** Per material override of the render mode, keyed by material uuid. */
     this.materialModes = new Map();
+    /** Materials the user has taken out of the way, keyed by uuid. */
+    this.hiddenMaterials = new Set();
     this.built = new Map(); // uuid|channel -> material, so toggling is cheap
     this.mode = "shaded";
     this.wireframe = false;
@@ -93,8 +95,37 @@ export class ChannelView {
   reset() {
     this.original.clear();
     this.materialModes.clear();
+    this.hiddenMaterials.clear();
     this.built.clear();
     this.mode = "shaded";
+  }
+
+  /**
+   * A transparency that cannot vary is a transparency that was lost.
+   *
+   * An exporter writes blending only when the source material had some, so a
+   * material that asks for it while carrying no alpha map, no texture and full
+   * opacity is describing something the file no longer contains: it draws as a
+   * solid slab, which is what the specification says and never what the author
+   * drew. Detecting the contradiction takes no file name and no format guess,
+   * so it holds for every model; repairing it would take inventing a texture,
+   * which is not this program's business.
+   */
+  static alphaLost(m) {
+    return !!m.transparent && (m.opacity ?? 1) >= 1 && !m.alphaMap && !m.map && !m.alphaTest;
+  }
+
+  /**
+   * Fully transparent, so nothing of it can ever be seen.
+   *
+   * Sometimes deliberate, for collision or helper geometry, and sometimes an
+   * exporter writing a slider into the wrong field: refractive glass is the
+   * common one, since its opacity setting is not a coverage. Either way a mesh
+   * that draws nothing is worth naming rather than leaving the viewer looking
+   * broken.
+   */
+  static invisible(m) {
+    return !!m.transparent && (m.opacity ?? 1) <= 0 && !(m.transmission > 0);
   }
 
   /** The distinct materials of the loaded model, for the inspector list. */
@@ -108,10 +139,76 @@ export class ChannelView {
       for (const m of Array.isArray(source) ? source : [source]) {
         if (!m || seen.has(m.uuid)) continue;
         seen.add(m.uuid);
-        out.push({ uuid: m.uuid, name: m.name || "(sans nom)", textured: !!m.map });
+        out.push({
+          uuid: m.uuid,
+          name: m.name || "(sans nom)",
+          textured: !!m.map,
+          alphaLost: ChannelView.alphaLost(m),
+          invisible: ChannelView.invisible(m),
+          deadVertexColors: !!m.userData?.deadVertexColors,
+          hidden: this.hiddenMaterials.has(m.uuid),
+        });
       }
     });
     return out;
+  }
+
+  /** The source material behind a uuid, and every mesh drawn with it. */
+  usersOf(uuid) {
+    const meshes = [];
+    let material = null;
+    this.viewer.root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      this.remember(o);
+      const source = this.original.get(o);
+      for (const m of Array.isArray(source) ? source : [source]) {
+        if (!m || m.uuid !== uuid) continue;
+        material = m;
+        meshes.push(o);
+      }
+    });
+    return { material, meshes };
+  }
+
+  /** Rebuild the channel copies after a material changed underneath them. */
+  refresh() {
+    this.built.clear();
+    this.apply(this.mode);
+  }
+
+  /**
+   * Put another material everywhere one was used.
+   *
+   * The per material choices travel with it: converting a material to glass
+   * must not silently un-hide it or send it back to PBR.
+   */
+  swapMaterial(uuid, next) {
+    this.viewer.root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      this.remember(o);
+      const source = this.original.get(o);
+      if (Array.isArray(source)) {
+        this.original.set(o, source.map((m) => (m && m.uuid === uuid ? next : m)));
+      } else if (source && source.uuid === uuid) {
+        this.original.set(o, next);
+      }
+    });
+    if (this.materialModes.has(uuid)) {
+      this.materialModes.set(next.uuid, this.materialModes.get(uuid));
+      this.materialModes.delete(uuid);
+    }
+    if (this.hiddenMaterials.has(uuid)) {
+      this.hiddenMaterials.delete(uuid);
+      this.hiddenMaterials.add(next.uuid);
+    }
+    this.refresh();
+  }
+
+  /** Take one material out of the picture, or put it back. */
+  setMaterialHidden(uuid, hidden) {
+    if (hidden) this.hiddenMaterials.add(uuid);
+    else this.hiddenMaterials.delete(uuid);
+    this.apply(this.mode);
   }
 
   /**
@@ -192,6 +289,17 @@ export class ChannelView {
     this.mode = mode;
     const make = (m) => {
       if (!m) return m;
+      // Hiding writes neither colour nor depth, so the slot stays in place on a
+      // mesh that carries several materials and only one of them is in the way.
+      if (this.hiddenMaterials.has(m.uuid)) {
+        const key = `${m.uuid}|hidden`;
+        let blank = this.built.get(key);
+        if (!blank) {
+          blank = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+          this.built.set(key, blank);
+        }
+        return blank;
+      }
       const channel = this.channelFor(m, mode);
       if (channel === "shaded") {
         this.setWireframeOn(m, this.wireframe);

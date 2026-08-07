@@ -12,18 +12,22 @@ const $ = (id) => document.getElementById(id);
 const PLAY = "M8 5l11 7-11 7z";
 const PAUSE = "M8 5h3v14H8zM13 5h3v14h-3z";
 
-export function wireHud({ viewer, nav, tauri, onNotice }) {
+export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
   // --- navigation mode ---
-  const setMode = (mode) => {
-    nav.setMode(mode);
+  // Fly mode can end on its own, when the pointer capture is released, so the
+  // buttons follow the navigation rather than the other way round.
+  const paintMode = (mode) => {
     $("nav-orbit").classList.toggle("active", mode === "orbit");
     $("nav-fly").classList.toggle("active", mode === "fly");
     onNotice(
       mode === "fly"
-        ? "Vol : ZQSD/WASD, Espace monte, Maj descend, clic capture la souris, molette règle la vitesse"
+        ? "Vol : ZQSD/WASD, bouton gauche maintenu pour regarder, Espace monte, Maj descend, molette règle la vitesse, Échap revient en orbite"
         : ""
     );
   };
+  nav.onMode = paintMode;
+  paintMode(nav.mode);
+  const setMode = (mode) => nav.setMode(mode);
   $("nav-orbit").addEventListener("click", () => setMode("orbit"));
   $("nav-fly").addEventListener("click", () => setMode("fly"));
   const toggleMode = () => setMode(nav.mode === "orbit" ? "fly" : "orbit");
@@ -70,7 +74,7 @@ export function wireHud({ viewer, nav, tauri, onNotice }) {
     }
   });
 
-  wireDeviceSettings(nav);
+  wireDeviceSettings(nav, onSettings);
 
   return { setMode, toggleMode, toggleFullscreen, toggleInspector };
 }
@@ -88,17 +92,21 @@ const AXES = [
   ["roll", "Roulis"],
 ];
 
-function wireDeviceSettings(nav) {
+function wireDeviceSettings(nav, onChange = () => {}) {
   const holder = $("sm-invert");
   for (const [key, label] of AXES) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
     b.title = `Inverser ${label}`;
+    // A correction restored from the settings file has to show as pressed,
+    // otherwise the panel disagrees with what the device is actually doing.
+    b.classList.toggle("active", !!nav.settings.space.invert[key]);
     b.addEventListener("click", () => {
       const inv = nav.settings.space.invert;
       inv[key] = !inv[key];
       b.classList.toggle("active", inv[key]);
+      onChange();
     });
     holder.appendChild(b);
   }
@@ -106,19 +114,23 @@ function wireDeviceSettings(nav) {
   const bind = (id, apply, initial) => {
     const el = $(id);
     if (!el) return;
-    if (initial !== undefined) el.value = String(initial);
+    if (initial !== undefined) {
+      if (el.type === "checkbox") el.checked = !!initial;
+      else el.value = String(initial);
+    }
     const evt = el.type === "checkbox" ? "change" : "input";
-    el.addEventListener(evt, () =>
-      apply(el.type === "checkbox" ? el.checked : Number(el.value))
-    );
+    el.addEventListener(evt, () => {
+      apply(el.type === "checkbox" ? el.checked : Number(el.value));
+      onChange();
+    });
   };
   const s = nav.settings;
   bind("pad-sens", (v) => (s.pad.sensitivity = v), s.pad.sensitivity);
   bind("pad-dead", (v) => (s.pad.deadzone = v), s.pad.deadzone);
-  bind("pad-inverty", (v) => (s.pad.invertY = v));
+  bind("pad-inverty", (v) => (s.pad.invertY = v), s.pad.invertY);
   bind("sm-trans", (v) => (s.space.translation = v), s.space.translation);
   bind("sm-rot", (v) => (s.space.rotation = v), s.space.rotation);
-  bind("sm-lockroll", (v) => (s.space.lockRoll = v));
+  bind("sm-lockroll", (v) => (s.space.lockRoll = v), s.space.lockRoll);
 }
 
 /** Show which devices are live, both in the panel and on the viewport. */

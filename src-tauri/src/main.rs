@@ -3,6 +3,173 @@
 #![windows_subsystem = "windows"]
 
 use std::path::PathBuf;
+use std::sync::OnceLock;
+use tauri::Manager;
+
+/// A headless render asked for on the command line.
+///
+/// `albedo.exe --thumbnail <model> --out <png> [--size 512]` loads a model in a
+/// window that is never shown, renders one square image and exits. The shell
+/// thumbnail provider drives this: every format reader lives in the frontend,
+/// so the picture Explorer gets is made by the same code that draws the viewer,
+/// not by a second renderer that would have to be kept in step.
+struct ThumbJob {
+    model: String,
+    out: PathBuf,
+    size: u32,
+}
+
+fn thumb_job() -> Option<&'static ThumbJob> {
+    static JOB: OnceLock<Option<ThumbJob>> = OnceLock::new();
+    JOB.get_or_init(parse_thumb_job).as_ref()
+}
+
+fn parse_thumb_job() -> Option<ThumbJob> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut model = None;
+    let mut out = None;
+    let mut size = 512u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--thumbnail" => {
+                model = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--out" => {
+                out = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--size" => {
+                size = args.get(i + 1).and_then(|v| v.parse().ok()).unwrap_or(size);
+                i += 2;
+            }
+            _ => i += 1,
+        }
+    }
+    Some(ThumbJob {
+        model: model?,
+        out: PathBuf::from(out?),
+        // Explorer asks for a size; anything outside this range is a mistake
+        size: size.clamp(32, 2048),
+    })
+}
+
+/// Never leave a headless process behind: a model that hangs the loader would
+/// otherwise sit in memory with no window to close.
+fn spawn_watchdog(seconds: u64) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(seconds));
+        std::process::exit(EXIT_TIMEOUT);
+    });
+}
+
+const EXIT_TIMEOUT: i32 = 2;
+const EXIT_FAILED: i32 = 3;
+
+fn b64_value(c: u8) -> Option<u8> {
+    match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// Decode the payload of a data URL. The canvas hands back base64 and pulling
+/// in a crate to read forty lines of it would be its own kind of cost.
+fn decode_base64(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let mut acc = 0u32;
+    let mut bits = 0u32;
+    for &c in text.as_bytes() {
+        if c == b'=' {
+            break;
+        }
+        let Some(v) = b64_value(c) else {
+            if c.is_ascii_whitespace() {
+                continue;
+            }
+            return None;
+        };
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
+#[derive(serde::Serialize)]
+struct ThumbRequest {
+    path: String,
+    size: u32,
+}
+
+/// What the frontend asks for on startup: a job, or nothing and a normal run.
+#[tauri::command]
+fn thumbnail_job() -> Option<ThumbRequest> {
+    thumb_job().map(|j| ThumbRequest {
+        path: j.model.clone(),
+        size: j.size,
+    })
+}
+
+/// Take the rendered image and stop. Writing beside the target and renaming
+/// means the provider never picks up a half written file.
+#[tauri::command]
+fn write_thumbnail(data: String) -> Result<(), String> {
+    let job = thumb_job().ok_or("aucune miniature demandée")?;
+    let payload = data.rsplit_once(',').map(|(_, p)| p).unwrap_or(&data);
+    let bytes = decode_base64(payload).ok_or("image illisible")?;
+    if let Some(dir) = job.out.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let tmp = job.out.with_extension("part");
+    std::fs::write(&tmp, &bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &job.out).map_err(|e| e.to_string())?;
+    std::process::exit(0);
+}
+
+/// The model could not be read: say so through the exit code, since a headless
+/// process has nowhere to print.
+#[tauri::command]
+fn thumbnail_failed(_message: String) {
+    std::process::exit(EXIT_FAILED);
+}
+
+/// Where the viewer's own settings live.
+///
+/// Roaming AppData, next to what every other desktop application writes there,
+/// and deliberately not beside the executable: a portable copy on a read only
+/// share must still start.
+fn prefs_path() -> Option<PathBuf> {
+    let base = std::env::var_os("APPDATA")?;
+    Some(PathBuf::from(base).join("Albedo").join("settings.json"))
+}
+
+/// The frontend owns the schema; this only carries the bytes.
+#[tauri::command]
+fn load_prefs() -> Option<String> {
+    std::fs::read_to_string(prefs_path()?).ok()
+}
+
+#[tauri::command]
+fn save_prefs(data: String) -> Result<(), String> {
+    let path = prefs_path().ok_or("aucun dossier de configuration")?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    // Written beside the target then renamed, so a crash mid-save cannot leave
+    // a half written file that the next launch would refuse to read.
+    let tmp = path.with_extension("part");
+    std::fs::write(&tmp, data.as_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
 
 const MODEL_EXTS: &[&str] = &[
     "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf", "3ds", "usdz",
@@ -32,6 +199,11 @@ fn cli_model_path() -> Option<String> {
 
 #[tauri::command]
 fn startup_file() -> Option<String> {
+    // A thumbnail run carries its model behind a flag, and the viewer must not
+    // treat it as a file to open in a window nobody will see.
+    if thumb_job().is_some() {
+        return None;
+    }
     cli_model_path()
 }
 
@@ -209,6 +381,12 @@ fn find_textures(model_path: String, names: Vec<String>) -> Vec<TexEntry> {
 }
 
 fn main() {
+    let headless = thumb_job().is_some();
+    if headless {
+        // Generous: a first run pays for the webview starting up, and a heavy
+        // model still has to be read from a cold disk.
+        spawn_watchdog(45);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -216,8 +394,23 @@ fn main() {
             startup_file,
             supported_extensions,
             scan_textures,
-            find_textures
+            find_textures,
+            thumbnail_job,
+            write_thumbnail,
+            thumbnail_failed,
+            load_prefs,
+            save_prefs
         ])
+        .setup(move |app| {
+            // The window is declared hidden so a thumbnail render never flashes
+            // on screen; a normal run shows it as soon as the shell is up.
+            if !headless {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running Albedo");
 }

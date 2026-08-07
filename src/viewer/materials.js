@@ -37,9 +37,17 @@ export function normalizeMaterials(object) {
     if (!mat.isMeshPhongMaterial && !mat.isMeshLambertMaterial) return mat;
     if (cache.has(mat)) return cache.get(mat);
 
+    // FBX, OBJ and 3DS exporters write a neutral grey diffuse factor by
+    // default, where glTF's equivalent is white. Multiplying a texture by that
+    // grey is why one model looked a fifth darker depending on which file it
+    // came from. A coloured tint is a decision and is kept; a grey one next to
+    // a texture is a default nobody chose.
+    const tint = mat.color ? mat.color.clone() : new THREE.Color(0xffffff);
+    if (mat.map && tint.r === tint.g && tint.g === tint.b) tint.setRGB(1, 1, 1);
+
     const std = new THREE.MeshStandardMaterial({
       name: mat.name,
-      color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
+      color: tint,
       emissive: mat.emissive ? mat.emissive.clone() : new THREE.Color(0x000000),
       emissiveIntensity: mat.emissiveIntensity ?? 1,
       roughness: mat.isMeshPhongMaterial ? shininessToRoughness(mat.shininess) : 0.9,
@@ -65,8 +73,11 @@ export function normalizeMaterials(object) {
       std.roughnessMap = mat.specularMap;
       std.roughness = 1;
     }
-    // Keep reflections subtle: these formats were never authored for IBL
-    std.envMapIntensity = 0.6;
+    // The same footing as glTF. Dimming the environment here was meant to keep
+    // reflections subtle on formats not authored for IBL, and its real effect
+    // was that one alligator looked flatter than the next depending on the
+    // container it arrived in.
+    std.envMapIntensity = 1;
     std.needsUpdate = true;
 
     cache.set(mat, std);
@@ -102,6 +113,150 @@ export function fixColorSpaces(object) {
       m.needsUpdate = true;
     }
   });
+}
+
+/**
+ * Turn a material into one that can describe glass.
+ *
+ * Exporters that lose a refraction setting leave a plain standard material
+ * behind, and no amount of tweaking makes such a material transmit light. This
+ * is the one conversion the inspector offers, so a badly exported window can be
+ * put right by hand instead of being written off.
+ */
+export function toPhysical(material, { span = 1 } = {}) {
+  if (!material || material.isMeshPhysicalMaterial) return material;
+  const physical = new THREE.MeshPhysicalMaterial();
+  // The physical copy reads fields a standard material never has, clearcoat
+  // among them, and throws on the first one. Borrowing the parent class's copy
+  // moves exactly what the two have in common.
+  THREE.MeshStandardMaterial.prototype.copy.call(physical, material);
+  physical.name = material.name;
+  physical.transmission = 1;
+  physical.ior = 1.5;
+  physical.roughness = Math.min(material.roughness ?? 0.5, 0.1);
+  physical.transparent = false;
+  physical.opacity = 1;
+  // Transmission with no thickness is a pane of nothing: light passes straight
+  // through, unbent and untinted, and the surface reads as a hole. A thickness
+  // proportional to the model is what makes it look like glass, and the slider
+  // is right there to argue with.
+  physical.thickness = span * 0.05;
+  physical.needsUpdate = true;
+  return physical;
+}
+
+/** The map slots worth showing, in the order an artist thinks of them. */
+export const MAP_SLOTS = [
+  ["map", "Albedo"],
+  ["normalMap", "Normale"],
+  ["roughnessMap", "Rugosité"],
+  ["metalnessMap", "Métal"],
+  ["aoMap", "AO"],
+  ["emissiveMap", "Émissif"],
+  ["alphaMap", "Alpha"],
+  ["bumpMap", "Relief"],
+  ["displacementMap", "Déplacement"],
+  ["lightMap", "Lumière"],
+];
+
+const DATA_SLOTS = new Set([
+  "normalMap", "roughnessMap", "metalnessMap", "aoMap", "alphaMap",
+  "bumpMap", "displacementMap",
+]);
+
+/**
+ * Put a different image in one of a material's map slots.
+ *
+ * The new texture inherits the orientation, wrapping and tiling of the one it
+ * replaces, because those belong to the model's UVs and not to the image: a
+ * texture swapped in with three's defaults would come out upside down on half
+ * the formats. With nothing to inherit from, another map on the same material
+ * is asked instead.
+ *
+ * @returns {Promise<THREE.Texture>}
+ */
+export async function replaceMap(material, slot, url, name) {
+  const isTga = /\.tga(\?|#|$)/i.test(url) || /\.tga$/i.test(name || "");
+  let texture;
+  if (isTga) {
+    const { TGALoader } = await import("three/examples/jsm/loaders/TGALoader.js");
+    texture = await new TGALoader().loadAsync(url);
+  } else {
+    texture = await new THREE.TextureLoader().loadAsync(url);
+  }
+
+  const previous = material[slot] || MAP_SLOTS.map(([k]) => material[k]).find(Boolean) || null;
+  texture.name = name || "";
+  texture.colorSpace = DATA_SLOTS.has(slot) ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+  texture.flipY = previous ? previous.flipY : false;
+  texture.wrapS = previous ? previous.wrapS : THREE.RepeatWrapping;
+  texture.wrapT = previous ? previous.wrapT : THREE.RepeatWrapping;
+  if (previous) {
+    texture.repeat.copy(previous.repeat);
+    texture.offset.copy(previous.offset);
+    texture.center.copy(previous.center);
+    texture.rotation = previous.rotation;
+  }
+  texture.needsUpdate = true;
+  material[slot] = texture;
+  material.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * Ignore a vertex colour that can only annihilate the texture.
+ *
+ * glTF multiplies COLOR_0 into the base colour, unconditionally. Some exporters
+ * carry over a colour array from a scene where the renderer only applied vertex
+ * colours when the material asked for it, and when that array is all zeros the
+ * mesh comes out black however detailed its albedo is: skin, cloth, everything.
+ *
+ * Nothing is invented here, unlike guessing a missing map. An array that is
+ * zero on every channel multiplies to zero everywhere, so the only thing it can
+ * describe is a black surface under a texture nobody would then have shipped.
+ * The material is marked so the inspector can say the file is defective rather
+ * than let the repair pass unnoticed.
+ *
+ * @returns {number} how many materials stopped being multiplied by nothing
+ */
+export function ignoreDeadVertexColors(object) {
+  let fixed = 0;
+  const judged = new Map();
+
+  const allZero = (geometry) => {
+    const attr = geometry?.attributes.color;
+    if (!attr) return false;
+    if (judged.has(attr)) return judged.get(attr);
+    const { array, itemSize } = attr;
+    let dead = true;
+    for (let i = 0; i < array.length && dead; i += itemSize) {
+      // Alpha says nothing about brightness, so only the colour is judged
+      for (let c = 0; c < Math.min(3, itemSize); c++) {
+        if (array[i + c] !== 0) {
+          dead = false;
+          break;
+        }
+      }
+    }
+    judged.set(attr, dead);
+    return dead;
+  };
+
+  object.traverse((o) => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    if (!allZero(o.geometry)) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m || !m.vertexColors) continue;
+      // Without a texture the vertex colour is the whole look, and a black
+      // model is then what the file really says.
+      if (!m.map) continue;
+      m.vertexColors = false;
+      m.userData.deadVertexColors = true;
+      m.needsUpdate = true;
+      fixed++;
+    }
+  });
+  return fixed;
 }
 
 /**
