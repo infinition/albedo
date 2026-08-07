@@ -84,6 +84,8 @@ if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
 }
 
 const prefs = await createPrefs(tauri);
+/** True when this process exists only to draw one thumbnail and stop. */
+let headless = false;
 
 const setBusy = (on) => {
   $("loading").hidden = !on;
@@ -1303,6 +1305,24 @@ $("btn-pedestal").addEventListener("click", async () => {
 
 // --- remembered state -----------------------------------------------------
 
+/**
+ * The one look every thumbnail is drawn under.
+ *
+ * Fixed on purpose, and deliberately not the user's: two people, or the shell
+ * and the library, have to get the same picture of the same file, and the cache
+ * key has no room to say which look produced it.
+ */
+function neutralLook() {
+  viewer.setExposure(1);
+  viewer.setEnvironmentIntensity(1);
+  viewer.envLighting = true;
+  viewer.setKeyLight(true);
+  viewer.setKeyLightPower(1.6);
+  viewer.setKeyLightColour("#ffffff");
+  viewer.setEnvironment("studio");
+  viewer.setClipping({ on: false });
+}
+
 /** Put the saved settings back, without writing them out again as we go. */
 function applyPrefs() {
   const p = prefs.all();
@@ -1504,6 +1524,7 @@ if (tauri) {
   // produce one image for the shell and then stop.
   const job = await tauri.core.invoke("thumbnail_job").catch(() => null);
   if (job) {
+    headless = true;
     renderThumbnail(job);
   } else {
     // A file passed on the command line ("Open with…")
@@ -1513,8 +1534,20 @@ if (tauri) {
   }
 }
 
-restoreDevices();
-applyPrefs();
+// A thumbnail is a file's identity card, not a picture of one session.
+//
+// The headless process ran the same startup as the window, so it inherited
+// whatever exposure, environment and lighting the user happened to be using:
+// pictures came out at one and a half stops over, lit by whichever panorama was
+// loaded that day. Worse, the cache key says nothing about any of it, so a
+// picture taken under one look was served for ever, and the shell and the
+// library, asking at different moments for different sizes, ended up holding
+// two different pictures of one file.
+if (headless) neutralLook();
+else {
+  restoreDevices();
+  applyPrefs();
+}
 
 // Dev hook: drive the app from the console while building the UI
 if (import.meta.env && import.meta.env.DEV) {

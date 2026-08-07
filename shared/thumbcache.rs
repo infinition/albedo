@@ -15,7 +15,7 @@ use std::time::UNIX_EPOCH;
 /// changes: correcting how USD states roughness, or how bright an environment
 /// lights a model, leaves every stored image showing the old answer with no
 /// reason to expire. Raising this number retires them all at once.
-pub const RENDER_EPOCH: u32 = 2;
+pub const RENDER_EPOCH: u32 = 3;
 
 /// Explorer asks for arbitrary widths; rounding to three sizes keeps the cache
 /// small and lets one picture serve a whole range of views.
