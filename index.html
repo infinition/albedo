@@ -394,6 +394,24 @@
 
         <div class="pane" data-pane="scene">
         <section>
+          <h2>Édition</h2>
+          <div class="segment" role="group" aria-label="Outil de transformation">
+            <button id="edit-off" class="seg active" type="button" title="Quitter le mode édition (Échap)">Aucun</button>
+            <button id="edit-translate" class="seg" type="button" title="Déplacer (G)">Déplacer</button>
+            <button id="edit-rotate" class="seg" type="button" title="Tourner (R)">Tourner</button>
+            <button id="edit-scale" class="seg" type="button" title="Redimensionner (S)">Échelle</button>
+          </div>
+          <p class="hint">G déplacer, R tourner, S échelle, Échap sortir. Maj pendant le
+            glisser règle par crans. Clique une surface pour n'agir que sur elle.</p>
+          <p class="hint" id="edit-target">Cible : le modèle entier</p>
+          <div class="row">
+            <button id="save-transform" class="seg" type="button" title="Écrire le modèle redressé dans un nouveau fichier">Enregistrer sous</button>
+            <button id="save-over" class="seg" type="button" title="Remplacer le fichier ouvert">Écraser l'original</button>
+          </div>
+          <p class="hint" id="save-note"></p>
+        </section>
+
+        <section>
           <h2>Orientation</h2>
           <p class="hint" id="orient-value">Aucune rotation</p>
           <div class="grid axes" id="orient-buttons"></div>

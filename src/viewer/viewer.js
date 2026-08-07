@@ -907,8 +907,8 @@ export class Viewer {
    * @param {"translate"|"rotate"|"scale"|null} mode
    * @param {(placing: object) => void} [onChange] called when the user lets go
    */
-  async setGizmo(mode, onChange) {
-    if (!mode || !this.pedestal) {
+  async setGizmo(mode, onChange, target = this.pedestal) {
+    if (!mode || !target) {
       if (this.gizmo) {
         this.gizmo.detach();
         this.scene.remove(this.gizmoHelper);
@@ -941,8 +941,22 @@ export class Viewer {
     }
     this.onGizmoChange = onChange;
     this.gizmo.setMode(mode);
-    this.gizmo.attach(this.pedestal);
+    this.gizmo.attach(target);
     this.invalidate();
+  }
+
+  /**
+   * Move in steps rather than freely.
+   *
+   * Held down while dragging, the way every modelling tool does it: a quarter
+   * of a unit, fifteen degrees, a tenth of the scale. Without it a model that
+   * needs turning a quarter turn ends up turned by 89.6 degrees.
+   */
+  setGizmoSnap(on) {
+    if (!this.gizmo) return;
+    this.gizmo.setTranslationSnap(on ? 0.25 : null);
+    this.gizmo.setRotationSnap(on ? Math.PI / 12 : null);
+    this.gizmo.setScaleSnap(on ? 0.1 : null);
   }
 
   /**

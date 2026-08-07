@@ -11,11 +11,16 @@
     "core:webview:allow-internal-toggle-devtools",
     "dialog:allow-open",
     "dialog:allow-save",
+    "dialog:allow-confirm",
     "fs:allow-read-file",
     "fs:default",
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        {
+          "path": "**"
+        }
+      ]
     },
     "core:window:allow-set-fullscreen",
     "core:window:allow-is-fullscreen",

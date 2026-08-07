@@ -424,6 +424,45 @@ the field of view and the zoom read as a number rather than a queue. Zoom is a
 percentage of the framing `F` gives, since a distance in world units would
 mean nothing.
 
+### Edit mode
+
+Three handles rather than six axis buttons. `E` brings them out, then `G`, `R`
+and `S` move, turn and scale, `Escape` puts them away, and holding shift while
+dragging works in steps: a quarter unit, fifteen degrees, a tenth of the scale.
+The keys are the ones every modelling tool uses, so the hands already know
+them, and they are modal exactly as they are there: `G` is the grid and `R` is
+the roll until the handles are out, and neither shortcut had to be given up.
+
+The handles take the whole model unless exactly one surface is picked. That is
+the case that can be answered without inventing anything, since attaching to a
+single mesh needs no pivot and no reparenting; a material spread over several
+meshes has no one transform to offer, so it falls back to the model and says
+so.
+
+The six quarter turn buttons stay, because a quarter turn by hand is never
+exactly a quarter turn. They are named for what they do to the model now,
+tipping it forward or laying it on its side, rather than for the axis they turn
+about. Nobody looking at a model on its side is thinking in axes.
+
+### Saving a correction
+
+A model that arrives upside down can be stood up and written back out, as glTF,
+either beside the original or over it. Overwriting is a separate button from
+saving: the two are not the same risk, it names the file it is about to
+destroy, and it only offers itself when the file it would replace is one Albedo
+can actually write. A NIF or a USDZ leaves as glTF, and quietly putting glTF
+bytes into a file named `.nif` would be worse than refusing.
+
+The thumbnail follows on its own. The cache key carries the path, the size and
+the modification time, so rewriting the file misses the old entry rather than
+serving it.
+
+This also fixed a quiet defect in the existing export, which wrote out the
+object and not the group holding it: every orientation correction was dropped
+on the way out. Measured on a model 1.598 tall, laid on its side so that
+dimension moves to Z, written and read back: through the group it is still on
+its side, through the object it stands up again.
+
 Right click gives no web menu. Reload, print, save image and inspect are offers
 about a web page, and half of them are ways to lose what is on screen. The
 canvas never showed one, since the orbit controls refuse the event to keep the
@@ -547,6 +586,9 @@ confirmed on the real thing.
 | Layout follows its own box, not the window | [x] | Fifty widths from 300 to 1280, viewer and library, nothing overflowing its box |
 | Preview strip follows a single selection | [x] | Twelve clicks over five assets, two single ones: two loads |
 | A model released when the next one loads | [x] | Eight loads: counts flat, picture identical, shared textures intact |
+| Edit mode, three handles, Blender keys | [x] | Modal G R S exercised, snapping on and off with shift, grid and roll recovered on exit |
+| A correction survives being written out | [x] | Model laid on its side, exported and read back still on its side |
+| Overwrite the original | [ ] | Written and permitted, exercised only through the save-as path in a browser |
 | Library sidebar becomes a drawer when tight | [x] | Below 760 pixels of library, whatever the window measures |
 
 ### Shell integration

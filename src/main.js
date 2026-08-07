@@ -204,6 +204,11 @@ function siblingResolver(modelPath) {
 
 async function open(url, label, { findTextures, resolveSibling } = {}) {
   setBusy(true);
+  // Cleared here and set again by openPath once the load succeeded, so a model
+  // dropped in from a browser picker can never be mistaken for a file on disk
+  // and offered up for overwriting.
+  openedPath = null;
+  setEditMode(null);
   try {
     const { object, animations, info } = await loadModel(url, {
       renderer: viewer.renderer,
@@ -239,6 +244,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     showStats(stats);
     showDimensions();
     paintOrientation();
+    paintSaveButtons();
     $("btn-export").disabled = false;
     $("btn-snapshot").disabled = false;
     paintShotPreview();
@@ -302,6 +308,9 @@ function showStats(stats, extra) {
 }
 
 /** Open a path coming from the OS (dialog, "Open with", drag & drop). */
+/** The file on disk the viewport is showing, when there is one. */
+let openedPath = null;
+
 async function openPath(path) {
   if (!tauri) return;
   const url = tauri.core.convertFileSrc(path);
@@ -313,6 +322,8 @@ async function openPath(path) {
     return (found || []).map((f) => ({ name: f.name, url: tauri.core.convertFileSrc(f.path) }));
   };
   await open(url, name, { findTextures, resolveSibling: siblingResolver(path) });
+  openedPath = path;
+  paintSaveButtons();
   await rescueTextures(path, name);
 }
 
@@ -433,6 +444,12 @@ function selectMaterial(uuid) {
   if (next === selectedMaterial) return;
   selectedMaterial = next;
   paintMaterialList();
+  // With the handles out, picking is aiming them rather than asking about
+  // matter, so the pane stays put and the gizmo moves to what was just chosen.
+  if (editMode) {
+    setEditMode(editMode);
+    return;
+  }
   // Picking a surface is a question about its matter, so show the answer
   if (next) showPane("matter");
 }
@@ -865,13 +882,16 @@ $("clip-at").addEventListener("input", (e) => {
  * a NIF from 2003 or a binary USD crate becomes a file any modern tool opens.
  * The scene furniture is left out, only what was loaded is written.
  */
-async function exportModel() {
+async function exportModel({ overwrite = false } = {}) {
   if (!viewer.current) return;
   const note = $("export-note");
   note.textContent = "Export en cours…";
   try {
     const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-    const result = await new GLTFExporter().parseAsync(viewer.current, {
+    // The group, not the object inside it. The orientation buttons and the
+    // handles both write to the group, so exporting the object alone wrote out
+    // a model still lying on its side after it had been stood up.
+    const result = await new GLTFExporter().parseAsync(viewer.root, {
       binary: true,
       animations: viewer.clips || [],
       // Skinned models need their bones, and three drops them otherwise
@@ -881,10 +901,12 @@ async function exportModel() {
     const name = ($("file-name").textContent || "modele").replace(/\.[^.]+$/, "") + ".glb";
 
     if (tauri) {
-      const path = await tauri.dialog.save({
-        defaultPath: name,
-        filters: [{ name: "glTF binaire", extensions: ["glb"] }],
-      });
+      const path = overwrite
+        ? openedPath
+        : await tauri.dialog.save({
+            defaultPath: name,
+            filters: [{ name: "glTF binaire", extensions: ["glb"] }],
+          });
       if (!path) {
         note.textContent = "";
         return;
@@ -1943,15 +1965,21 @@ function paintOrientation() {
     : "Aucune rotation";
 }
 
-for (const [axis, quarters, label] of [
-  ["x", 1, "X +"], ["x", -1, "X −"],
-  ["y", 1, "Y +"], ["y", -1, "Y −"],
-  ["z", 1, "Z +"], ["z", -1, "Z −"],
+// Named for what they do to the model rather than for the axis they turn it
+// about. Nobody looking at a model on its side is thinking in axes; they are
+// thinking "tip it forward". The axis stays in the tooltip for anyone who is.
+for (const [axis, quarters, label, what] of [
+  ["x", 1, "Basculer avant", "Bascule le modèle vers l'avant, quart de tour sur X"],
+  ["x", -1, "Basculer arrière", "Bascule le modèle vers l'arrière, quart de tour sur X"],
+  ["y", 1, "Pivoter gauche", "Fait pivoter le modèle sur lui-même, quart de tour sur Y"],
+  ["y", -1, "Pivoter droite", "Fait pivoter le modèle sur lui-même, quart de tour sur Y"],
+  ["z", 1, "Coucher gauche", "Couche le modèle sur le côté, quart de tour sur Z"],
+  ["z", -1, "Coucher droite", "Couche le modèle sur le côté, quart de tour sur Z"],
 ]) {
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = label;
-  b.title = `Quart de tour sur ${axis.toUpperCase()}`;
+  b.title = what;
   b.addEventListener("click", () => {
     viewer.turnModel(axis, quarters);
     paintOrientation();
@@ -1964,6 +1992,129 @@ $("orient-reset").addEventListener("click", () => {
   viewer.resetOrientation();
   paintOrientation();
   showDimensions();
+});
+
+// --- edit mode ------------------------------------------------------------
+
+/**
+ * Three handles instead of six axis buttons.
+ *
+ * The buttons are exact and stay, but they ask the question in the wrong
+ * language: someone looking at a model lying on its side is not thinking about
+ * which axis to turn about. A gizmo is the answer every modelling tool gives,
+ * and the keys are the ones those tools use, so the hands already know them.
+ *
+ * The keys are modal on purpose. G, R and S mean grid, roll and nothing at all
+ * outside this mode, and they mean move, turn and scale inside it. That is how
+ * Blender resolves the same collision, and it means no shortcut had to be given
+ * up to gain three.
+ */
+let editMode = null;
+
+/**
+ * What the handles act on.
+ *
+ * The whole model unless exactly one surface is picked, which is the case that
+ * can be answered without inventing anything: attaching to one mesh needs no
+ * pivot and no reparenting. A material covering several meshes has no single
+ * transform to offer, so that falls back to the model and says so.
+ */
+function editTarget() {
+  if (!viewer.current) return null;
+  const meshes = selectedMaterial ? channels.usersOf(selectedMaterial).meshes : [];
+  return meshes.length === 1 ? meshes[0] : viewer.root;
+}
+
+function paintEditTarget() {
+  const target = editTarget();
+  const whole = !target || target === viewer.root;
+  $("edit-target").textContent = whole
+    ? "Cible : le modèle entier"
+    : `Cible : ${target.name || "la surface choisie"}`;
+}
+
+function setEditMode(mode) {
+  if (mode && !viewer.current) return;
+  editMode = mode || null;
+  const target = editMode ? editTarget() : null;
+  viewer.setGizmo(editMode, null, target);
+  viewer.setGizmoSnap(false);
+  for (const [id, value] of [
+    ["edit-off", null], ["edit-translate", "translate"],
+    ["edit-rotate", "rotate"], ["edit-scale", "scale"],
+  ]) {
+    $(id).classList.toggle("active", editMode === value);
+  }
+  paintEditTarget();
+  if (editMode) {
+    const label = { translate: "Déplacer", rotate: "Tourner", scale: "Échelle" }[editMode];
+    const whole = !target || target === viewer.root;
+    toast(`${label} · ${whole ? "modèle entier" : "surface choisie"} · Maj pour les crans`);
+  } else {
+    paintOrientation();
+    showDimensions();
+  }
+}
+
+for (const [id, mode] of [
+  ["edit-off", null], ["edit-translate", "translate"],
+  ["edit-rotate", "rotate"], ["edit-scale", "scale"],
+]) {
+  $(id).addEventListener("click", () => setEditMode(mode));
+}
+
+/**
+ * Write the corrected model back.
+ *
+ * Two buttons rather than one dialog with a choice in it, because the two are
+ * not the same risk. Writing beside the original costs nothing; replacing it
+ * cannot be undone, so it says what it is about to destroy and only offers
+ * itself when the file it would replace is one this program can actually write.
+ * A NIF or a USDZ leaves as glTF, and quietly putting glTF bytes in a file
+ * named .nif would be worse than refusing.
+ */
+const WRITABLE = /\.(glb|gltf)$/i;
+
+function paintSaveButtons() {
+  const has = !!viewer.current;
+  const over = $("save-over");
+  const canOverwrite = has && !!openedPath && WRITABLE.test(openedPath);
+  $("save-transform").disabled = !has;
+  over.disabled = !canOverwrite;
+  over.title = canOverwrite
+    ? `Remplacer ${openedPath.split(/[\\/]/).pop()}, sans retour possible`
+    : openedPath
+      ? "Albedo écrit du glTF ; ce fichier est dans un autre format, passe par Enregistrer sous"
+      : "Aucun fichier sur le disque";
+}
+
+$("save-transform").addEventListener("click", async () => {
+  $("save-note").textContent = "";
+  await exportModel();
+  $("save-note").textContent = $("export-note").textContent;
+});
+
+$("save-over").addEventListener("click", async () => {
+  if (!openedPath) return;
+  const name = openedPath.split(/[\\/]/).pop();
+  const ok = await (tauri?.dialog?.confirm
+    ? tauri.dialog.confirm(`Remplacer ${name} ? L'original sera perdu.`, {
+        title: "Écraser le fichier",
+        kind: "warning",
+      })
+    : Promise.resolve(window.confirm(`Remplacer ${name} ? L'original sera perdu.`)));
+  if (!ok) return;
+  await exportModel({ overwrite: true });
+  $("save-note").textContent = $("export-note").textContent;
+  toast("Fichier réécrit, sa vignette suivra");
+});
+
+// Held, not toggled: the same key that snaps in every other tool
+window.addEventListener("keydown", (e) => {
+  if (editMode && e.key === "Shift") viewer.setGizmoSnap(true);
+});
+window.addEventListener("keyup", (e) => {
+  if (editMode && e.key === "Shift") viewer.setGizmoSnap(false);
 });
 
 // --- picking --------------------------------------------------------------
@@ -2076,11 +2227,27 @@ window.addEventListener("keydown", (e) => {
     // one. Escape usually never reaches us, the webview eats it to release the
     // pointer, which the navigation already reads as the way out; this covers
     // the case where the capture was refused and fly mode has the keys only.
-    case "Escape": hud.setMode("orbit"); break;
+    case "Escape":
+      if (editMode) setEditMode(null);
+      else hud.setMode("orbit");
+      break;
+    // G, R and S belong to the edit mode while it is on, and to the grid, the
+    // roll and nothing at all while it is off. Modal, as in every tool that
+    // has more to do than it has letters.
+    case "KeyE":
+      if (nav.mode === "orbit") setEditMode(editMode ? null : "translate");
+      break;
     case "KeyG":
+      if (editMode) {
+        setEditMode("translate");
+        break;
+      }
       $("opt-grid").checked = !$("opt-grid").checked;
       viewer.setGrid($("opt-grid").checked);
       toast($("opt-grid").checked ? "Grille affichée" : "Grille masquée");
+      break;
+    case "KeyS":
+      if (editMode) setEditMode("scale");
       break;
     case "KeyT":
       if (nav.mode === "orbit") {
@@ -2097,6 +2264,10 @@ window.addEventListener("keydown", (e) => {
       toggleLibrary();
       break;
     case "KeyR":
+      if (editMode) {
+        setEditMode("rotate");
+        break;
+      }
       nav.resetRoll();
       toast("Roulis remis à plat");
       break;
@@ -2115,3 +2286,4 @@ window.addEventListener("keydown", (e) => {
 // Last, so every restored preference and every saved effect setting is already
 // in the inputs and the first number shown is the one in force.
 wireSliderValues($("inspector"));
+paintSaveButtons();
