@@ -945,9 +945,19 @@ export class Viewer {
       this.gizmoHelper = this.gizmo.getHelper();
       this.scene.add(this.gizmoHelper);
       this.gizmo.addEventListener("change", () => this.invalidate());
+      // Fires on every step of a drag, which is where a number is wanted: not
+      // knowing what you started from and by how much it has moved is the whole
+      // complaint about dragging a handle blind.
+      this.gizmo.addEventListener("objectChange", () =>
+        this.onGizmoDrag?.("move", this.gizmo.object)
+      );
       // Dragging a handle must not also orbit the camera behind it
       this.gizmo.addEventListener("dragging-changed", (e) => {
         this.controls.enabled = !e.value;
+        // Announced before and after, so whatever is keeping a history can take
+        // its snapshot of the object as it was rather than as it ended up.
+        this.onGizmoDrag?.(e.value ? "start" : "end", this.gizmo.object);
+        if (e.value) this.gizmo.__moving = this.gizmo.object;
         if (!e.value && this.onGizmoChange) this.onGizmoChange(this.pedestalPlacing());
       });
     }
@@ -1086,6 +1096,75 @@ export class Viewer {
   /** Everything in the scene, not just the file that was opened. */
   sceneBox() {
     return new THREE.Box3().setFromObject(this.root);
+  }
+
+  /**
+   * The point the camera turns about.
+   *
+   * Framing puts it at the middle of the bounding box, which is the right guess
+   * and the wrong answer often enough to be worth changing by hand: a figure
+   * with an outstretched arm, or a building with a spire, has a box whose
+   * middle is nowhere near what you want to look at.
+   */
+  setPivot(point) {
+    this.controls.target.copy(point);
+    this.controls.update();
+    if (this.pivotMarker) this.pivotMarker.position.copy(point);
+    this.invalidate();
+  }
+
+  /**
+   * Where the geometry actually is, rather than where its box is.
+   *
+   * The average of the vertices, which for a shape with one long limb sits
+   * where the mass is instead of halfway to the tip. Sampled on large meshes:
+   * a centre computed from every vertex of a million and a centre computed from
+   * every eleventh do not differ by anything anyone can see.
+   */
+  geometricCentre() {
+    const sum = new THREE.Vector3();
+    const p = new THREE.Vector3();
+    let n = 0;
+    this.root.updateMatrixWorld(true);
+    this.root.traverse((o) => {
+      const position = o.geometry?.attributes?.position;
+      if (!position || (!o.isMesh && !o.isPoints)) return;
+      const step = Math.max(1, Math.floor(position.count / 20000));
+      for (let i = 0; i < position.count; i += step) {
+        p.fromBufferAttribute(position, i).applyMatrix4(o.matrixWorld);
+        sum.add(p);
+        n++;
+      }
+    });
+    return n ? sum.divideScalar(n) : this.sceneBox().getCenter(new THREE.Vector3());
+  }
+
+  /** A marker at the pivot, so moving it is something you can see. */
+  showPivot(on) {
+    if (on && !this.pivotMarker) {
+      const marker = new THREE.Group();
+      const ball = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 16, 12),
+        // Drawn over everything: a pivot inside the model is the usual case,
+        // and one that is hidden by the very thing it turns is no help.
+        new THREE.MeshBasicMaterial({ color: 0x4c8dff, depthTest: false, transparent: true, opacity: 0.9 })
+      );
+      marker.add(ball, new THREE.AxesHelper(4));
+      marker.renderOrder = 999;
+      marker.traverse((o) => {
+        if (o.material) o.material.depthTest = false;
+      });
+      this.pivotMarker = marker;
+      this.scene.add(marker);
+    }
+    if (this.pivotMarker) {
+      this.pivotMarker.visible = !!on;
+      this.pivotMarker.position.copy(this.controls.target);
+      // Sized against the model, so it is a dot on a building and not a planet
+      const s = Math.max(this.sceneBox().getSize(new THREE.Vector3()).length(), 1e-3) * 0.01;
+      this.pivotMarker.scale.setScalar(s);
+    }
+    this.invalidate();
   }
 
   /** Re-frame what is in the scene. */

@@ -226,6 +226,11 @@ export class Navigation {
       (e) => {
         if (this.mode !== "orbit" || e.button !== 0 || e.target !== canvas) return;
         if (!e.shiftKey && !e.ctrlKey) return;
+        // While the transform handles are out, shift belongs to them: it is
+        // what makes a drag work in steps. This listener captures and stops
+        // propagation, so leaving it in place did not merely also swing the
+        // light, it took the event before the handle could see it at all.
+        if (viewer.gizmo && e.shiftKey) return;
         lightDrag = e.shiftKey;
         fovDrag = !e.shiftKey && e.ctrlKey;
         modX = e.clientX;

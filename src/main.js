@@ -32,6 +32,29 @@ let editMode = null;
 let selectedPart = null;
 /** The formats Albedo can write, so the only ones it may offer to replace. */
 const WRITABLE = /\.(glb|gltf)$/i;
+/** True while the handles are aimed at the centre of rotation, not the model. */
+let pivotEditing = false;
+/** True while a transform field has the caret, so repainting leaves it alone. */
+let typingTransform = false;
+
+/**
+ * What was moved, and where it was before.
+ *
+ * A pose rather than a command: three vectors copied off the object are enough
+ * to put it back exactly, they cost nothing to keep, and they do not care
+ * whether the change came from a handle, an axis button, a typed field or a
+ * reset. A log of operations would have to know about each of those, and would
+ * be wrong the first time one of them grew an option.
+ */
+const history = { past: [], future: [], limit: 80 };
+let pendingPose = null;
+
+/** Field, what it reads, which axis, and what to multiply by to show it. */
+const XFORM = [
+  ["tx", "position", "x", 1], ["ty", "position", "y", 1], ["tz", "position", "z", 1],
+  ["rx", "rotation", "x", 180 / Math.PI], ["ry", "rotation", "y", 180 / Math.PI], ["rz", "rotation", "z", 180 / Math.PI],
+  ["sx", "scale", "x", 1], ["sy", "scale", "y", 1], ["sz", "scale", "z", 1],
+];
 
 /**
  * Say what just changed, once, and get out of the way.
@@ -222,6 +245,12 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
   // and offered up for overwriting.
   openedPath = null;
   selectedPart = null;
+  pivotEditing = false;
+  // The poses name objects that are about to be released; keeping them would
+  // mean an undo that puts a freed mesh back into a scene it no longer belongs to.
+  history.past.length = 0;
+  history.future.length = 0;
+  pendingPose = null;
   setEditMode(null);
   try {
     const { object, animations, info } = await loadModel(url, {
@@ -1996,7 +2025,9 @@ for (const [axis, quarters, label, what] of [
   b.textContent = label;
   b.title = what;
   b.addEventListener("click", () => {
+    recordBefore(viewer.root);
     viewer.turnModel(axis, quarters);
+    recordAfter();
     paintOrientation();
     showDimensions();
   });
@@ -2004,7 +2035,9 @@ for (const [axis, quarters, label, what] of [
 }
 
 $("orient-reset").addEventListener("click", () => {
+  recordBefore(viewer.root);
   viewer.resetOrientation();
+  recordAfter();
   paintOrientation();
   showDimensions();
 });
@@ -2036,7 +2069,194 @@ $("orient-reset").addEventListener("click", () => {
  * pivot and no reparenting. A material covering several meshes has no single
  * transform to offer, so that falls back to the model and says so.
  */
+// --- undo ------------------------------------------------------------------
+
+const poseOf = (o) => ({
+  object: o,
+  position: o.position.clone(),
+  quaternion: o.quaternion.clone(),
+  scale: o.scale.clone(),
+});
+const samePose = (a, b) =>
+  a.object === b.object &&
+  a.position.equals(b.position) &&
+  a.quaternion.equals(b.quaternion) &&
+  a.scale.equals(b.scale);
+function applyPose(p) {
+  p.object.position.copy(p.position);
+  p.object.quaternion.copy(p.quaternion);
+  p.object.scale.copy(p.scale);
+  p.object.updateMatrixWorld(true);
+}
+
+function recordBefore(object) {
+  pendingPose = object ? poseOf(object) : null;
+}
+
+/** Closes the entry opened by recordBefore, unless nothing actually moved. */
+function recordAfter() {
+  if (!pendingPose) return;
+  const after = poseOf(pendingPose.object);
+  if (samePose(pendingPose, after)) {
+    pendingPose = null;
+    return;
+  }
+  history.past.push({ before: pendingPose, after });
+  if (history.past.length > history.limit) history.past.shift();
+  // A new edit is a new branch: what was undone can no longer be redone
+  history.future.length = 0;
+  pendingPose = null;
+  paintHistory();
+}
+
+function paintHistory() {
+  $("undo").disabled = !history.past.length;
+  $("redo").disabled = !history.future.length;
+}
+
+function stepHistory(back) {
+  const from = back ? history.past : history.future;
+  const to = back ? history.future : history.past;
+  const entry = from.pop();
+  if (!entry) return;
+  applyPose(back ? entry.before : entry.after);
+  to.push(entry);
+  if (entry.before.object === viewer.pivotMarker) viewer.setPivot(viewer.pivotMarker.position);
+  viewer.invalidate();
+  paintOrientation();
+  showDimensions();
+  paintHistory();
+  toast(back ? "Annulé" : "Rétabli");
+}
+
+$("undo").addEventListener("click", () => stepHistory(true));
+$("redo").addEventListener("click", () => stepHistory(false));
+
+viewer.onGizmoDrag = (phase, object) => {
+  if (phase === "start") {
+    recordBefore(object);
+    return;
+  }
+  if (phase === "move") {
+    paintTransform();
+    toast(liveTransform(object));
+    if (object === viewer.pivotMarker) viewer.setPivot(object.position);
+    return;
+  }
+  recordAfter();
+  paintTransform();
+  if (object === viewer.pivotMarker) viewer.setPivot(object.position);
+};
+
+// --- the numbers behind the handles ----------------------------------------
+
+/**
+ * Where the thing is, how it is turned, and how big it is.
+ *
+ * Both readable and writable. A handle is quick and never exact, a field is
+ * exact and never quick, and a transform needs both: nudging something into
+ * place by eye and then typing the ninety degrees you actually meant.
+ */
+/** The one number a drag is actually changing, said while it changes. */
+function liveTransform(object) {
+  if (!object) return "";
+  const round = (v, n = 2) => Number(v.toFixed(n));
+  if (editMode === "rotate") {
+    const d = (r) => Math.round((r * 180) / Math.PI);
+    return `Rotation ${d(object.rotation.x)}° ${d(object.rotation.y)}° ${d(object.rotation.z)}°`;
+  }
+  if (editMode === "scale") {
+    const s = object.scale;
+    return `Échelle ${round(s.x)} ${round(s.y)} ${round(s.z)}`;
+  }
+  const p = object.position;
+  return `Position ${round(p.x, 3)} ${round(p.y, 3)} ${round(p.z, 3)}`;
+}
+
+function paintTransform() {
+  const target = editTarget();
+  for (const [id, group, axis, factor] of XFORM) {
+    const input = $(id);
+    input.disabled = !target;
+    // Not while it is being typed into, or the caret jumps mid-number
+    if (!target || (typingTransform && document.activeElement === input)) continue;
+    const value = target[group][axis] * factor;
+    input.value = String(Number(value.toFixed(group === "rotation" ? 1 : 4)));
+  }
+}
+
+for (const [id, group, axis, factor] of XFORM) {
+  const input = $(id);
+  input.addEventListener("focus", () => {
+    typingTransform = true;
+  });
+  input.addEventListener("blur", () => {
+    typingTransform = false;
+    paintTransform();
+  });
+  input.addEventListener("change", () => {
+    const target = editTarget();
+    const value = Number(input.value);
+    if (!target || !Number.isFinite(value)) return;
+    // A scale of zero collapses a mesh to a plane it cannot come back from by
+    // dragging, so the field refuses what the handle would never produce.
+    const wanted = group === "scale" && value === 0 ? 0.001 : value / factor;
+    recordBefore(target);
+    target[group][axis] = wanted;
+    target.updateMatrixWorld(true);
+    recordAfter();
+    if (target === viewer.pivotMarker) viewer.setPivot(target.position);
+    viewer.invalidate();
+    paintOrientation();
+    showDimensions();
+    paintTransform();
+  });
+  input.addEventListener("keydown", (e) => e.stopPropagation());
+}
+
+// --- pivot -----------------------------------------------------------------
+
+function setPivotEditing(on) {
+  pivotEditing = !!on && !!viewer.current;
+  $("pivot-move").classList.toggle("active", pivotEditing);
+  if (pivotEditing) {
+    $("pivot-show").checked = true;
+    viewer.showPivot(true);
+    setEditMode("translate");
+  } else if (editMode) {
+    setEditMode(editMode);
+  }
+}
+
+$("pivot-show").addEventListener("change", (e) => {
+  viewer.showPivot(e.target.checked);
+  if (!e.target.checked && pivotEditing) setPivotEditing(false);
+});
+$("pivot-move").addEventListener("click", () => setPivotEditing(!pivotEditing));
+
+$("pivot-centre").addEventListener("click", () => {
+  if (!viewer.current) return;
+  recordBefore(viewer.pivotMarker || viewer.root);
+  viewer.setPivot(viewer.geometricCentre());
+  viewer.showPivot($("pivot-show").checked || pivotEditing);
+  recordAfter();
+  toast("Centre à la moyenne des sommets");
+});
+
+$("pivot-reset").addEventListener("click", () => {
+  if (!viewer.current) return;
+  const box = viewer.sceneBox();
+  // getCenter wants somewhere to write; the box's own corner is a spare vector
+  const middle = box.getCenter(box.min.clone());
+  recordBefore(viewer.pivotMarker || viewer.root);
+  viewer.setPivot(middle);
+  viewer.showPivot($("pivot-show").checked || pivotEditing);
+  recordAfter();
+  toast("Centre au milieu de la boîte");
+});
+
 function editTarget() {
+  if (pivotEditing && viewer.pivotMarker) return viewer.pivotMarker;
   if (!viewer.current) return null;
   // A chosen object wins: with several files in the scene, moving one of them
   // is the whole point, and it is a more useful answer than a surface.
@@ -2047,6 +2267,7 @@ function editTarget() {
 
 function editTargetName() {
   const target = editTarget();
+  if (pivotEditing && target === viewer.pivotMarker) return "le centre de rotation";
   if (!target || target === viewer.root) return "la scène entière";
   if (selectedPart && target === selectedPart.object) return selectedPart.name || "l'objet choisi";
   return target.name || "la surface choisie";
@@ -2122,6 +2343,7 @@ function setEditMode(mode) {
     $(id).classList.toggle("active", editMode === value);
   }
   paintEditTarget();
+  paintTransform();
   if (editMode) {
     const label = { translate: "Déplacer", rotate: "Tourner", scale: "Échelle" }[editMode];
     toast(`${label} · ${editTargetName()} · Maj pour les crans`);
@@ -2363,20 +2585,28 @@ window.addEventListener("keydown", (e) => {
     // G, R and S belong to the edit mode while it is on, and to the grid, the
     // roll and nothing at all while it is off. Modal, as in every tool that
     // has more to do than it has letters.
+    case "KeyZ":
+      if (!e.ctrlKey) break;
+      e.preventDefault();
+      stepHistory(!e.shiftKey);
+      break;
     case "KeyE":
       if (nav.mode === "orbit") setEditMode(editMode ? null : "translate");
       break;
+    // G, R and S bring their handle out straight away, with no mode to enter
+    // first. That was the mistake: in the tools these keys come from, they act
+    // on the spot, and a step nobody expects reads as a feature that is broken.
+    // The two bindings they displaced moved onto shift, which is free here
+    // because shift only means anything while a handle is already being dragged.
     case "KeyG":
-      if (editMode) {
-        setEditMode("translate");
-        break;
-      }
-      $("opt-grid").checked = !$("opt-grid").checked;
-      viewer.setGrid($("opt-grid").checked);
-      toast($("opt-grid").checked ? "Grille affichée" : "Grille masquée");
+      if (e.shiftKey) {
+        $("opt-grid").checked = !$("opt-grid").checked;
+        viewer.setGrid($("opt-grid").checked);
+        toast($("opt-grid").checked ? "Grille affichée" : "Grille masquée");
+      } else setEditMode("translate");
       break;
     case "KeyS":
-      if (editMode) setEditMode("scale");
+      if (!e.ctrlKey) setEditMode("scale");
       break;
     case "KeyT":
       if (nav.mode === "orbit") {
@@ -2393,12 +2623,10 @@ window.addEventListener("keydown", (e) => {
       toggleLibrary();
       break;
     case "KeyR":
-      if (editMode) {
-        setEditMode("rotate");
-        break;
-      }
-      nav.resetRoll();
-      toast("Roulis remis à plat");
+      if (e.shiftKey) {
+        nav.resetRoll();
+        toast("Roulis remis à plat");
+      } else setEditMode("rotate");
       break;
     case "KeyW":
       if (!e.ctrlKey && nav.mode === "orbit") {
@@ -2416,3 +2644,5 @@ window.addEventListener("keydown", (e) => {
 // in the inputs and the first number shown is the one in force.
 wireSliderValues($("inspector"));
 paintSaveButtons();
+paintHistory();
+paintTransform();

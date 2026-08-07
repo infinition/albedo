@@ -341,6 +341,26 @@ label:has(> input[type="range"]) { position: relative; }
 label:hover > .slider-value,
 label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
 
+/* Three numbers to a row, typed as readily as dragged. A handle is quick and
+   never exact; a field is exact and never quick, so both are offered. */
+.xform { display: grid; gap: 4px; margin: 6px 0 2px; }
+.xform label { display: grid; grid-template-columns: 62px repeat(3, 1fr); gap: 4px; align-items: center; }
+.xform label > span { color: var(--muted); font-size: 11px; }
+.xform input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 11px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 5px;
+}
+.xform input:focus { outline: none; border-color: var(--accent); }
+.xform input:disabled { opacity: 0.4; }
+
 /* --- what just changed ----------------------------------------------------- */
 
 #toast {

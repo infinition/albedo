@@ -404,9 +404,32 @@
           <p class="hint">G déplacer, R tourner, S échelle, Échap sortir. Maj pendant le
             glisser règle par crans. Clique une surface pour n'agir que sur elle.</p>
           <p class="hint" id="edit-target">Cible : le modèle entier</p>
+          <div class="xform">
+            <label><span>Position</span>
+              <input type="number" id="tx" step="0.01" /><input type="number" id="ty" step="0.01" /><input type="number" id="tz" step="0.01" />
+            </label>
+            <label><span>Rotation °</span>
+              <input type="number" id="rx" step="1" /><input type="number" id="ry" step="1" /><input type="number" id="rz" step="1" />
+            </label>
+            <label><span>Échelle</span>
+              <input type="number" id="sx" step="0.01" /><input type="number" id="sy" step="0.01" /><input type="number" id="sz" step="0.01" />
+            </label>
+          </div>
           <div id="parts-list"></div>
           <div class="row">
             <button id="part-import" class="seg" type="button" title="Ajouter un autre fichier 3D à la scène">Importer un objet</button>
+            <button id="undo" class="seg" type="button" title="Annuler (Ctrl+Z)" disabled>←</button>
+            <button id="redo" class="seg" type="button" title="Rétablir (Ctrl+Maj+Z)" disabled>→</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Centre de rotation</h2>
+          <label class="check"><input type="checkbox" id="pivot-show" /><span>Montrer le centre</span></label>
+          <div class="row">
+            <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées">Déplacer</button>
+            <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets">Centre géométrique</button>
+            <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante">Restaurer</button>
           </div>
           <div class="row">
             <button id="save-transform" class="seg" type="button" title="Écrire le modèle redressé dans un nouveau fichier">Enregistrer sous</button>

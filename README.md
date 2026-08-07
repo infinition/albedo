@@ -426,12 +426,28 @@ mean nothing.
 
 ### Edit mode
 
-Three handles rather than six axis buttons. `E` brings them out, then `G`, `R`
-and `S` move, turn and scale, `Escape` puts them away, and holding shift while
-dragging works in steps: a quarter unit, fifteen degrees, a tenth of the scale.
-The keys are the ones every modelling tool uses, so the hands already know
-them, and they are modal exactly as they are there: `G` is the grid and `R` is
-the roll until the handles are out, and neither shortcut had to be given up.
+Three handles rather than six axis buttons. `G`, `R` and `S` bring one out and
+act on the spot, `Escape` puts them away, and holding shift while dragging
+works in steps: a quarter unit, fifteen degrees, a tenth of the scale.
+
+They took two keys with them. The grid moved to `shift G` and the roll reset to
+`shift R`, which is the right way round: in the tools these keys come from they
+act immediately, and a mode to enter first reads as a feature that is broken
+rather than as a feature with a doorway. Shift is free for this because it only
+means anything else while a handle is already being dragged.
+
+The numbers are there too, readable and writable: position, rotation in
+degrees, and scale, three fields to a row. A handle is quick and never exact, a
+field is exact and never quick, and a transform wants both. While a handle is
+being dragged the value it is changing is announced as it changes, because
+dragging blind was the complaint that produced the fields in the first place.
+
+Every change can be taken back, with `ctrl Z` and `ctrl shift Z` or the two
+arrows. What is kept is a pose, three vectors copied off the object, not a log
+of operations: it costs nothing, it restores exactly, and it does not care
+whether the change came from a handle, an axis button, a typed field or a
+reset. A log would have to know about each of those and would be wrong the
+first time one grew an option.
 
 The handles take the whole model unless exactly one surface is picked. That is
 the case that can be answered without inventing anything, since attaching to a
@@ -464,6 +480,20 @@ file it no longer holds is worse than one that refuses. Anything imported can,
 and removing it gives the card back what it held: measured, a scene taken to
 two models and back reports the same triangles, the same bounding box and the
 same texture count as before the import.
+
+### The centre of rotation
+
+Framing puts it in the middle of the bounding box, which is the right guess and
+the wrong answer often enough to be worth changing: a figure with an
+outstretched arm, or a building with a spire, has a box whose middle is nowhere
+near what anyone wants to turn about. It can be shown, dragged with the same
+handles, sent to the average of the vertices, or put back in the middle of the
+box.
+
+Those last two are genuinely different answers, which is why they are two
+buttons. On a candle model the box middle sits at y −0.202 and the vertex
+average at y −0.335: the wax is where the mass is, the wick is where the box
+is.
 
 ### Saving a correction
 
