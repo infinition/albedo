@@ -20,6 +20,19 @@ import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 const $ = (id) => document.getElementById(id);
 const app = $("app");
 
+// Declared here rather than beside the edit mode they belong to, and this is
+// not tidiness. A file passed on the command line is opened while this module
+// is still being evaluated, and opening clears the edit mode: reading a `let`
+// from above its own declaration is a ReferenceError, not an undefined, so
+// double clicking a model in Explorer failed before the loader was ever
+// reached. See the edit mode section for what they mean.
+/** @type {"translate"|"rotate"|"scale"|null} */
+let editMode = null;
+/** @type {{object: any, name: string}|null} */
+let selectedPart = null;
+/** The formats Albedo can write, so the only ones it may offer to replace. */
+const WRITABLE = /\.(glb|gltf)$/i;
+
 /**
  * Say what just changed, once, and get out of the way.
  *
@@ -2010,8 +2023,10 @@ $("orient-reset").addEventListener("click", () => {
  * outside this mode, and they mean move, turn and scale inside it. That is how
  * Blender resolves the same collision, and it means no shortcut had to be given
  * up to gain three.
+ *
+ * `editMode` and `selectedPart` are declared at the top of this file; opening a
+ * file clears the edit mode, and opening can happen before this line is reached.
  */
-let editMode = null;
 
 /**
  * What the handles act on.
@@ -2021,9 +2036,6 @@ let editMode = null;
  * pivot and no reparenting. A material covering several meshes has no single
  * transform to offer, so that falls back to the model and says so.
  */
-/** The imported object the handles are aimed at, when one is chosen. */
-let selectedPart = null;
-
 function editTarget() {
   if (!viewer.current) return null;
   // A chosen object wins: with several files in the scene, moving one of them
@@ -2136,8 +2148,6 @@ for (const [id, mode] of [
  * A NIF or a USDZ leaves as glTF, and quietly putting glTF bytes in a file
  * named .nif would be worse than refusing.
  */
-const WRITABLE = /\.(glb|gltf)$/i;
-
 function paintSaveButtons() {
   const has = !!viewer.current;
   const over = $("save-over");
