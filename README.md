@@ -106,6 +106,72 @@ orientation three uses by default. Forcing the glTF convention instead, top left
 origin, turns every USD texture upside down; the crate path did that until the
 model was looked at closely rather than counted.
 
+## Asset manager
+
+Press `B`, or the grid button. It opens over the viewer and closes back to it,
+because Albedo is a viewer first: the manager, its stylesheet and its texture
+decoders are one chunk that is fetched the first time it is asked for and never
+at startup.
+
+A library is any folder you nominate. Inside it: a grid whose thumbnails resize
+from 84 to 320 pixels, a folder tree, free text search over names and tags,
+filters by kind and by format, and sorting by name, date, size or format.
+Models and textures both, since a texture is an asset too and half of them are
+in formats no browser will show.
+
+The pictures are the same ones Explorer shows, from the same cache. The manager
+does not render its own: the two would drift, and a file would end up with two
+different pictures depending on where you looked at it. Browsing a folder in
+Albedo therefore warms the icons in Explorer, and the other way round.
+
+### Portable by construction
+
+Tags and notes live in `.albedo/library.json` inside the library, keyed by path
+relative to its root:
+
+```json
+{
+  "albedo": 1,
+  "name": "props",
+  "items": {
+    "chars/hero.glb": { "tags": ["personnage", "wip"], "note": "" }
+  }
+}
+```
+
+Copy the folder to another disk, hand it to someone else, put it on a share:
+the annotations arrive with it and still resolve, because nothing in the file
+names a machine. The list of libraries is the opposite kind of thing, a set of
+absolute paths that mean nothing elsewhere, so that lives in AppData with the
+other settings.
+
+The alternative was writing tags into the assets themselves. That means
+rewriting binary formats in place, GLB chunk tables and NIF block streams, and
+STL has nowhere to put a tag at all. A sidecar risks nothing, stays readable,
+and can be diffed.
+
+## Startup
+
+A viewer has to be on screen before anyone has finished reading its name, so
+what happens before the first frame is measured rather than assumed.
+
+| | Before | After |
+| --- | --- | --- |
+| Scripts parsed at boot | 920 Ko | 656 Ko |
+| Application chunk | 360 Ko | 80 Ko |
+| Studio lighting pass | in the constructor | at the first model |
+
+Two things were being paid for nothing. Eleven format readers were imported
+statically, so every launch parsed all of them even to open a GLB, even to open
+nothing; each is now fetched when its extension turns up. And the generated
+studio environment ran a PMREM pass in the constructor, measured at 7 to 8 ms
+warm and more cold with shader compilation, to light a viewport that was empty.
+
+The bundler needs help holding that line: a loader used by two lazy chunks gets
+hoisted into the shared one, and a dynamic `import("three")` builds a namespace
+object that defeats tree shaking and pulled 124 Ko of engine back into the boot
+path. Both are pinned in `vite.config.js` and by named imports.
+
 ## Inspection
 
 Eleven channels, each a flat unlit view of one input: shaded, hand painted,
@@ -297,6 +363,12 @@ confirmed on the real thing.
 | Feature | Status | Evidence |
 | --- | :---: | --- |
 | Texture lookup by name for NIF and USD | [x] | DDS 256x512 bound from a distant folder |
+| Asset library scan, relative and portable paths | [x] | Real corpus, forward slashes, folders and a limit |
+| Tags written to a sidecar and read back | [x] | Round trip, and the file sits inside the library |
+| Grid: filters, search, sort, tags, zoom | [x] | Every control exercised against a scan |
+| Texture preview for formats no browser decodes | [x] | DDS decoded to a 256 picture, 106 distinct tints |
+| Manager costs nothing at startup | [x] | Absent from every chunk the page loads |
+| Thumbnails refresh when a model changes | [x] | The key carries mtime and length, so an edit misses |
 | Texture discovery by naming convention | [ ] | Written earlier, not re-measured this round |
 | Sibling files under the Tauri asset protocol | [x] | URL rewriting checked on six cases |
 | Drag and drop into the window | [x] | Confirmed in use |
@@ -363,6 +435,7 @@ confirmed on the real thing.
 - [x] Sibling file resolution under the Tauri asset protocol
 - [x] Shell integration: open with, drag and drop, command line
 - [x] No console window, GUI subsystem in every build
+- [x] Asset manager: libraries, grid, folder tree, tags, filters, search
 - [x] Windows shell thumbnails, rendered by the viewer itself and cached on disk
 - [x] Export to glTF, so anything readable becomes portable
 - [x] Save the view as a PNG, clear background, no overlays
@@ -374,8 +447,6 @@ confirmed on the real thing.
 
 ### Next
 
-- [ ] **Asset manager.** Grid of thumbnails, folder tree, tags and search over
-      a library. The thumbnails it would show already exist.
 - [ ] Custom lights, with the gizmo the stand already uses. The fill light is
       already steerable, coloured and dimmable; what is missing is more of them.
 - [ ] USD animation and skinning. Geometry, transforms and materials are read;

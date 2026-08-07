@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::Mutex;
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use windows::core::{implement, Error, Interface, Result, BOOL, GUID, HRESULT, PCWSTR};
 use windows::Win32::Foundation::{
@@ -57,14 +57,12 @@ const EXTENSIONS: &[&str] = &[
 /// How long Explorer is made to wait for a model it has never seen.
 const RENDER_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Bumped whenever the viewer draws differently.
-///
-/// The cache is keyed on the file, which is right until the renderer itself
-/// changes: correcting how USD states roughness, or how bright an environment
-/// lights a model, leaves every stored image showing the old answer with no
-/// reason to expire. Raising this number retires them all at once.
-const RENDER_EPOCH: u32 = 2;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// The cache key, shared with the viewer so the two cannot disagree.
+#[path = "../../shared/thumbcache.rs"]
+mod thumbcache;
+use thumbcache::bucket_for;
 
 static MODULE: AtomicIsize = AtomicIsize::new(0);
 static OBJECTS: AtomicIsize = AtomicIsize::new(0);
@@ -134,48 +132,10 @@ impl IThumbnailProvider_Impl for Provider_Impl {
 // Cache and rendering
 // -----------------------------------------------------------------------------
 
-/// Render at a few fixed sizes rather than at whatever Explorer asks for, so a
-/// folder switching between icon sizes reuses one image instead of paying for a
-/// new render each time.
-fn bucket_for(cx: u32) -> u32 {
-    match cx {
-        0..=256 => 256,
-        257..=512 => 512,
-        _ => 1024,
-    }
-}
-
-fn hash64(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in bytes {
-        h ^= u64::from(b);
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    h
-}
-
-/// Where a given model's image lives.
-///
-/// The key carries the size, the length and the modification time, so an edited
-/// model simply misses the cache instead of showing yesterday's picture.
+/// Where a given model's image lives. The key itself is shared with the viewer,
+/// which rounds to the same few sizes so one picture serves a range of views.
 fn cache_path(model: &Path, bucket: u32) -> Result<PathBuf> {
-    let meta = std::fs::metadata(model).map_err(|_| Error::from(E_FAIL))?;
-    let stamp = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    let mut key = model.to_string_lossy().to_lowercase().into_bytes();
-    key.extend_from_slice(&stamp.to_le_bytes());
-    key.extend_from_slice(&meta.len().to_le_bytes());
-    key.extend_from_slice(&RENDER_EPOCH.to_le_bytes());
-
-    let base = std::env::var_os("LOCALAPPDATA").ok_or_else(|| Error::from(E_FAIL))?;
-    let dir = PathBuf::from(base).join("Albedo").join("thumbnails");
-    std::fs::create_dir_all(&dir).map_err(|_| Error::from(E_FAIL))?;
-    Ok(dir.join(format!("{:016x}-{}.png", hash64(&key), bucket)))
+    thumbcache::cache_path(model, bucket).ok_or_else(|| Error::from(E_FAIL))
 }
 
 /// The viewer, which sits next to this DLL once installed.
@@ -494,7 +454,7 @@ mod tests {
     fn the_key_moves_with_the_file() {
         // Same bytes hash the same, different stamps do not: the cache is keyed
         // on content identity, not on the name alone.
-        assert_eq!(hash64(b"a/b.glb"), hash64(b"a/b.glb"));
-        assert_ne!(hash64(b"a/b.glb"), hash64(b"a/b.gltf"));
+        assert_eq!(thumbcache::hash64(b"a/b.glb"), thumbcache::hash64(b"a/b.glb"));
+        assert_ne!(thumbcache::hash64(b"a/b.glb"), thumbcache::hash64(b"a/b.gltf"));
     }
 }

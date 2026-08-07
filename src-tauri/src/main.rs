@@ -2,6 +2,8 @@
 // No console window, ever: the app is a GUI even in debug builds
 #![windows_subsystem = "windows"]
 
+mod library;
+
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tauri::Manager;
@@ -80,7 +82,7 @@ fn b64_value(c: u8) -> Option<u8> {
 
 /// Decode the payload of a data URL. The canvas hands back base64 and pulling
 /// in a crate to read forty lines of it would be its own kind of cost.
-fn decode_base64(text: &str) -> Option<Vec<u8>> {
+pub fn decode_base64(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
     let mut acc = 0u32;
     let mut bits = 0u32;
@@ -391,6 +393,17 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
+            library::library_roots,
+            library::library_add,
+            library::library_remove,
+            library::library_rename,
+            library::library_scan,
+            library::library_meta_read,
+            library::library_meta_write,
+            library::thumbnails_lookup,
+            library::thumbnail_save,
+            library::thumbnail_render,
+            library::thumbnails_prune,
             startup_file,
             supported_extensions,
             scan_textures,

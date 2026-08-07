@@ -1290,8 +1290,27 @@ Object.assign(actions, {
   [ACTIONS.RESET_ROLL]: () => nav.resetRoll(),
 });
 
+/**
+ * The asset manager, brought in the first time it is asked for.
+ *
+ * Its module, stylesheet and texture decoders are one lazy chunk, so a viewer
+ * that is only ever used to look at one file never pays for any of it.
+ */
+let library = null;
+async function toggleLibrary() {
+  if (!library) {
+    const { createLibrary } = await import("./library/index.js");
+    library = createLibrary({ tauri, prefs, onOpen: (path) => openPath(path) });
+    library.show();
+    return;
+  }
+  library.toggle();
+}
+$("btn-library").addEventListener("click", toggleLibrary);
+
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
+  if (library?.isOpen && e.code !== "KeyB") return;
   switch (e.code) {
     case "Space":
       // in fly mode the space bar lifts the camera instead
@@ -1336,6 +1355,10 @@ window.addEventListener("keydown", (e) => {
       if (nav.mode === "orbit") toggleTurntable();
       break;
     case "KeyU": toggleUnlit(); break;
+    case "KeyB":
+      e.preventDefault();
+      toggleLibrary();
+      break;
     case "KeyR": nav.resetRoll(); break;
     case "KeyW":
       if (!e.ctrlKey && nav.mode === "orbit") {
