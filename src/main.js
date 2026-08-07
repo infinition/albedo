@@ -133,6 +133,10 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     showStats(stats);
     showDimensions();
     $("btn-export").disabled = false;
+    $("btn-snapshot").disabled = false;
+    // The cut is expressed against the model's own extent, so a new one has to
+    // recompute where the plane actually falls.
+    viewer.setClipping({});
     $("tree").textContent = viewer.sceneTree();
     paintMaterialList();
     $("empty").classList.add("hidden");
@@ -603,6 +607,23 @@ $("opt-exposure").addEventListener("input", (e) => {
   prefs.set("exposure", Number(e.target.value));
 });
 
+// --- cross section --------------------------------------------------------
+
+function setClipping(axis, remember = true) {
+  viewer.setClipping({ axis: axis || undefined, on: !!axis });
+  for (const [id, a] of [["clip-off", null], ["clip-x", "x"], ["clip-y", "y"], ["clip-z", "z"]]) {
+    $(id).classList.toggle("active", a === axis);
+  }
+  if (remember) prefs.set("clipAxis", axis);
+}
+for (const [id, axis] of [["clip-off", null], ["clip-x", "x"], ["clip-y", "y"], ["clip-z", "z"]]) {
+  $(id).addEventListener("click", () => setClipping(axis));
+}
+$("clip-at").addEventListener("input", (e) => {
+  viewer.setClipping({ at: Number(e.target.value) });
+  prefs.set("clipAt", Number(e.target.value));
+});
+
 // --- export ---------------------------------------------------------------
 
 /**
@@ -655,6 +676,44 @@ async function exportModel() {
 }
 
 $("btn-export").addEventListener("click", exportModel);
+
+/**
+ * Save the current view as a PNG.
+ *
+ * The same square render the shell asks for, with a clear background, so a
+ * model can be dropped into a document without a screenshot tool and without
+ * the overlays that would come with one.
+ */
+async function saveSnapshot() {
+  if (!viewer.current) return;
+  const note = $("export-note");
+  try {
+    const url = viewer.snapshot(1024, { transparent: true });
+    const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0));
+    const name = ($("file-name").textContent || "albedo").replace(/\.[^.]+$/, "") + ".png";
+    if (tauri) {
+      const path = await tauri.dialog.save({
+        defaultPath: name,
+        filters: [{ name: "Image PNG", extensions: ["png"] }],
+      });
+      if (!path) return;
+      const { writeFile } = await import("@tauri-apps/plugin-fs");
+      await writeFile(path, bytes);
+      note.textContent = `Écrit : ${path.split(/[\\/]/).pop()}`;
+    } else {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      note.textContent = name;
+    }
+  } catch (e) {
+    note.textContent = `Image impossible : ${e.message || e}`;
+    console.warn("[albedo] image:", e);
+  }
+}
+
+$("btn-snapshot").addEventListener("click", saveSnapshot);
 
 // --- inspector tabs -------------------------------------------------------
 
@@ -897,6 +956,16 @@ $("key-light").addEventListener("change", (e) => {
   viewer.setKeyLight(e.target.checked);
   prefs.set("keyLight", e.target.checked);
 });
+$("key-power").addEventListener("input", (e) => {
+  const value = Number(e.target.value);
+  $("key-power-value").textContent = value.toFixed(1);
+  viewer.setKeyLightPower(value);
+  prefs.set("keyLightPower", value);
+});
+$("key-colour").addEventListener("input", (e) => {
+  viewer.setKeyLightColour(e.target.value);
+  prefs.set("keyLightColour", e.target.value);
+});
 
 // --- the stand --------------------------------------------------------------
 
@@ -986,6 +1055,9 @@ $("btn-pedestal").addEventListener("click", async () => {
 function applyPrefs() {
   const p = prefs.all();
   showPane(p.pane, false);
+  $("clip-at").value = String(p.clipAt);
+  viewer.setClipping({ at: p.clipAt });
+  setClipping(p.clipAxis, false);
   $("opt-grid").checked = p.grid;
   viewer.setGrid(p.grid);
   $("opt-bounds").checked = p.bounds;
@@ -1009,6 +1081,11 @@ function applyPrefs() {
   viewer.setEnvironmentIntensity(p.environmentIntensity);
   $("key-light").checked = p.keyLight;
   viewer.setKeyLight(p.keyLight);
+  $("key-power").value = String(p.keyLightPower);
+  $("key-power-value").textContent = Number(p.keyLightPower).toFixed(1);
+  viewer.setKeyLightPower(p.keyLightPower);
+  $("key-colour").value = p.keyLightColour;
+  viewer.setKeyLightColour(p.keyLightColour);
   $("grad-hue").value = String(p.gradientHue);
   $("bg-brightness").value = String(p.backgroundBrightness);
   viewer.setBackgroundBrightness(p.backgroundBrightness);

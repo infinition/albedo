@@ -360,6 +360,41 @@ export class Viewer {
     return this.gradient || this.setGradient(DEFAULT_STOPS, 0);
   }
 
+  /**
+   * Cut the model open along one axis.
+   *
+   * Looking inside a closed shape otherwise means hiding materials one by one
+   * or trusting the wireframe. The cut is not capped: the far side of the
+   * surface shows through, which is honest about the model being a shell and
+   * not a solid.
+   *
+   * @param {{axis?: "x"|"y"|"z", at?: number, on?: boolean}} options `at` in 0..1
+   */
+  setClipping({ axis, at, on } = {}) {
+    this.clip = {
+      axis: axis ?? this.clip?.axis ?? "x",
+      at: at ?? this.clip?.at ?? 0.5,
+      on: on ?? this.clip?.on ?? false,
+    };
+    const box = this.boxHelper.box;
+    if (!this.clip.on || box.isEmpty()) {
+      this.renderer.clippingPlanes = [];
+      this.invalidate();
+      return;
+    }
+    const normal = new THREE.Vector3(
+      this.clip.axis === "x" ? -1 : 0,
+      this.clip.axis === "y" ? -1 : 0,
+      this.clip.axis === "z" ? -1 : 0
+    );
+    const min = box.min[this.clip.axis];
+    const max = box.max[this.clip.axis];
+    // A hair beyond each end, so the slider can also show the model whole
+    const where = min + (max - min) * this.clip.at;
+    this.renderer.clippingPlanes = [new THREE.Plane(normal, where)];
+    this.invalidate();
+  }
+
   /** How bright the backdrop is drawn, without touching the lighting. */
   setBackgroundBrightness(value) {
     this.scene.backgroundIntensity = Math.max(0, value);
@@ -412,6 +447,17 @@ export class Viewer {
   /** The directional fill, which a panorama usually makes unnecessary. */
   setKeyLight(on) {
     this.keyLight.visible = on !== false;
+    this.invalidate();
+  }
+
+  /** How hard the fill hits, and what colour it is. */
+  setKeyLightPower(value) {
+    this.keyLight.intensity = Math.max(0, value);
+    this.invalidate();
+  }
+
+  setKeyLightColour(hex) {
+    this.keyLight.color.set(hex);
     this.invalidate();
   }
 

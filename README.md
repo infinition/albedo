@@ -365,7 +365,9 @@ confirmed on the real thing.
 - [x] No console window, GUI subsystem in every build
 - [x] Windows shell thumbnails, rendered by the viewer itself and cached on disk
 - [x] Export to glTF, so anything readable becomes portable
+- [x] Save the view as a PNG, clear background, no overlays
 - [x] Dimensions, so a file that arrived in the wrong unit says so
+- [x] Cross section along any axis, for looking inside a closed shape
 - [x] Environment: studio probe, editable gradient or HDR panorama, with what
       lights the model kept separate from what sits behind it
 - [x] Settings that outlive the window, in roaming AppData
@@ -374,8 +376,8 @@ confirmed on the real thing.
 
 - [ ] **Asset manager.** Grid of thumbnails, folder tree, tags and search over
       a library. The thumbnails it would show already exist.
-- [ ] Custom lights, with the gizmo the stand already uses.
-- [ ] Cross sections, alongside the dimensions already shown.
+- [ ] Custom lights, with the gizmo the stand already uses. The fill light is
+      already steerable, coloured and dimmable; what is missing is more of them.
 - [ ] USD animation and skinning. Geometry, transforms and materials are read;
       time samples and blend shapes are not.
 - [ ] NIF skinning applied at load, rather than showing the bind pose.

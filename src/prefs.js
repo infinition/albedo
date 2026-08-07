@@ -16,6 +16,9 @@ const SAVE_DELAY = 400;
 export const DEFAULTS = {
   /** Which inspector pane was open. */
   pane: "render",
+  /** Cross section: axis, or nothing for a whole model. */
+  clipAxis: null,
+  clipAt: 0.5,
   grid: true,
   bounds: false,
   skeleton: false,
@@ -35,6 +38,8 @@ export const DEFAULTS = {
   environmentIntensity: 1,
   /** The directional fill, on top of the environment. */
   keyLight: true,
+  keyLightPower: 1.6,
+  keyLightColour: "#ffffff",
   /** How the panorama is framed behind the model. */
   environmentZoom: 1,
   environmentRotation: 0,

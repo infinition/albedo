@@ -109,6 +109,22 @@
             <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" />
           </label>
         </section>
+
+        <section>
+          <h2>Coupe</h2>
+          <div class="row">
+            <div class="segment" role="group" aria-label="Axe de coupe">
+              <button id="clip-off" class="seg active" type="button" title="Aucune coupe">Aucune</button>
+              <button id="clip-x" class="seg" type="button" title="Couper selon X">X</button>
+              <button id="clip-y" class="seg" type="button" title="Couper selon Y">Y</button>
+              <button id="clip-z" class="seg" type="button" title="Couper selon Z">Z</button>
+            </div>
+          </div>
+          <label class="field">
+            <span>Position</span>
+            <input type="range" id="clip-at" min="0" max="1" step="0.005" value="0.5" />
+          </label>
+        </section>
         </div>
 
         <div class="pane" data-pane="matter">
@@ -154,6 +170,16 @@
           <label class="check"><input type="checkbox" id="env-background" checked /><span>Fond visible</span></label>
           <label class="check"><input type="checkbox" id="env-lighting" checked /><span>Éclaire la scène</span></label>
           <label class="check"><input type="checkbox" id="key-light" checked /><span>Lumière d'appoint</span></label>
+          <div id="key-light-tools">
+            <label class="field">
+              <span>Force de l'appoint <span id="key-power-value" class="mono">1.6</span></span>
+              <input type="range" id="key-power" min="0" max="5" step="0.1" value="1.6" />
+            </label>
+            <div class="map-row">
+              <span class="map-role">Couleur</span>
+              <input type="color" id="key-colour" class="swatch" value="#ffffff" />
+            </div>
+          </div>
           <label class="field">
             <span>Intensité de l'éclairage <span id="env-intensity-value" class="mono">1.0</span></span>
             <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1" />
@@ -249,6 +275,9 @@
           <p id="dimensions" class="hint mono">—</p>
           <div class="row">
             <button id="btn-export" class="wide" type="button" disabled>Exporter en glTF</button>
+          </div>
+          <div class="row">
+            <button id="btn-snapshot" class="wide" type="button" disabled>Enregistrer une image</button>
           </div>
           <p id="export-note" class="hint"></p>
           <div id="tree" class="tree">—</div>
