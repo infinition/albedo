@@ -70,6 +70,10 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
     const materialPath = Array.isArray(target) ? target[0] : target;
     const material = getMaterial(materialPath);
 
+    // A skinned mesh stores its points in bind space, which is not where the
+    // model stands: without this the silhouette is simply the wrong shape.
+    applySkinning(crate, primPath, geometry, { fieldsAt, valueAt });
+
     // Whether the back of a surface is drawn at all. USD says single sided
     // unless told otherwise, and an open mouth or a cloak reads as holes when
     // that is guessed rather than read.
@@ -246,6 +250,122 @@ export function buildFromCrate(crate, { resolveTexture } = {}) {
 }
 
 const toFloat32 = (a) => (a instanceof Float32Array ? a : Float32Array.from(a));
+
+/**
+ * Put a skinned mesh into its rest pose.
+ *
+ * A skinned mesh stores its points in bind space, which is not where the model
+ * stands: the same alligator came out with a different silhouette from its
+ * glTF twin, twenty percent fewer pixels, because the bind pose and the rest
+ * pose are different poses and nothing was moving the points between them.
+ *
+ * UsdSkel says a point lands at the weighted sum of, for each joint, the
+ * joint's place in the rest pose times the inverse of where it sat at bind
+ * time. Applied here on the points rather than through a skeleton on the GPU,
+ * because a still model is what a viewer shows and this is checkable against
+ * the same asset in another format.
+ *
+ * @returns {boolean} whether anything was moved
+ */
+function applySkinning(crate, primPath, geometry, lookup) {
+  const { fieldsAt, valueAt } = lookup;
+
+  const binding = fieldsAt(`${primPath}.skel:skeleton`);
+  const target = binding
+    ? crate.value(binding.targetPaths) || crate.value(binding.targetChildren)
+    : null;
+  const skelPath = Array.isArray(target) ? target[0] : target;
+  if (!skelPath) return false;
+
+  const joints = valueAt(`${skelPath}.joints`);
+  const bind = valueAt(`${skelPath}.bindTransforms`);
+  const rest = valueAt(`${skelPath}.restTransforms`);
+  const indices = valueAt(`${primPath}.primvars:skel:jointIndices`);
+  const weights = valueAt(`${primPath}.primvars:skel:jointWeights`);
+  if (!joints || !bind || !rest || !indices || !weights) return false;
+  if (bind.length !== joints.length || rest.length !== joints.length) return false;
+
+  const position = geometry.attributes.position;
+  const count = position.count;
+  const influences = Math.max(1, Math.round(indices.length / count));
+  if (indices.length !== count * influences) return false;
+
+  // A joint's parent is the path it hangs off, which the names carry already.
+  const order = new Map(joints.map((path, i) => [path, i]));
+  const parents = joints.map((path) => {
+    const cut = path.lastIndexOf("/");
+    return cut < 0 ? -1 : order.get(path.slice(0, cut)) ?? -1;
+  });
+
+  // USD writes matrices for row vectors; fromArray reads column major, which is
+  // the transpose, so composition reverses and reads as parent times child.
+  const local = rest.map((m) => new THREE.Matrix4().fromArray(Array.from(m)));
+  const world = new Array(joints.length);
+  for (let i = 0; i < joints.length; i++) {
+    const parent = parents[i];
+    world[i] =
+      parent >= 0 && world[parent]
+        ? new THREE.Matrix4().multiplyMatrices(world[parent], local[i])
+        : local[i].clone();
+  }
+
+  const skin = bind.map((m, i) => {
+    const inverseBind = new THREE.Matrix4().fromArray(Array.from(m)).invert();
+    return new THREE.Matrix4().multiplyMatrices(world[i], inverseBind);
+  });
+
+  const geomBind = valueAt(`${primPath}.primvars:skel:geomBindTransform`);
+  const bindMatrix =
+    geomBind && geomBind.length === 16
+      ? new THREE.Matrix4().fromArray(Array.from(geomBind))
+      : null;
+
+  const normal = geometry.attributes.normal;
+  const source = new THREE.Vector3();
+  const moved = new THREE.Vector3();
+  const scratch = new THREE.Vector3();
+  const normalSource = new THREE.Vector3();
+  const normalMoved = new THREE.Vector3();
+
+  for (let v = 0; v < count; v++) {
+    source.fromBufferAttribute(position, v);
+    if (bindMatrix) source.applyMatrix4(bindMatrix);
+    moved.set(0, 0, 0);
+    if (normal) {
+      normalSource.fromBufferAttribute(normal, v);
+      normalMoved.set(0, 0, 0);
+    }
+
+    let total = 0;
+    for (let k = 0; k < influences; k++) {
+      const weight = weights[v * influences + k];
+      if (!weight) continue;
+      const joint = skin[indices[v * influences + k]];
+      if (!joint) continue;
+      total += weight;
+      moved.addScaledVector(scratch.copy(source).applyMatrix4(joint), weight);
+      if (normal) {
+        normalMoved.addScaledVector(
+          scratch.copy(normalSource).transformDirection(joint),
+          weight
+        );
+      }
+    }
+    // A vertex nothing claims stays where it was rather than collapsing to the
+    // origin, which is what an unweighted stray would otherwise do.
+    if (total <= 0) continue;
+    position.setXYZ(v, moved.x, moved.y, moved.z);
+    if (normal) {
+      normalMoved.normalize();
+      normal.setXYZ(v, normalMoved.x, normalMoved.y, normalMoved.z);
+    }
+  }
+
+  position.needsUpdate = true;
+  if (normal) normal.needsUpdate = true;
+  geometry.computeBoundingSphere();
+  return true;
+}
 
 /** Fan-triangulate the polygons a face-count array describes. */
 function triangulate(indices, counts) {
