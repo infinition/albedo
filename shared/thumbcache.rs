@@ -50,11 +50,14 @@ pub fn cache_dir() -> Option<PathBuf> {
 /// yesterday's picture.
 pub fn cache_path(model: &Path, bucket: u32) -> Option<PathBuf> {
     let meta = std::fs::metadata(model).ok()?;
+    // Nanoseconds, not seconds: someone iterating on a model saves it several
+    // times a minute, and two saves inside the same second that happen to weigh
+    // the same would have shared a key and served the older picture back.
     let stamp = meta
         .modified()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
+        .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
 
     let mut key = model.to_string_lossy().to_lowercase().into_bytes();
@@ -65,6 +68,41 @@ pub fn cache_path(model: &Path, bucket: u32) -> Option<PathBuf> {
     let dir = cache_dir()?;
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join(format!("{:016x}-{}.png", hash64(&key), bucket)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A model being worked on has to show its progress, not its history.
+    #[test]
+    fn an_edited_model_lands_on_another_key() {
+        let dir = std::env::temp_dir().join(format!("albedo-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let model = dir.join("piece.glb");
+
+        std::fs::write(&model, b"first").unwrap();
+        let before = cache_path(&model, 256).unwrap();
+
+        // Same length on purpose: only the moment of writing differs, which is
+        // the case a second-resolution stamp used to miss.
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        std::fs::write(&model, b"third").unwrap();
+        let after = cache_path(&model, 256).unwrap();
+
+        assert_ne!(before, after, "une edition doit changer la cle du cache");
+
+        std::fs::write(&model, b"a much longer body than before").unwrap();
+        assert_ne!(after, cache_path(&model, 256).unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sizes_round_to_three_buckets() {
+        assert_eq!(bucket_for(16), 256);
+        assert_eq!(bucket_for(257), 512);
+        assert_eq!(bucket_for(4096), 1024);
+    }
 }
 
 /// Drop pictures nothing can reach any more.

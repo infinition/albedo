@@ -43,7 +43,7 @@ body {
    real one with its own controls, draws there. Nothing is duplicated. */
 body.peeking #stage {
   left: auto;
-  width: var(--peek, 380px);
+  width: var(--peek, 460px);
 }
 
 #view {
@@ -82,8 +82,9 @@ body.peeking #stage {
 body.clean #chrome,
 body.clean #inspector { opacity: 0; pointer-events: none; }
 
-/* The inspector is wider than the preview strip and would swallow it whole */
-body.peeking #inspector { display: none; }
+/* The chrome and the inspector live inside the render box, not the window, so
+   the strip the library hands over is a whole Albedo: name, render mode,
+   navigation, panes and all. Nothing is rebuilt for the preview. */
 
 .ov {
   position: absolute;

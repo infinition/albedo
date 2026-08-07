@@ -13,7 +13,6 @@
       <div id="stage">
         <canvas id="view"></canvas>
         <img id="peek-image" alt="" hidden />
-      </div>
 
       <!-- Empty state ------------------------------------------------------->
       <div id="empty">
@@ -304,22 +303,22 @@
           <h2>Bloom</h2>
           <label class="check"><input type="checkbox" id="bloom-on" /><span>Activer</span></label>
           <label class="field"><span>Force</span>
-            <input type="range" id="bloom-strength" min="0" max="2" step="0.01" value="0.35" /></label>
+            <input type="range" id="bloom-strength" min="0" max="2" step="0.01" value="0.6" /></label>
           <label class="field"><span>Rayon</span>
-            <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.4" /></label>
+            <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.5" /></label>
           <label class="field"><span>Seuil</span>
-            <input type="range" id="bloom-threshold" min="0" max="1" step="0.01" value="0.85" /></label>
+            <input type="range" id="bloom-threshold" min="0" max="2" step="0.01" value="1.1" /></label>
         </section>
 
         <section>
           <h2>Profondeur de champ</h2>
           <label class="check"><input type="checkbox" id="dof-on" /><span>Activer</span></label>
           <label class="field"><span>Mise au point</span>
-            <input type="range" id="dof-focus" min="0.05" max="1.5" step="0.01" value="0.5" /></label>
+            <input type="range" id="dof-focus" min="0" max="1" step="0.01" value="0.5" /></label>
           <label class="field"><span>Ouverture</span>
-            <input type="range" id="dof-aperture" min="0" max="0.2" step="0.001" value="0.02" /></label>
+            <input type="range" id="dof-aperture" min="0" max="0.06" step="0.001" value="0.02" /></label>
           <label class="field"><span>Flou maximal</span>
-            <input type="range" id="dof-maxblur" min="0" max="0.05" step="0.001" value="0.01" /></label>
+            <input type="range" id="dof-maxblur" min="0" max="0.05" step="0.001" value="0.012" /></label>
         </section>
 
         <section>
@@ -385,6 +384,7 @@
         </section>
         </div>
       </aside>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

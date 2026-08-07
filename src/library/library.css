@@ -20,7 +20,7 @@
 }
 #library.open { opacity: 1; pointer-events: auto; }
 /* With the preview on, the library stops at the strip the viewer draws in */
-body.peeking #library { right: var(--peek, 380px); }
+body.peeking #library { right: var(--peek, 460px); }
 
 .lib-handle {
   position: absolute;

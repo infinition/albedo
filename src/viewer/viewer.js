@@ -294,6 +294,31 @@ export class Viewer {
   }
 
   /**
+   * Close the clip planes around the subject, and remember what they were.
+   *
+   * Framing leaves a span of a million to one, which draws fine and resolves no
+   * depth at all. Anything reading the depth buffer needs the range closed
+   * first; only the caller knows for how long, so it says when to open it again.
+   */
+  tightenClip(near, far) {
+    if (!this.camera.isPerspectiveCamera) return;
+    this.wideClip ||= { near: this.camera.near, far: this.camera.far };
+    this.camera.near = Math.max(1e-4, near);
+    this.camera.far = Math.max(this.camera.near * 1.001, far);
+    this.camera.updateProjectionMatrix();
+    this.invalidate();
+  }
+
+  restoreClip() {
+    if (!this.wideClip) return;
+    this.camera.near = this.wideClip.near;
+    this.camera.far = this.wideClip.far;
+    this.camera.updateProjectionMatrix();
+    this.wideClip = null;
+    this.invalidate();
+  }
+
+  /**
    * Bring up the effect chain, once, the first time one is asked for.
    * @returns {Promise<import("./post.js").PostFx>}
    */
@@ -946,6 +971,9 @@ export class Viewer {
     if (this.camera.isOrthographicCamera) {
       this.syncOrtho();
     } else {
+      // Framing states the range afresh, so anything that had closed it in
+      // must forget what it was holding rather than restore a stale pair.
+      this.wideClip = null;
       this.camera.near = Math.max(radius / 1000, 1e-4);
       this.camera.far = radius * 1000;
       this.camera.updateProjectionMatrix();

@@ -22,8 +22,11 @@ import * as THREE from "three";
 /** Everything the panel can drive, with the values a fresh viewer starts at. */
 export const DEFAULTS = {
   ao: { on: false, radius: 0.25, intensity: 1, thickness: 1 },
-  bloom: { on: false, strength: 0.35, radius: 0.4, threshold: 0.85 },
-  dof: { on: false, focus: 0.5, aperture: 0.02, maxblur: 0.01 },
+  // The threshold is read in linear light, before tone mapping, where a lit
+  // backdrop already sits above one: at 0.85 everything bloomed and the picture
+  // just lifted. Above white is where a highlight actually is.
+  bloom: { on: false, strength: 0.6, radius: 0.5, threshold: 1.1 },
+  dof: { on: false, focus: 0.5, aperture: 0.02, maxblur: 0.012 },
   grade: {
     on: false,
     contrast: 1,
@@ -31,6 +34,7 @@ export const DEFAULTS = {
     temperature: 0,
     vignette: 0.25,
     grain: 0.04,
+    grainSize: 1.6,
     aberration: 0,
     sharpen: 0.2,
   },
@@ -53,6 +57,7 @@ const GradeShader = {
     temperature: { value: 0 },
     vignette: { value: 0.25 },
     grain: { value: 0.04 },
+    grainSize: { value: 1.6 },
     aberration: { value: 0 },
     sharpen: { value: 0.2 },
     time: { value: 0 },
@@ -67,11 +72,9 @@ const GradeShader = {
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform vec2 resolution;
-    uniform float contrast, saturation, temperature, vignette, grain, aberration, sharpen, time;
+    uniform float contrast, saturation, temperature, vignette, grain, grainSize, aberration, sharpen, time;
     varying vec2 vUv;
 
-    // Deterministic per pixel and per frame, which is what makes grain read as
-    // film rather than as a static pattern stuck to the screen.
     float hash(vec2 p) {
       return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
     }
@@ -118,9 +121,22 @@ const GradeShader = {
         colour *= mix(1.0, fall, vignette);
       }
 
+      // Film grain, not sensor noise.
+      //
+      // Three things separate the two, and the first version had none of them.
+      // Grain has a size, so it is sampled on a coarser lattice than the pixel
+      // grid: at one grain per pixel it disappears on a dense screen and reads
+      // as fizz on a coarse one. It lives in the midtones, since a film's
+      // blacks hold no silver to speak of and its whites are saturated, so it
+      // is weighted by luminance and vanishes at both ends. And it is
+      // monochrome: coloured speckle is what a cheap sensor does.
       if (grain > 0.0) {
-        float n = hash(uv * resolution + time) - 0.5;
-        colour += n * grain * 0.35;
+        vec2 lattice = floor(gl_FragCoord.xy / max(grainSize, 0.5));
+        float seed = floor(time * 24.0);
+        float n = hash(lattice + seed) + hash(lattice * 1.7 - seed) - 1.0;
+        float lum = dot(colour, vec3(0.2126, 0.7152, 0.0722));
+        float weight = 4.0 * clamp(lum, 0.0, 1.0) * (1.0 - clamp(lum, 0.0, 1.0));
+        colour += n * grain * 0.5 * weight;
       }
 
       gl_FragColor = vec4(max(colour, 0.0), 1.0);
@@ -295,18 +311,10 @@ export class PostFx {
       this.bloom.threshold = bag.threshold;
     } else if (group === "dof") {
       this.dof.enabled = bag.on;
-      const u = this.dof.materialBokeh?.uniforms;
-      if (u) {
-        // Focus is given as a fraction of the model's own depth, so the slider
-        // means the same thing whether the subject is a bolt or a building.
-        const span = this.focusSpan();
-        u.focus.value = Math.max(0.01, bag.focus * span.far);
-        u.aperture.value = bag.aperture * 0.001;
-        u.maxblur.value = bag.maxblur;
-      }
+      this.tuneDof();
     } else if (group === "grade") {
       this.grade.enabled = bag.on;
-      for (const name of ["contrast", "saturation", "temperature", "vignette", "grain", "aberration", "sharpen"]) {
+      for (const name of ["contrast", "saturation", "temperature", "vignette", "grain", "grainSize", "aberration", "sharpen"]) {
         if (this.grade.uniforms[name]) this.grade.uniforms[name].value = bag[name];
       }
     } else if (group === "aa") {
@@ -354,15 +362,57 @@ export class PostFx {
     }
   }
 
-  focusSpan() {
+  /**
+   * Point the lens, and give it a depth range it can actually resolve.
+   *
+   * Two things kept this effect from doing anything at all. The aperture was
+   * divided by a thousand on its way to the pass, so the widest setting was
+   * still shut. And the camera spans a million to one from its near plane to
+   * its far one, which is fine for drawing and hopeless for depth: the whole
+   * subject landed inside a thousandth of the range, so every pixel came back
+   * at the same distance and nothing was ever out of focus.
+   *
+   * The clip planes are therefore closed around the subject while the effect is
+   * on, and opened again when it is off. That is also better for depth
+   * precision generally, which is why the picture stops flickering on
+   * coincident faces at the same time.
+   */
+  tuneDof() {
+    const bag = this.settings.dof;
+    const camera = this.viewer.camera;
+    const u = this.dof.materialBokeh?.uniforms;
+    if (!u) return;
+
+    if (!bag.on) {
+      this.viewer.restoreClip();
+      return;
+    }
+
     const box = this.viewer.boxHelper.box;
     const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
-    const distance = this.viewer.camera.position.distanceTo(centre);
-    return { near: distance * 0.5, far: distance * 2 };
+    const size = box.isEmpty() ? new THREE.Vector3(1, 1, 1) : box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.length() / 2, 1e-3);
+    const distance = camera.position.distanceTo(centre);
+
+    const near = Math.max(radius * 0.01, distance - radius * 1.6);
+    const far = distance + radius * 2.4;
+    this.viewer.tightenClip(near, far);
+
+    u.nearClip.value = camera.near;
+    u.farClip.value = camera.far;
+    // The slider walks the subject from its near face to its far one
+    u.focus.value = distance + (bag.focus - 0.5) * radius * 2;
+    // Past a certain opening the blur reaches its ceiling everywhere and the
+    // effect stops being a depth of field: it becomes a flat blur, and moving
+    // the focus changes nothing at all. The slider stops before that.
+    u.aperture.value = Math.min(bag.aperture, 0.06);
+    u.maxblur.value = bag.maxblur;
   }
 
   render(dt = 0) {
     if (this.grade.enabled) this.grade.uniforms.time.value += dt;
+    // The camera moves; a focus fixed when the slider last moved would drift
+    if (this.dof.enabled) this.tuneDof();
     this.composer.render(dt);
   }
 
