@@ -7,6 +7,7 @@ import {
   fixColorSpaces,
   ensureAoUv,
   ignoreDeadVertexColors,
+  resolveTransparency,
   replaceMap,
   toPhysical,
   applyPreset,
@@ -132,6 +133,18 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     channels.setWireframe($("opt-wireframe").checked);
     applyChannel(currentChannel);
     $("opt-skeleton").checked = viewer.skeletons.visible;
+
+    // Once the maps are in, blending that the file asked for and the picture
+    // does not want can be settled. Not awaited: the model is on screen and
+    // this only ever makes it more correct.
+    texturesSettled(4000).then(() => {
+      if (!viewer.current) return;
+      const fixed = resolveTransparency(viewer.current);
+      if (fixed.opaque || fixed.cutout) {
+        viewer.invalidate();
+        console.info(`[albedo] transparence corrigee : ${fixed.opaque} opaque, ${fixed.cutout} en seuil`);
+      }
+    });
 
     setTitle(label);
     showStats(stats);

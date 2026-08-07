@@ -375,3 +375,95 @@ export function ensureAoUv(object) {
     }
   });
 }
+
+/**
+ * Undo blending that the file asked for and the picture does not want.
+ *
+ * A material can declare that it blends while its texture is opaque from edge
+ * to edge, and exporters do this constantly: a capture of a Sketchfab scene
+ * arrives with every material set to blend because the images happen to carry
+ * an alpha channel, not because anything in them is see-through.
+ *
+ * The consequence is not a subtle one. A blended surface writes no depth, so
+ * walls stop occluding each other and the room is visible through its own
+ * masonry; and with both faces drawn, the inside of a wall blends over its
+ * outside and reads as dark bands. Checking what the alpha channel actually
+ * says costs one downscaled read per texture and settles it.
+ *
+ * Two answers rather than one. An alpha that is entirely opaque means the
+ * material is opaque. An alpha that is only ever fully on or fully off is a
+ * cutout, foliage and grilles and fences, which wants a threshold and not a
+ * blend: that also writes depth and sorts correctly, and is what the asset
+ * meant in the first place.
+ *
+ * @returns {{opaque: number, cutout: number, kept: number}}
+ */
+export function resolveTransparency(object) {
+  const report = { opaque: 0, cutout: 0, kept: 0 };
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const seen = new Set();
+
+  object.traverse((o) => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m || seen.has(m.uuid)) continue;
+      seen.add(m.uuid);
+      // A stated opacity, a separate alpha map or an existing threshold are all
+      // decisions; only the texture's own channel is in question here.
+      if (!m.transparent || m.alphaTest > 0 || m.alphaMap || (m.opacity ?? 1) < 1) continue;
+      const image = m.map?.image;
+      // A compressed texture cannot be read back without decoding it on the GPU
+      if (!image || !image.width || m.map.isCompressedTexture) {
+        report.kept++;
+        continue;
+      }
+
+      let stats;
+      try {
+        stats = alphaProfile(canvas, ctx, image);
+      } catch (_) {
+        report.kept++;
+        continue;
+      }
+      if (!stats) {
+        report.kept++;
+        continue;
+      }
+
+      if (stats.min >= 250) {
+        m.transparent = false;
+        m.depthWrite = true;
+        m.needsUpdate = true;
+        report.opaque++;
+      } else if (stats.betweenRatio < 0.02) {
+        m.transparent = false;
+        m.alphaTest = 0.5;
+        m.depthWrite = true;
+        m.needsUpdate = true;
+        report.cutout++;
+      } else {
+        report.kept++;
+      }
+    }
+  });
+  return report;
+}
+
+/** What a texture's alpha channel is actually made of. */
+function alphaProfile(canvas, ctx, image, size = 128) {
+  canvas.width = size;
+  canvas.height = size;
+  ctx.clearRect(0, 0, size, size);
+  ctx.drawImage(image, 0, 0, size, size);
+  const data = ctx.getImageData(0, 0, size, size).data;
+  let min = 255;
+  let between = 0;
+  for (let i = 3; i < data.length; i += 4) {
+    const a = data[i];
+    if (a < min) min = a;
+    // Anything that is neither on nor off is a real gradient
+    if (a > 12 && a < 243) between++;
+  }
+  return { min, betweenRatio: between / (size * size) };
+}
