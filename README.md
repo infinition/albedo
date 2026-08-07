@@ -92,11 +92,11 @@ Albedo adds:
 - Loose `.usd` and `.usda` files, repackaged in memory with the textures found
   beside them, since the three.js reader only accepts an archive.
 - Non PNG textures transcoded, because the archive reader only picks up PNG.
-- Skinning. A skinned mesh stores its points in bind space, which is not where
-  the model stands, so the alligator came out a different shape from its glTF
-  twin. Each point is moved to the rest pose the way UsdSkel describes it, and
-  the two now render the same picture: 102660 pixels either way, and the same
-  bounding box to the centimetre.
+- Compressed float arrays. A float array whose values all happen to be whole
+  numbers is stored as integers behind a one byte code, which skin weights are
+  the usual case of: a vertex owned outright by one joint is a column of ones
+  and zeroes. Reading the compressed flag without the type ran the integer
+  decoder over real floats and failed much further down as a corrupt block.
 - Both `UsdPreviewSurface` workflows. Half the packages in circulation state
   `glossiness` rather than `roughness`, and reading only the latter left every
   such surface at the default: a rough hide came out with a sheen of reflected
@@ -399,7 +399,7 @@ confirmed on the real thing.
 | USD shader inputs routed by connection | [x] | A normal map can no longer land in the albedo slot |
 | Effect chain, and nothing until it is asked for | [x] | Absent before the first tick, identical to base when switched off |
 | Backdrop unchanged by the chain | [x] | 20,22,26 with occlusion, bloom and depth of field |
-| USD skinning, rest pose | [x] | Same silhouette and bounding box as the glTF twin |
+| USD compressed float arrays | [x] | Skin weights on both meshes of the alligator |
 | Folder tree with every level | [x] | Intermediate folders the scan never reports |
 | Grid built a page at a time | [x] | 5000 entries, 240 cards built |
 | Stale thumbnail work dropped | [x] | 20 asked, 2 processes started, 18 abandoned |
@@ -495,7 +495,6 @@ confirmed on the real thing.
 - [x] Asset manager: libraries, grid, folder tree, tags, filters, search
 - [x] Custom lights: directional, point and spot, placed on a dome
 - [x] Post-processing: occlusion, bloom, depth of field, grading, grain, SMAA
-- [x] USD skinning, checked against the same asset in another format
 - [x] Windows shell thumbnails, rendered by the viewer itself and cached on disk
 - [x] Export to glTF, so anything readable becomes portable
 - [x] Save the view as a PNG, clear background, no overlays
@@ -507,8 +506,13 @@ confirmed on the real thing.
 
 ### Next
 
-- [ ] USD animation. Geometry, transforms, materials and skinning are read; the
-      time samples an animation is made of, and blend shapes, are not.
+- [ ] USD skinning and animation. The rig is read: joints, bind and rest
+      transforms, per vertex indices and weights all decode. What is missing is
+      the composition that puts a bind-space mesh into its pose. Four
+      arrangements were tried against the same asset exported as glTF and none
+      matched, which may mean the two exports are simply not the same pose
+      rather than that one of them is wrong; it needs an asset whose two forms
+      are known to agree before anything is applied.
 - [ ] NIF skinning applied at load, rather than showing the bind pose.
 
 ## Layout

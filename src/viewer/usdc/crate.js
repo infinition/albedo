@@ -353,11 +353,36 @@ export class CrateFile {
     let p = at + 8;
 
     if (rep.isCompressed) {
-      const wide = rep.type === T.Int64 || rep.type === T.UInt64;
-      const compressedSize = Number(this.view.getBigUint64(p, true));
-      p += 8;
-      const buffer = decompress(this.bytes, p, compressedSize, encodedSize(count, wide));
-      return decodeInts(buffer, count, wide);
+      const integral =
+        rep.type === T.Int || rep.type === T.UInt || rep.type === T.Int64 || rep.type === T.UInt64;
+      if (integral) {
+        const wide = rep.type === T.Int64 || rep.type === T.UInt64;
+        const compressedSize = Number(this.view.getBigUint64(p, true));
+        p += 8;
+        const buffer = decompress(this.bytes, p, compressedSize, encodedSize(count, wide));
+        return decodeInts(buffer, count, wide);
+      }
+
+      // A float array whose values all happen to be whole numbers is stored as
+      // integers, behind a one byte code saying so. Skin weights are the usual
+      // case: a vertex owned outright by one joint is a column of ones and
+      // zeroes. Running the integer decoder on real floats, which is what
+      // reading the compressed flag alone did, turns the stream into noise and
+      // the failure surfaces as a corrupt block much further down.
+      if (rep.type === T.Float || rep.type === T.Double || rep.type === T.Half) {
+        const code = this.bytes[p];
+        p += 1;
+        if (code !== 0x69 /* 'i' */) return null;
+        const wide = rep.type === T.Double;
+        const compressedSize = Number(this.view.getBigUint64(p, true));
+        p += 8;
+        const buffer = decompress(this.bytes, p, compressedSize, encodedSize(count, wide));
+        const ints = decodeInts(buffer, count, wide);
+        const out = new Float32Array(count);
+        for (let i = 0; i < count; i++) out[i] = Number(ints[i]);
+        return out;
+      }
+      return null;
     }
 
     const floats = (components) => {
