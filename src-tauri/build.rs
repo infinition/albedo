@@ -11,7 +11,32 @@ fn main() {
     println!("cargo:rerun-if-changed=../index.html");
     println!("cargo:rerun-if-changed=../src");
 
+    embed_thumbnail_provider();
     tauri_build::build()
+}
+
+/// Carry the shell provider inside the executable, when there is one to carry.
+///
+/// A single file that can be handed to someone has to hold everything it needs;
+/// a provider shipped beside it is a provider that gets separated from it. The
+/// bytes are written into a generated file rather than reached with a bare
+/// `include_bytes!`, because that would make the whole application refuse to
+/// compile on a tree where the provider has not been built yet. Absent, the
+/// application still builds and still runs, and only says the integration is
+/// unavailable.
+fn embed_thumbnail_provider() {
+    let dll = Path::new("../shell-thumbnails/target/release/albedo_thumbnails.dll");
+    println!("cargo:rerun-if-changed={}", dll.display());
+
+    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("provider.rs");
+    let body = match std::fs::canonicalize(dll) {
+        Ok(full) => format!(
+            "pub const PROVIDER: Option<&[u8]> = Some(include_bytes!(r\"{}\"));",
+            full.display()
+        ),
+        Err(_) => "pub const PROVIDER: Option<&[u8]> = None;".to_string(),
+    };
+    std::fs::write(out, body).expect("write provider.rs");
 }
 
 /// `rerun-if-changed` on a directory only covers its own entries, so the tree

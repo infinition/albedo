@@ -2069,6 +2069,62 @@ $("orient-reset").addEventListener("click", () => {
  * pivot and no reparenting. A material covering several meshes has no single
  * transform to offer, so that falls back to the model and says so.
  */
+// --- Windows integration ----------------------------------------------------
+
+/**
+ * Attach this copy of Albedo to Explorer, or detach it.
+ *
+ * Albedo is the only thing that knows where Albedo is, and it knows it every
+ * time it starts, which an installer cannot say. A portable copy moves between
+ * folders and disks; the path it records is refreshed at each launch, so moving
+ * it is not something anyone has to remember to repair.
+ *
+ * Asked for rather than assumed, and the button that undoes it sits beside the
+ * one that does it. A program that writes to the registry because it was
+ * launched, and leaves the entry behind when its file is gone, has taken
+ * something that was not offered.
+ */
+async function paintShellState(state) {
+  const note = $("shell-state");
+  if (!state) {
+    note.textContent = "état inconnu";
+    return;
+  }
+  $("shell-section").hidden = false;
+  $("shell-on").disabled = !state.available || state.current_is_registered;
+  $("shell-off").disabled = !state.registered;
+  if (!state.registered) {
+    note.textContent = state.available ? "inactive" : "indisponible dans cette version";
+    return;
+  }
+  note.textContent = state.current_is_registered
+    ? "active, sur cette copie"
+    : `active, mais sur ${state.renderer || state.provider || "une autre copie"}`;
+}
+
+async function refreshShellState() {
+  if (!tauri) return;
+  const state = await tauri.core.invoke("shell_integration").catch(() => null);
+  paintShellState(state);
+}
+
+for (const [id, command, said] of [
+  ["shell-on", "shell_integration_enable", "Vignettes Windows activées"],
+  ["shell-off", "shell_integration_disable", "Vignettes Windows retirées"],
+]) {
+  $(id).addEventListener("click", async () => {
+    $(id).disabled = true;
+    try {
+      paintShellState(await tauri.core.invoke(command));
+      toast(said);
+    } catch (e) {
+      $("shell-state").textContent = String(e);
+      toast(`Échec : ${e}`);
+    }
+    refreshShellState();
+  });
+}
+
 // --- undo ------------------------------------------------------------------
 
 const poseOf = (o) => ({
@@ -2671,6 +2727,7 @@ window.addEventListener("keydown", (e) => {
 // Last, so every restored preference and every saved effect setting is already
 // in the inputs and the first number shown is the one in force.
 wireSliderValues($("inspector"));
+refreshShellState();
 paintSaveButtons();
 paintHistory();
 paintTransform();

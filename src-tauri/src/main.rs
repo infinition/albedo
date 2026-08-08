@@ -3,6 +3,7 @@
 #![windows_subsystem = "windows"]
 
 mod library;
+mod shell;
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -412,7 +413,10 @@ fn main() {
             write_thumbnail,
             thumbnail_failed,
             load_prefs,
-            save_prefs
+            save_prefs,
+            shell::shell_integration,
+            shell::shell_integration_enable,
+            shell::shell_integration_disable
         ])
         .setup(move |app| {
             // The window is declared hidden so a thumbnail render never flashes
@@ -421,6 +425,10 @@ fn main() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                 }
+                // A portable copy that has been moved would otherwise leave
+                // Explorer calling the folder it used to sit in. Silent, and a
+                // no-op unless the integration is on and the path has gone stale.
+                shell::refresh_recorded_path();
             }
             Ok(())
         })

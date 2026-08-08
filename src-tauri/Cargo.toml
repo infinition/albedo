@@ -16,6 +16,12 @@ tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Attaching the shell provider from inside the application, so a portable copy
+# can offer it without an installer.
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.5"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
+
 [profile.release]
 codegen-units = 1
 lto = true
