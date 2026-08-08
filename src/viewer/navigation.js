@@ -442,9 +442,44 @@ export class Navigation {
         { vendorId: 0x046d, usagePage: 0x01, usage: 0x08 }, // Logitech-era units
       ],
     });
-    const device = devices[0];
+    return this.useSpaceMouse(devices[0]);
+  }
+
+  /**
+   * Pick up a device the browser already lets us have.
+   *
+   * WebHID asks for permission once, on a click, and remembers it. After that
+   * `getDevices` hands the device back with no gesture at all, so plugging the
+   * SpaceMouse in and starting Albedo is enough, the way a gamepad is: the
+   * button in the panel is for the first time only. `connect` covers the case
+   * where the device arrives while the window is already open.
+   *
+   * The first authorisation cannot be skipped. It is the webview's rule, not a
+   * setting, and the only way past it would be to read the device from the Rust
+   * side instead, which is a bigger change and a real option.
+   */
+  async adoptKnownSpaceMouse() {
+    if (!navigator.hid || this.spaceDevice) return null;
+    const known = await navigator.hid.getDevices().catch(() => []);
+    const device = known.find((d) => d.vendorId === 0x256f || d.vendorId === 0x046d);
+    return device ? this.useSpaceMouse(device) : null;
+  }
+
+  watchSpaceMouse() {
+    if (!navigator.hid || this._watchingHid) return;
+    this._watchingHid = true;
+    navigator.hid.addEventListener("connect", (e) => {
+      if (this.spaceDevice) return;
+      const d = e.device;
+      if (d.vendorId === 0x256f || d.vendorId === 0x046d) this.useSpaceMouse(d);
+    });
+    this.adoptKnownSpaceMouse();
+  }
+
+  async useSpaceMouse(device) {
     if (!device) return null;
-    if (!device.opened) await device.open();
+    if (!device.opened) await device.open().catch(() => {});
+    if (!device.opened) return null;
 
     const state = { tx: 0, ty: 0, tz: 0, rx: 0, ry: 0, rz: 0, buttons: 0 };
     this.spaceNav = state;
@@ -466,6 +501,7 @@ export class Navigation {
     });
 
     device.addEventListener("disconnect", () => {
+      this.spaceDevice = null;
       this.spaceNav = null;
       this.spaceNavName = null;
       this.onDevice("space", null);

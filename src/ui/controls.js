@@ -74,6 +74,10 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
     }
   });
 
+  // Plugged in and started is enough, once the device has been allowed once.
+  // The button above is for that first time and for letting go on purpose.
+  nav.watchSpaceMouse();
+
   wireDeviceSettings(nav, onSettings);
 
   return { setMode, toggleMode, toggleFullscreen, toggleInspector };
