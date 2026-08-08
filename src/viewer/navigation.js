@@ -24,6 +24,8 @@ const FLY_KEYS = {
 const isKey = (role, code) => FLY_KEYS[role].includes(code);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const HALF_PI = Math.PI / 2 - 0.001;
+/** Up is up, whatever the camera is looking at. */
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Xbox pads report through the standard mapping, so the indices are fixed.
@@ -601,10 +603,14 @@ export class Navigation {
     };
 
     if (pad) {
-      orbit(pad.lookX * dt * 1.8, pad.lookY * dt * 1.8);
-      pan(pad.moveX * distance * dt * 0.9, -pad.moveZ * distance * dt * 0.9);
-      dolly(pad.dolly * dt * 1.5);
-      if (pad.up) pan(0, pad.up * distance * dt * 0.9);
+      // Both sticks turn around the model, because that is the whole of what
+      // orbiting is and a pad in this mode has nothing better to do. Panning
+      // used to sit on the left stick and it was the wrong answer twice: it
+      // slid the subject out of frame, and it left no obvious way back to
+      // centre. The triggers still come and go, which is the one other thing
+      // orbiting wants.
+      orbit((pad.lookX + pad.moveX) * dt * 1.8, (pad.lookY + pad.moveZ) * dt * 1.8);
+      dolly((pad.dolly + pad.up) * dt * 1.5);
     }
     if (space) {
       orbit(space.yaw * dt * 2, space.pitch * dt * 2);
@@ -644,11 +650,15 @@ export class Navigation {
     }
 
     let turned = false;
+    // A SpaceMouse is six axes in the hand and the point of it is that they are
+    // free, so its translations stay relative to the camera: push the cap
+    // forward while looking up and you rise. The stick and the keys do not work
+    // that way, see below.
+    const free = new THREE.Vector3();
     if (pad) {
       move.x += pad.moveX;
       move.z += pad.moveZ;
-      move.y += pad.up;
-      move.z -= pad.dolly;
+      move.y += pad.up + pad.dolly;
       if (pad.lookX || pad.lookY) {
         this.look.x -= pad.lookX * dt * 2.2;
         this.look.y = clamp(this.look.y - pad.lookY * dt * 2.2, -HALF_PI, HALF_PI);
@@ -656,9 +666,7 @@ export class Navigation {
       }
     }
     if (space) {
-      move.x += space.x;
-      move.y += space.y;
-      move.z -= space.z;
+      free.set(space.x, space.y, -space.z);
       if (space.yaw || space.pitch || space.roll) {
         this.look.x += space.yaw * dt * 2;
         this.look.y = clamp(this.look.y + space.pitch * dt * 2, -HALF_PI, HALF_PI);
@@ -667,19 +675,33 @@ export class Navigation {
       }
     }
     if (turned) this.applyLook();
-    if (move.lengthSq() === 0) return turned;
+    if (move.lengthSq() === 0 && free.lengthSq() === 0) return turned;
 
     // Clamp rather than normalise: a half-pushed stick should move at half pace
     if (move.lengthSq() > 1) move.normalize();
-    move.multiplyScalar(this.speed * boost * dt);
+    const step = this.speed * boost * dt;
+    move.multiplyScalar(step);
+    free.multiplyScalar(step);
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    // Walking, not flying along the line of sight. Forward is where the body
+    // faces, which is the heading with the pitch taken out of it, and up is up.
+    // Along the view vector instead, looking at the ceiling and pressing
+    // forward launches you at it, and every game that made that choice was
+    // making a different one on purpose.
+    const yaw = this.look.x;
+    const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     cam.position
       .addScaledVector(forward, -move.z)
       .addScaledVector(right, move.x)
-      .addScaledVector(up, move.y);
+      .addScaledVector(WORLD_UP, move.y);
+
+    if (free.lengthSq() > 0) {
+      cam.position
+        .addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion), free.x)
+        .addScaledVector(new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion), free.y)
+        .addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion), -free.z);
+    }
     this.viewer.invalidate();
     return true;
   }
