@@ -56,8 +56,15 @@ jobs:
         shell: powershell
         run: |
           node tools/make-samples.mjs
-          $model = (Get-ChildItem "testdata\fmt" -Filter *.glb | Select-Object -First 1).FullName
+          # Whatever the generator writes, in order of preference rather than
+          # one hard-coded name: it does not produce a GLB, and asking for one
+          # failed the release on the machine instead of on the binary.
+          $model = Get-ChildItem "testdata\fmt" -File |
+                   Where-Object { $_.Extension -in ".glb", ".gltf", ".ply", ".dae", ".3mf", ".vox" } |
+                   Sort-Object { @(".glb", ".gltf", ".ply", ".dae", ".3mf", ".vox").IndexOf($_.Extension) } |
+                   Select-Object -First 1 -ExpandProperty FullName
           if (-not $model) { throw "aucun modele d'essai" }
+          Write-Host "Modele d'essai : $model"
           $out = "$env:RUNNER_TEMP\smoke.png"
           # Bounded, because the failure this guards against does not return an
           # error: a binary with no frontend waits for a page that never comes.
