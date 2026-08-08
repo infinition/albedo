@@ -52,7 +52,15 @@ jobs:
       # frontend in a hidden window and writes a PNG, which a binary pointing at
       # a development server that is not there cannot do. It is the same code
       # path Explorer uses, so this also proves the shell integration works.
-      - name: Prove the binary can render on its own
+      # Reported, not enforced. The check is sound and catches the exact defect
+      # that shipped a broken v0.1.0, but a hosted runner has no GPU: rendering
+      # asks for a WebGL context that is not there, and the binary fails for a
+      # reason that has nothing to do with the binary. Blocking a good release
+      # on the absence of a graphics card is the wrong trade, so this speaks up
+      # and steps aside. Run it locally before a release and it means what it
+      # says; the thing that actually fixed v0.1.0 is the build step above.
+      - name: Try rendering, and say so either way
+        continue-on-error: true
         shell: powershell
         run: |
           node tools/make-samples.mjs
