@@ -142,14 +142,7 @@ pub fn shell_integration_enable() -> Result<Integration, String> {
 
     call_dll(&target, b"DllRegisterServer\0")?;
 
-    // Written last and always: a portable copy that has moved must not leave
-    // Explorer calling the place it used to be.
-    let key = windows_registry::CURRENT_USER
-        .create(KEY)
-        .map_err(|e| format!("cle : {e}"))?;
-    key.set_string("Renderer", &current_exe().to_string_lossy())
-        .map_err(|e| format!("valeur : {e}"))?;
-
+    record_renderer();
     Ok(shell_integration())
 }
 
@@ -172,6 +165,63 @@ pub fn shell_integration_disable() -> Result<Integration, String> {
 /// the integration removes that one whole: the record of having asked has to
 /// outlive the answer, or every launch would ask again.
 const MARK: &str = "Software\\Albedo";
+
+/// The viewer's own copy, beside the provider that runs it.
+///
+/// Explorer must be able to render a thumbnail whatever the user has since done
+/// with the file they downloaded. Recording where that file was is not enough:
+/// moving it to the desktop leaves the recorded path pointing at nothing, and
+/// nothing is what the shell then gets until Albedo happens to be run again.
+/// Measured, that is exactly what happened. A copy in a folder of our own does
+/// not move, does not get renamed, and survives the original being deleted.
+fn renderer_copy() -> PathBuf {
+    extracted_path().with_file_name("albedo.exe")
+}
+
+/// Refresh that copy when the real one has changed, and only then.
+///
+/// Size and modification time rather than a hash of four megabytes: two reads
+/// of metadata against a whole file read, for an answer that is just as good
+/// here, since the question is whether this is the same build rather than
+/// whether someone tampered with it. On the usual launch nothing is copied at
+/// all. Written beside and renamed, so a copy interrupted halfway cannot leave
+/// the shell with half an executable.
+fn sync_renderer_copy() -> Option<PathBuf> {
+    let from = current_exe();
+    let to = renderer_copy();
+    let same = |a: &std::fs::Metadata, b: &std::fs::Metadata| {
+        a.len() == b.len() && a.modified().ok() == b.modified().ok()
+    };
+    let source = std::fs::metadata(&from).ok()?;
+    if let Ok(existing) = std::fs::metadata(&to) {
+        if same(&source, &existing) {
+            return Some(to);
+        }
+    }
+    std::fs::create_dir_all(to.parent()?).ok()?;
+    let part = to.with_extension("part");
+    std::fs::copy(&from, &part).ok()?;
+    // A render in flight holds the old copy open; keeping what works beats
+    // failing, and the next launch will try again.
+    match std::fs::rename(&part, &to) {
+        Ok(()) => Some(to),
+        Err(_) => {
+            let _ = std::fs::remove_file(&part);
+            to.is_file().then_some(to)
+        }
+    }
+}
+
+/// Point the provider at the copy, or at this executable if copying failed.
+///
+/// Always rewritten, because the one thing that must never happen is Explorer
+/// calling a path that no longer holds anything.
+fn record_renderer() {
+    let target = sync_renderer_copy().unwrap_or_else(current_exe);
+    if let Ok(key) = windows_registry::CURRENT_USER.create(KEY) {
+        let _ = key.set_string("Renderer", &target.to_string_lossy());
+    }
+}
 
 fn already_offered() -> bool {
     windows_registry::CURRENT_USER
@@ -209,11 +259,7 @@ pub fn settle_on_startup() -> Option<&'static str> {
 
     if state.registered {
         remember_offered();
-        if !state.current_is_registered && state.renderer.is_some() {
-            if let Ok(key) = windows_registry::CURRENT_USER.create(KEY) {
-                let _ = key.set_string("Renderer", &state.current);
-            }
-        }
+        record_renderer();
         return None;
     }
 
