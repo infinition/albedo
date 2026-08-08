@@ -5,3 +5,6 @@ src-tauri/gen/
 *.log
 testdata/
 shell-thumbnails/target/
+.claude/
+.idea/
+.vscode/
