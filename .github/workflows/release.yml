@@ -43,50 +43,11 @@ jobs:
       - name: Build Portable Executable
         run: npm run tauri build -- --no-bundle
 
-      # A release that boots to an error page is worse than no release, and the
-      # one that shipped weighed 3.9 MB against 4.4 for a good one: a size
-      # threshold would have let it through, and the frontend is compressed
-      # inside the binary so its bytes cannot be searched for either.
-      #
-      # So the build is made to use itself. Rendering a thumbnail runs the whole
-      # frontend in a hidden window and writes a PNG, which a binary pointing at
-      # a development server that is not there cannot do. It is the same code
-      # path Explorer uses, so this also proves the shell integration works.
-      # Reported, not enforced. The check is sound and catches the exact defect
-      # that shipped a broken v0.1.0, but a hosted runner has no GPU: rendering
-      # asks for a WebGL context that is not there, and the binary fails for a
-      # reason that has nothing to do with the binary. Blocking a good release
-      # on the absence of a graphics card is the wrong trade, so this speaks up
-      # and steps aside. Run it locally before a release and it means what it
-      # says; the thing that actually fixed v0.1.0 is the build step above.
-      - name: Try rendering, and say so either way
-        continue-on-error: true
-        shell: powershell
-        run: |
-          node tools/make-samples.mjs
-          # Whatever the generator writes, in order of preference rather than
-          # one hard-coded name: it does not produce a GLB, and asking for one
-          # failed the release on the machine instead of on the binary.
-          $model = Get-ChildItem "testdata\fmt" -File |
-                   Where-Object { $_.Extension -in ".glb", ".gltf", ".ply", ".dae", ".3mf", ".vox" } |
-                   Sort-Object { @(".glb", ".gltf", ".ply", ".dae", ".3mf", ".vox").IndexOf($_.Extension) } |
-                   Select-Object -First 1 -ExpandProperty FullName
-          if (-not $model) { throw "aucun modele d'essai" }
-          Write-Host "Modele d'essai : $model"
-          $out = "$env:RUNNER_TEMP\smoke.png"
-          # Bounded, because the failure this guards against does not return an
-          # error: a binary with no frontend waits for a page that never comes.
-          # Measured, the good one finishes in about a second.
-          $p = Start-Process "src-tauri\target\release\albedo.exe" `
-               -ArgumentList @("--thumbnail", $model, "--out", $out, "--size", "256") `
-               -PassThru -WindowStyle Hidden
-          if (-not $p.WaitForExit(60000)) {
-            $p.Kill()
-            throw "le rendu ne rend jamais la main : le binaire attend une page qui n'existe pas"
-          }
-          if ($p.ExitCode -ne 0) { throw "rendu en echec, code $($p.ExitCode)" }
-          if (-not (Test-Path $out)) { throw "aucune image produite : le frontend n'est pas dans le binaire" }
-          "Rendu : {0:N0} octets" -f (Get-Item $out).Length
+      # Le rendu ne se verifie pas ici. Une machine hebergee n'a pas de carte
+      # graphique, donc pas de contexte WebGL : l'essai echouerait pour une
+      # raison qui ne concerne pas le binaire. Ce qui a repare la v0.1.0 est
+      # l'etape ci-dessus, qui compile par l'outil Tauri au lieu de cargo seul.
+      # L'essai reel se fait sur un poste de travail, ou il y a un ecran.
 
       - name: Prepare Release Executable & Zip
         shell: powershell
