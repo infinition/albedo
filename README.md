@@ -105,6 +105,7 @@ Detailed technical documentation and reference guides are organized in the [`doc
 - [**Supported Formats & Decoders**](docs/FORMATS.md): Full format compatibility status matrix, NIF block size benchmarks, and USD crate parsing notes.
 - [**Navigation & Controls Guide**](docs/CONTROLS.md): Keyboard shortcuts, Xbox gamepad controls, SpaceMouse WebHID 6-DOF mapping, and Edit Mode handles.
 - [**Architecture & System Design**](docs/ARCHITECTURE.md): Startup optimization metrics, memory disposal & leak prevention, material contradiction rules, shell thumbnail COM DLL architecture, and post-processing pipeline.
+- [**Porting Beyond Windows**](docs/porting.md): What survives a port and what does not, the Linux thumbnailer contract, the macOS Quick Look extension, and the signing each one demands.
 - [**Feature Verification & Roadmap**](docs/ROADMAP.md): Comprehensive feature verification checklist, test evidence log, and upcoming milestones.
 
 ---
