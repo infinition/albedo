@@ -21,13 +21,11 @@ if (-not (Test-Path $built)) {
     throw "DLL introuvable : $built. Compile d'abord shell-thumbnails en release."
 }
 
-# The viewer goes with it. The DLL renders nothing itself: it looks for
-# albedo.exe beside itself or one folder up, runs it with --thumbnail and waits
-# for the PNG. Copying the DLL alone to a folder with no executable in it left
-# the provider unable to find a renderer, so Explorer got a failure for every
-# model and drew the generic icon instead. Both files move together or neither
-# does. It also finishes the job the DLL started: with the executable copied
-# too, nothing in the build tree is held open by the desktop.
+# The viewer is named rather than copied. The DLL renders nothing itself: it
+# runs albedo.exe with --thumbnail and waits for the PNG. Recording the path
+# means every build is picked up with nothing to copy afterwards, which a copy
+# could not promise. Explorer only spawns the renderer rather than loading it, so
+# naming a file in the build tree costs no lock; only the DLL has to be a copy.
 $exe = Join-Path $root "src-tauri\target\release\albedo.exe"
 if (-not (Test-Path $exe)) {
     throw "albedo.exe introuvable : $exe. Compile d'abord le viewer en release."
@@ -39,13 +37,15 @@ New-Item -ItemType Directory -Force -Path $home_ | Out-Null
 
 # Explorer may still hold the previous copy, so a locked target is reported
 # rather than thrown: the remedy is one Explorer restart, not a stack trace.
+$dllCopiee = $true
 try {
     Copy-Item $built $stable -Force
-    Copy-Item $exe (Join-Path $home_ "albedo.exe") -Force
 } catch {
-    Write-Warning "Copie impossible : $($_.Exception.Message)"
-    Write-Warning "Ferme Albedo, redemarre l'explorateur, puis relance ce script."
-    exit 1
+    # The DLL is a thin shim and rarely changes, so a locked one is usually the
+    # same bytes as the new one: worth saying, not worth stopping for.
+    $dllCopiee = $false
+    Write-Warning "DLL non remplacee, l'explorateur la tient : $($_.Exception.Message)"
+    Write-Warning "Sans importance si elle n'a pas change ; sinon redemarre l'explorateur et relance."
 }
 
 $clsid = "{A4E3C1D2-8B57-4F09-9C6E-3D0B2A5F71E4}"
@@ -58,10 +58,14 @@ $before = (Get-ItemProperty -Path $key).'(default)'
 Set-ItemProperty -Path $key -Name "(default)" -Value $stable
 Set-ItemProperty -Path $key -Name "ThreadingModel" -Value "Apartment"
 
-Write-Host "Avant : $before"
-Write-Host "Apres : $stable"
-Write-Host "Viewer : $(Join-Path $home_ 'albedo.exe')"
+# Read by the DLL before it falls back to looking beside itself.
+New-Item -Path "HKCU:\Software\Albedo\Shell" -Force | Out-Null
+Set-ItemProperty -Path "HKCU:\Software\Albedo\Shell" -Name "Renderer" -Value $exe
+
+Write-Host "Fournisseur : $stable$(if (-not $dllCopiee) { '  (copie inchangee)' })"
+Write-Host "Avant        : $before"
+Write-Host "Moteur       : $exe"
 Write-Host ""
-Write-Host "Redemarre l'explorateur une fois pour qu'il lache l'ancienne DLL."
-Write-Host "Les compilations suivantes ne seront plus bloquees."
-Write-Host "A relancer apres chaque build, les deux copies etant des instantanes."
+Write-Host "Le moteur est designe, pas copie : chaque nouvelle compilation du viewer"
+Write-Host "est prise en compte sans rien relancer ici. Ce script n'est a rejouer que"
+Write-Host "si la DLL elle-meme change, ou si le viewer change de dossier."

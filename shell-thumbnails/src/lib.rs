@@ -138,8 +138,35 @@ fn cache_path(model: &Path, bucket: u32) -> Result<PathBuf> {
     thumbcache::cache_path(model, bucket).ok_or_else(|| Error::from(E_FAIL))
 }
 
+/// Where a build that is not an install says its viewer lives.
+///
+/// An installed Albedo needs none of this: the installer puts the DLL beside the
+/// executable and the search below finds it. A working copy is the awkward case,
+/// because Explorer loads this DLL into its own process and holds it, so it
+/// cannot be registered where cargo writes. Registering a copy instead broke the
+/// search, the copy having no executable beside it.
+///
+/// A recorded path settles it, and settles it better than copying the executable
+/// would: the value points at the build output, so every build is picked up with
+/// nothing to copy afterwards. Explorer only spawns the renderer rather than
+/// loading it, so naming a file in the build tree costs no lock.
+///
+/// Deliberately not the PATH. Explorer inherits its environment at sign-in, so a
+/// change would not be seen until the next one; the first match wins, which on a
+/// machine with more than one build is a coin toss; and PATH is writable by
+/// anyone who can write to the user's profile, which is a poor way for something
+/// running inside the desktop to decide what to execute.
+fn recorded_renderer() -> Option<PathBuf> {
+    let key = windows_registry::CURRENT_USER.open("Software\\Albedo\\Shell").ok()?;
+    let path = PathBuf::from(key.get_string("Renderer").ok()?);
+    path.is_file().then_some(path)
+}
+
 /// The viewer, which sits next to this DLL once installed.
 fn renderer() -> Option<PathBuf> {
+    if let Some(recorded) = recorded_renderer() {
+        return Some(recorded);
+    }
     let module = HMODULE(MODULE.load(Ordering::SeqCst) as *mut c_void);
     let mut buf = [0u16; 32768];
     let len = unsafe { GetModuleFileNameW(Some(module), &mut buf) } as usize;
