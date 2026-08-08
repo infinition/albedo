@@ -341,7 +341,10 @@ export class Navigation {
       this.look.x = Math.atan2(-dir.x, -dir.z);
       this.look.y = Math.asin(clamp(dir.y, -1, 1));
       this.look.roll = 0;
-      this.holdPointer();
+      // The pointer is left alone. Holding it is what made this mode hostile:
+      // the webview shows its own banner over the model, the cursor vanishes,
+      // and leaving takes a key nobody was told about. Dragging to look is what
+      // the other mode already does, and it needs no permission from anyone.
     } else {
       this.releasePointer();
       this.viewer.canvas.classList.remove("looking");

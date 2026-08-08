@@ -17,8 +17,9 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
   // Fly mode can end on its own, when the pointer capture is released, so the
   // buttons follow the navigation rather than the other way round.
   const paintMode = (mode) => {
-    $("nav-orbit").classList.toggle("active", mode === "orbit");
-    $("nav-fly").classList.toggle("active", mode === "fly");
+    const free = mode === "fly";
+    $("nav-free").classList.toggle("active", free);
+    $("nav-free").setAttribute("aria-pressed", String(free));
     onNotice(
       mode === "fly"
         ? "Vol : ZQSD/WASD, bouton gauche maintenu pour regarder, Espace monte, Maj descend, molette règle la vitesse, Échap revient en orbite"
@@ -28,8 +29,11 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
   nav.onMode = paintMode;
   paintMode(nav.mode);
   const setMode = (mode) => nav.setMode(mode);
-  $("nav-orbit").addEventListener("click", () => setMode("orbit"));
-  $("nav-fly").addEventListener("click", () => setMode("fly"));
+  // A toggle rather than a pair: there is one way a viewer behaves, and this
+  // says whether it is held to the middle of the model or not.
+  $("nav-free").addEventListener("click", () =>
+    setMode(nav.mode === "fly" ? "orbit" : "fly")
+  );
   const toggleMode = () => setMode(nav.mode === "orbit" ? "fly" : "orbit");
 
   // --- framing ---

@@ -60,10 +60,11 @@
         </div>
 
         <div class="ov ov-bl">
-          <div class="segment" role="group" aria-label="Mode de navigation">
-            <button id="nav-orbit" class="seg active" type="button" title="Orbite (O)">Orbite</button>
-            <button id="nav-fly" class="seg" type="button" title="Vol libre (V)">Vol</button>
-          </div>
+          <!-- One button, not two modes. Orbiting is what a viewer does; being
+               let off the leash is a thing you switch on, not another place to
+               be. (V, or Échap to come back) -->
+          <button id="nav-free" class="seg" type="button" aria-pressed="false"
+                  title="Se détacher du centre : pivoter sur place, avancer, reculer (V)">Libre</button>
           <button id="btn-frame" class="icon" type="button" title="Recadrer (F)">
             <svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" /><circle cx="12" cy="12" r="3" /></svg>
           </button>
