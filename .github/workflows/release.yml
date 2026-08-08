@@ -30,11 +30,48 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Thumbnail Provider DLL & Frontend Assets
-        run: npm run build:all
-
+      # Through the Tauri CLI, never through cargo alone. A bare
+      # `cargo build --release` produced a binary that asked localhost for its
+      # interface and showed the webview's own error page to anyone who
+      # downloaded it: the CLI is what tells the build to bake the frontend in
+      # rather than point at the development server. It also runs
+      # `build:all` itself, which is what puts the provider DLL and the
+      # frontend in place before the compiler needs them.
+      #
+      # --no-bundle stops at the executable. The portable single file is the
+      # release; an installer would be a second thing to keep in step.
       - name: Build Portable Executable
-        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+        run: npm run tauri build -- --no-bundle
+
+      # A release that boots to an error page is worse than no release, and the
+      # one that shipped weighed 3.9 MB against 4.4 for a good one: a size
+      # threshold would have let it through, and the frontend is compressed
+      # inside the binary so its bytes cannot be searched for either.
+      #
+      # So the build is made to use itself. Rendering a thumbnail runs the whole
+      # frontend in a hidden window and writes a PNG, which a binary pointing at
+      # a development server that is not there cannot do. It is the same code
+      # path Explorer uses, so this also proves the shell integration works.
+      - name: Prove the binary can render on its own
+        shell: powershell
+        run: |
+          node tools/make-samples.mjs
+          $model = (Get-ChildItem "testdata\fmt" -Filter *.glb | Select-Object -First 1).FullName
+          if (-not $model) { throw "aucun modele d'essai" }
+          $out = "$env:RUNNER_TEMP\smoke.png"
+          # Bounded, because the failure this guards against does not return an
+          # error: a binary with no frontend waits for a page that never comes.
+          # Measured, the good one finishes in about a second.
+          $p = Start-Process "src-tauri\target\release\albedo.exe" `
+               -ArgumentList @("--thumbnail", $model, "--out", $out, "--size", "256") `
+               -PassThru -WindowStyle Hidden
+          if (-not $p.WaitForExit(60000)) {
+            $p.Kill()
+            throw "le rendu ne rend jamais la main : le binaire attend une page qui n'existe pas"
+          }
+          if ($p.ExitCode -ne 0) { throw "rendu en echec, code $($p.ExitCode)" }
+          if (-not (Test-Path $out)) { throw "aucune image produite : le frontend n'est pas dans le binaire" }
+          "Rendu : {0:N0} octets" -f (Get-Item $out).Length
 
       - name: Prepare Release Executable & Zip
         shell: powershell
