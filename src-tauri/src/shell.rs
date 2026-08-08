@@ -168,17 +168,59 @@ pub fn shell_integration_disable() -> Result<Integration, String> {
     Ok(shell_integration())
 }
 
-/// Keep a live registration pointing at wherever this executable now is.
+/// Deliberately outside the key the integration itself uses, because removing
+/// the integration removes that one whole: the record of having asked has to
+/// outlive the answer, or every launch would ask again.
+const MARK: &str = "Software\\Albedo";
+
+fn already_offered() -> bool {
+    windows_registry::CURRENT_USER
+        .open(MARK)
+        .ok()
+        .and_then(|k| k.get_u32("ShellOffered").ok())
+        .unwrap_or(0)
+        == 1
+}
+
+fn remember_offered() {
+    if let Ok(key) = windows_registry::CURRENT_USER.create(MARK) {
+        let _ = key.set_u32("ShellOffered", 1);
+    }
+}
+
+/// What the first launch does about Explorer, and what every launch after it
+/// does not.
 ///
-/// Called at startup and silent by design: it changes nothing unless the
-/// integration is already on and the recorded path has gone stale, which is
-/// what happens the first time a portable copy is run from somewhere else.
-pub fn refresh_recorded_path() {
+/// Nothing is asked of someone who installed a 3D viewer and expects to see 3D
+/// files. On a machine that has never met Albedo the thumbnails are switched on
+/// and said so; after that the question is never raised again, whatever the
+/// answer turned out to be.
+///
+/// That last part is the whole of the design. Switching them off has to be
+/// final: a program that restores at every launch what the user removed at the
+/// last one is not offering a choice, it is wearing one down. So the fact of
+/// having decided is recorded apart from the decision itself, and only a first
+/// launch ever writes anything.
+///
+/// A live registration still has its path refreshed, which costs nothing and is
+/// what lets a portable copy be moved without breaking.
+pub fn settle_on_startup() -> Option<&'static str> {
     let state = shell_integration();
-    if !state.registered || state.renderer.is_none() || state.current_is_registered {
-        return;
+
+    if state.registered {
+        remember_offered();
+        if !state.current_is_registered && state.renderer.is_some() {
+            if let Ok(key) = windows_registry::CURRENT_USER.create(KEY) {
+                let _ = key.set_string("Renderer", &state.current);
+            }
+        }
+        return None;
     }
-    if let Ok(key) = windows_registry::CURRENT_USER.create(KEY) {
-        let _ = key.set_string("Renderer", &state.current);
+
+    if already_offered() || !state.available {
+        return None;
     }
+
+    remember_offered();
+    shell_integration_enable().ok().map(|_| "shell-enabled")
 }

@@ -7,7 +7,7 @@ mod shell;
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// A headless render asked for on the command line.
 ///
@@ -435,7 +435,14 @@ fn main() {
                 // of file checks are unlikely to be felt, but nothing that can be
                 // done later has any business being done before the first frame,
                 // and Explorer will not ask for a thumbnail in the meantime.
-                std::thread::spawn(shell::refresh_recorded_path);
+                let app = app.handle().clone();
+                std::thread::spawn(move || {
+                    if shell::settle_on_startup().is_some() {
+                        // Said out loud, because something was written on the
+                        // user's behalf and they are entitled to know which.
+                        let _ = app.emit("shell-enabled", ());
+                    }
+                });
             }
             Ok(())
         })

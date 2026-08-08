@@ -1753,6 +1753,12 @@ if (tauri) {
     const startup = await tauri.core.invoke("startup_file").catch(() => null);
     if (startup) openPath(startup);
     tauri.event.listen("open-file", (e) => e.payload && openPath(e.payload));
+    // Something was written on the user's behalf, so they are told which, and
+    // where to undo it. Once, on the first launch of a machine that had none.
+    tauri.event.listen("shell-enabled", () => {
+      refreshShellState();
+      toast("Vignettes 3D activées dans l'explorateur · Scène pour les retirer", 4000);
+    });
   }
 }
 
