@@ -1,0 +1,80 @@
+name: Release Portable Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Thumbnail Provider DLL & Frontend Assets
+        run: npm run build:all
+
+      - name: Build Portable Executable
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Prepare Release Executable & Zip
+        shell: powershell
+        run: |
+          $tag = "${{ github.ref_name }}"
+          Copy-Item "src-tauri\target\release\albedo.exe" "Albedo.exe"
+          Compress-Archive -Path "Albedo.exe" -DestinationPath "Albedo-${tag}-portable-win-x64.zip"
+
+      - name: Generate Commit Details Changelog
+        id: changelog
+        shell: powershell
+        run: |
+          $prevTag = (git tag --sort=-creatordate | Select-Object -Skip 1 | Select-Object -First 1)
+          if ($prevTag) {
+            $commits = git log "$prevTag..HEAD" --pretty=format:"* %s (%h)"
+          } else {
+            $commits = git log -n 30 --pretty=format:"* %s (%h)"
+          }
+          
+          $body = @"
+          ## Albedo Portable Release (${{ github.ref_name }})
+          
+          Standalone portable Windows 64-bit executable with embedded application icon and embedded shell thumbnail provider DLL. No installer or administrative rights required.
+          
+          ### Commit Log & Changes
+          $commits
+          "@
+          
+          Set-Content -Path "release_notes.md" -Value $body -Encoding UTF8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Albedo ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            Albedo.exe
+            Albedo-${{ github.ref_name }}-portable-win-x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
