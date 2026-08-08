@@ -181,8 +181,14 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   flex: none;
 }
 
-.segment { display: flex; gap: 2px; }
+/* Wraps rather than overflows. A row of choices that runs off the edge of the
+   panel hides the last one, and the last one is as real as the first: the edit
+   mode's fourth button was off screen, and so was every axis inversion. */
+.segment { display: flex; gap: 2px; flex-wrap: wrap; }
 .seg { padding: 5px 12px; color: var(--muted); }
+.segment > .seg { flex: 0 1 auto; min-width: 0; }
+/* A row of buttons must be allowed to give ground before it pushes anything */
+.row { flex-wrap: wrap; min-width: 0; }
 .seg.active { background: rgba(255, 255, 255, 0.1); color: var(--fg); }
 
 .link {
@@ -249,7 +255,9 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
   top: var(--gap);
   right: var(--gap);
   bottom: var(--gap);
-  width: 288px;
+  /* Wide enough for the widest row it actually holds, which is the six axis
+     lines: a switch, a name, a slider worth dragging, a number and a sign. */
+  width: 324px;
   padding: 4px 16px 18px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -265,7 +273,7 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
 #inspector.open { transform: none; opacity: 1; }
 
 /* Give the top-right buttons room when the panel is out */
-body.inspector .ov-tr { right: calc(288px + var(--gap) * 2); }
+body.inspector .ov-tr { right: calc(324px + var(--gap) * 2); }
 body.inspector .ov-br { opacity: 0; }
 .ov-tr, .ov-br { transition: right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s; }
 
@@ -364,11 +372,14 @@ label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
 /* One degree of freedom to a line: heard or not, how fast, which way. */
 .axis-row {
   display: grid;
-  grid-template-columns: 14px 62px 1fr 34px 26px;
-  gap: 6px;
+  /* minmax(0, 1fr) on the slider, so the row shrinks with the panel instead of
+     pushing its own last column past the edge and out of reach. */
+  grid-template-columns: 14px 58px minmax(0, 1fr) 32px 24px;
+  gap: 5px;
   align-items: center;
   padding: 2px 0;
 }
+.axis-row input[type="range"] { width: 100%; min-width: 0; }
 .axis-row.muted { opacity: 0.45; }
 .axis-row input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
 .axis-name { font-size: 11px; color: var(--muted); }
@@ -673,8 +684,8 @@ details[open] summary::before { content: "▾ "; }
  */
 
 @container stage (max-width: 1100px) {
-  #inspector { width: 264px; }
-  body.inspector .ov-tr { right: calc(264px + var(--gap) * 2); }
+  #inspector { width: 288px; }
+  body.inspector .ov-tr { right: calc(288px + var(--gap) * 2); }
 }
 
 @container stage (max-width: 900px) {
