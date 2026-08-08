@@ -428,7 +428,14 @@ fn main() {
                 // A portable copy that has been moved would otherwise leave
                 // Explorer calling the folder it used to sit in. Silent, and a
                 // no-op unless the integration is on and the path has gone stale.
-                shell::refresh_recorded_path();
+                //
+                // On a thread of its own, because this is a viewer: it is opened
+                // by double clicking a file and has to be on screen before anyone
+                // has finished reading its name. Two registry reads and a couple
+                // of file checks are unlikely to be felt, but nothing that can be
+                // done later has any business being done before the first frame,
+                // and Explorer will not ask for a thumbnail in the meantime.
+                std::thread::spawn(shell::refresh_recorded_path);
             }
             Ok(())
         })

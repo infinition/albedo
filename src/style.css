@@ -361,6 +361,20 @@ label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
 .xform input:focus { outline: none; border-color: var(--accent); }
 .xform input:disabled { opacity: 0.4; }
 
+/* One degree of freedom to a line: heard or not, how fast, which way. */
+.axis-row {
+  display: grid;
+  grid-template-columns: 14px 62px 1fr 34px 26px;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 0;
+}
+.axis-row.muted { opacity: 0.45; }
+.axis-row input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
+.axis-name { font-size: 11px; color: var(--muted); }
+.axis-value { font-size: 10px; text-align: right; }
+.axis-row .seg { padding: 1px 0; min-width: 0; }
+
 /* --- what just changed ----------------------------------------------------- */
 
 #toast {

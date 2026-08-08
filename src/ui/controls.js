@@ -87,32 +87,91 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
  * Vendors disagree on which way a SpaceMouse axis points, so every axis gets a
  * toggle rather than a hard-coded sign nobody can change.
  */
+// Named for the movement of the hand rather than the letter of the axis, since
+// the letter is what nobody can map onto a cap they are pushing.
 const AXES = [
-  ["x", "X"],
-  ["y", "Y"],
-  ["z", "Z"],
-  ["pitch", "Tang."],
-  ["yaw", "Lacet"],
-  ["roll", "Roulis"],
+  ["x", "Glisser", "Pousser le bouchon a gauche ou a droite"],
+  ["y", "Monter", "Soulever ou enfoncer le bouchon"],
+  ["z", "Avancer", "Pousser le bouchon en avant ou le tirer vers soi"],
+  ["pitch", "Basculer", "Incliner le bouchon en avant ou en arriere"],
+  ["yaw", "Pivoter", "Tourner le bouchon sur lui-meme"],
+  ["roll", "Rouler", "Incliner le bouchon a gauche ou a droite"],
 ];
 
+/**
+ * One line per degree of freedom.
+ *
+ * The maker's own panel gives each axis three things, and it gives them for a
+ * reason: a cap has six degrees of freedom and a hand has none of the
+ * discipline to move one at a time, so switching off the two you did not mean
+ * is what makes the other four usable. Three inversion buttons and two master
+ * speeds could not express that.
+ *
+ * Built rather than written out, because six identical rows in the markup is
+ * six chances for one of them to drift from the others.
+ */
 function wireDeviceSettings(nav, onChange = () => {}) {
   const holder = $("sm-invert");
-  for (const [key, label] of AXES) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    b.title = `Inverser ${label}`;
+  const cfg = nav.settings.space;
+  for (const [key, label, hint] of AXES) {
+    const row = document.createElement("div");
+    row.className = "axis-row";
+
+    const on = document.createElement("input");
+    on.type = "checkbox";
+    on.checked = cfg.on?.[key] !== false;
+    on.title = `Écouter ${label}`;
+
+    const name = document.createElement("span");
+    name.className = "axis-name";
+    name.textContent = label;
+    name.title = hint;
+
+    const gain = document.createElement("input");
+    gain.type = "range";
+    gain.min = "0";
+    gain.max = "3";
+    gain.step = "0.05";
+    gain.value = String(cfg.gain?.[key] ?? 1);
+    gain.dataset.novalue = "";
+    gain.title = `Vitesse de ${label}`;
+
+    const value = document.createElement("span");
+    value.className = "axis-value mono";
+    const paint = () => {
+      value.textContent = Number(gain.value).toFixed(2);
+      row.classList.toggle("muted", !on.checked);
+      gain.disabled = !on.checked;
+    };
+
     // A correction restored from the settings file has to show as pressed,
     // otherwise the panel disagrees with what the device is actually doing.
-    b.classList.toggle("active", !!nav.settings.space.invert[key]);
-    b.addEventListener("click", () => {
-      const inv = nav.settings.space.invert;
-      inv[key] = !inv[key];
-      b.classList.toggle("active", inv[key]);
+    const flip = document.createElement("button");
+    flip.type = "button";
+    flip.className = "seg";
+    flip.textContent = "±";
+    flip.title = `Inverser ${label}`;
+    flip.classList.toggle("active", !!cfg.invert[key]);
+
+    on.addEventListener("change", () => {
+      (cfg.on ||= {})[key] = on.checked;
+      paint();
       onChange();
     });
-    holder.appendChild(b);
+    gain.addEventListener("input", () => {
+      (cfg.gain ||= {})[key] = Number(gain.value);
+      paint();
+      onChange();
+    });
+    flip.addEventListener("click", () => {
+      cfg.invert[key] = !cfg.invert[key];
+      flip.classList.toggle("active", cfg.invert[key]);
+      onChange();
+    });
+
+    paint();
+    row.append(on, name, gain, value, flip);
+    holder.appendChild(row);
   }
 
   const bind = (id, apply, initial) => {

@@ -1161,6 +1161,10 @@ $("shot-save").addEventListener("click", async () => {
 function showPane(name, remember = true) {
   // The preview is a render; it is only worth making while it is on screen
   if (name === "photo") paintShotPreview();
+  // Same reasoning, cheaper subject: the shell registration is two registry
+  // reads across the bridge, and nobody needs the answer until they are looking
+  // at the panel that shows it.
+  if (name === "scene") refreshShellState();
   for (const tab of document.querySelectorAll(".tab")) {
     tab.classList.toggle("active", tab.dataset.pane === name);
   }
@@ -1581,6 +1585,8 @@ function deviceSnapshot() {
     spaceRotation: s.space.rotation,
     spaceLockRoll: s.space.lockRoll,
     spaceInvert: { ...s.space.invert },
+    spaceOn: { ...s.space.on },
+    spaceGain: { ...s.space.gain },
   };
 }
 
@@ -1594,6 +1600,8 @@ function restoreDevices() {
   if (d.spaceRotation !== undefined) s.space.rotation = d.spaceRotation;
   if (d.spaceLockRoll !== undefined) s.space.lockRoll = d.spaceLockRoll;
   if (d.spaceInvert) Object.assign(s.space.invert, d.spaceInvert);
+  if (d.spaceOn) Object.assign(s.space.on, d.spaceOn);
+  if (d.spaceGain) Object.assign(s.space.gain, d.spaceGain);
 }
 
 const TURNTABLE_SPEED = 0.5; // radians per second, a full turn in about twelve
@@ -2727,7 +2735,6 @@ window.addEventListener("keydown", (e) => {
 // Last, so every restored preference and every saved effect setting is already
 // in the inputs and the first number shown is the one in force.
 wireSliderValues($("inspector"));
-refreshShellState();
 paintSaveButtons();
 paintHistory();
 paintTransform();

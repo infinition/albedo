@@ -123,6 +123,13 @@ export class Navigation {
         // A SpaceMouse reports six signed axes but vendors disagree on which
         // way each one points; these flip an axis without a rebuild.
         invert: { x: false, y: false, z: false, pitch: false, yaw: false, roll: false },
+        // One line per axis, as the maker's own panel has it: whether the axis
+        // is listened to at all, and how strongly. A cap has six degrees of
+        // freedom and a hand has none of the discipline to use one at a time,
+        // so switching off the two you did not mean is how the other four
+        // become usable. The two speeds above remain as a master for each half.
+        on: { x: true, y: true, z: true, pitch: true, yaw: true, roll: true },
+        gain: { x: 1, y: 1, z: 1, pitch: 1, yaw: 1, roll: 1 },
         lockRoll: false,
       },
     };
@@ -529,14 +536,20 @@ export class Navigation {
     const cfg = this.settings.space;
     const t = cfg.translation;
     const r = cfg.rotation;
-    const sign = (k) => (cfg.invert[k] ? -1 : 1);
+    // Off is a zero rather than a skipped multiplication, so an axis switched
+    // off cannot leak through whatever reads these afterwards.
+    const k = (name, master) =>
+      (cfg.on?.[name] === false ? 0 : 1) *
+      master *
+      (cfg.gain?.[name] ?? 1) *
+      (cfg.invert[name] ? -1 : 1);
     const axes = {
-      x: s.tx * t * sign("x"), // right
-      y: -s.tz * t * sign("y"), // up: the cap reports downwards
-      z: s.ty * t * sign("z"), // forward, three's -Z
-      pitch: -s.rx * r * sign("pitch"),
-      yaw: -s.rz * r * sign("yaw"),
-      roll: cfg.lockRoll ? 0 : -s.ry * r * sign("roll"),
+      x: s.tx * k("x", t), // right
+      y: -s.tz * k("y", t), // up: the cap reports downwards
+      z: s.ty * k("z", t), // forward, three's -Z
+      pitch: -s.rx * k("pitch", r),
+      yaw: -s.rz * k("yaw", r),
+      roll: cfg.lockRoll ? 0 : -s.ry * k("roll", r),
     };
     const idle =
       !axes.x && !axes.y && !axes.z && !axes.pitch && !axes.yaw && !axes.roll;
