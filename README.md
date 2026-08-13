@@ -107,6 +107,7 @@ Detailed technical documentation and reference guides are organized in the [`doc
 - [**Architecture & System Design**](docs/ARCHITECTURE.md): Startup optimization metrics, memory disposal & leak prevention, material contradiction rules, shell thumbnail COM DLL architecture, and post-processing pipeline.
 - [**Porting Beyond Windows**](docs/porting.md): What survives a port and what does not, the Linux thumbnailer contract, the macOS Quick Look extension, and the signing each one demands.
 - [**Feature Verification & Roadmap**](docs/ROADMAP.md): Comprehensive feature verification checklist, test evidence log, and upcoming milestones.
+- [**Retopology & Baking**](docs/RETOPO.md): How the plancton engine becomes the Retopo tab, what the viewer already provides for it, the startup contract it must not break, and the phased plan.
 
 ---
 

@@ -1,0 +1,432 @@
+# Retopo: bringing the plancton engine into Albedo
+
+How the retopology and baking engine becomes Albedo's eighth tab, what Albedo
+already provides for free, what has to be rebuilt, and what must not be broken
+on the way.
+
+Legend: **[x]** done and measured, **[~]** in progress, **[ ]** planned.
+
+---
+
+## What this is
+
+[plancton](https://github.com/infinition/plancton) is a retopology and texture
+baking tool: quadric error decimation, isotropic remeshing, hole filling,
+tangential relax with reprojection, quad pairing, a UV atlas and a cage
+projection that bakes five PBR maps from a high poly onto a low one. It is pure
+Rust, no CUDA, no Python, no C++, and it is built on Tauri 2 exactly like Albedo.
+
+It arrives here as a tab, not as a merge.
+
+**plancton stays its own repository.** It keeps its name, its CLI, its HTTP
+server and the Blender bridge that server exists for. What changes is that its
+three library crates become a dependency Albedo consumes, and its desktop shell
+`plancton-bureau` stops being built, because Albedo *is* the shell now. That is
+the only casualty and it is the redundant part.
+
+Inside Albedo the name disappears. There is no plancton tab, no plancton menu,
+no plancton branding. There is a **Retopo** tab, and it does retopology and
+baking, in the same French single-word register as Rendu, Matières, Caméra,
+Décor, Effets, Photo and Scène.
+
+### Why "Retopo" and not "Remesh" or "Retopo & Bake"
+
+The tab strip is icons with a `title` tooltip, and every existing tooltip is one
+French noun. A two word English label would be the only one of its kind, which
+is exactly the sort of small inconsistency that makes an interface feel
+assembled rather than designed.
+
+Baking is not in the name because baking is a consequence here, not a peer
+activity: you bake *because* you decimated, to carry the detail you just threw
+away onto the mesh that remains. It is a section inside the tab, next to the
+button whose cost it changes, which is where plancton eventually put it too
+after trying it as its own tab twice.
+
+"Remesh" was the other candidate and it is narrower than the truth: remeshing is
+one of the three methods in there, next to decimation and quad pairing.
+
+---
+
+## Why this fits, in one paragraph
+
+Both applications are Tauri 2 with a Rust backend and edition 2021. Albedo
+already exports the loaded scene to GLB through `GLTFExporter`
+([main.js:934](../src/main.js)), which is the bridge the engine needs to be fed.
+Albedo already raycasts the model, already lists materials with their map slots,
+already replaces a texture in a slot and already restores the original. Those
+are not adjacent features, they are literally the next chantier on plancton's
+roadmap, already written and already debugged here.
+
+---
+
+## What Albedo already provides
+
+plancton's next milestone was "Materials: a tab, and selection in the viewport",
+eleven items. Six of them exist in Albedo today, including the two most
+expensive.
+
+| plancton wanted | Albedo has | Where |
+| --- | :---: | --- |
+| A materials tab, one row per material | [x] | Matières pane, `#materials` |
+| Every texture slot listed one at a time | [x] | `MAP_SLOTS`, ten slots, not five |
+| The source of each texture, named | [x] | `texture.name` |
+| Import an external texture into a slot | [x] | `replaceMap()` in `src/viewer/materials.js` |
+| Restore the original | [x] | `channels.restoreMaterial(uuid)` |
+| Click a material in the viewport to select it | [x] | `pick(x, y)` in `src/viewer/viewer.js` |
+| Ctrl-click to add to the selection | [ ] | trivial on top of `pick()` |
+| Triangle count per material | [ ] | trivial from the geometry groups |
+| Isolate and hide per material | [ ] | |
+| Decimate and bake a selection only | [ ] | the engine's job |
+
+These are not sketches. `replaceMap` does the part that costs an afternoon: the
+incoming texture inherits `flipY`, wrapping, repeat, offset, centre and rotation
+from the one it replaces, because those belong to the model's UVs and not to the
+image. It handles TGA. It sets the colour space per slot from `DATA_SLOTS`, so a
+normal map does not land in sRGB. `pick` already filters hidden meshes, helpers,
+the stand, and objects whose *ancestor* is hidden.
+
+plancton's roadmap proposed solving picking with a GPU pass writing the material
+index into a framebuffer and reading one pixel back. That approach is now
+unnecessary. A CPU raycast against three.js is simpler and already works.
+
+### The gain nobody planned for
+
+plancton reads glTF and GLB, and nothing else. Albedo reads NIF, USD, USDZ, FBX,
+PLY, STL, OBJ, PCD and more. The moment the engine is fed from Albedo's scene
+graph rather than from a file, **retopology works on every format Albedo can
+open**. Retopologising a Bethesda NIF is not a feature anyone scheduled. It falls
+out of the integration for free.
+
+---
+
+## What has to be rebuilt
+
+Three of plancton's display modes do not survive the trip through GLB into
+three.js. This is the real cost of the integration and it should not be
+discovered late.
+
+- **Quad topology.** glTF has no quads. plancton pairs triangles and carries the
+  result as a per triangle diagonal mask inside PMSH, its own wire format, which
+  the GLB does not hold. Load the result into three.js untouched and you see
+  triangles. The 86 percent quad coverage that the Rebuild path is sold on
+  becomes invisible. The mask has to travel beside the GLB and a line material
+  has to honour it.
+- **The deviation heatmap.** Per vertex distance from the source, measured
+  through the BVH. It is an attribute the engine computes and nothing in three.js
+  knows about. Needs its own transport and a shader.
+- **The bake cage as a shell.** Geometry pushed along its own normals, drawn
+  translucent, updating live with the slider. Cheap in three.js, but it does not
+  exist there yet, and there is no other way to judge a cage distance than to see
+  whether it swallows the detail without reaching onto the next part.
+
+Everything else in plancton's viewer is either already in Albedo and better
+(eleven unlit inspection channels against one unlit mode) or is a three.js
+one-liner (wireframe, x-ray).
+
+The compute ports at one to one. `plancton-core`, `plancton-remesh` and
+`plancton-bake` are libraries with no interface in them at all.
+
+---
+
+## The startup contract
+
+This is the constraint that outranks every feature in this document.
+
+`albedo.exe` is not launched once. It is also the Windows shell thumbnail
+provider: `shell-thumbnails` runs `albedo.exe --thumbnail` **one process per
+file**. Open a folder of two hundred models for the first time and Windows spawns
+two hundred of them. And Albedo's own architecture document commits to
+initialising in under one second, with lazy format readers, a deferred PMREM
+pass and pinned Vite chunks defending that number.
+
+So, three rules, none of them negotiable:
+
+1. **Nothing about Retopo initialises at boot.** `src-tauri/src/main.rs` already
+   branches on `thumb_job()`. Every engine construction goes behind "this is not
+   a thumbnail render", and behind first use even then.
+2. **The tab is a lazy chunk.** The Asset Manager is the precedent: it is fetched
+   on first interaction, not parsed at startup. `vite.config.js` pins chunk
+   boundaries specifically so a loader used by two lazy chunks does not get
+   hoisted back into the startup bundle. Retopo gets the same treatment, and the
+   pin has to be checked, not assumed.
+3. **The icon is always there, the tab is inert until clicked.** No engine, no
+   worker, no allocation until the pane is opened for the first time in a
+   session.
+
+### Measured, so the size argument is settled
+
+| Binary | Size | Profile |
+| --- | ---: | --- |
+| `albedo.exe` today | 4.4 MB | `opt-level="s"`, fat LTO, `codegen-units=1`, stripped |
+| `plancton-bureau.exe` | 13.2 MB | `opt-level=3`, thin LTO, `codegen-units=4`, not stripped |
+| plancton CLI, its own profile | 5.57 MB | as above |
+| **plancton CLI, rebuilt at Albedo's profile** | **3.78 MB** | Albedo's exactly |
+
+The 13.2 MB figure is misleading and should not be quoted: it is mostly profile
+and Tauri and embedded web assets, all of which Albedo already pays for. The
+honest number is the last row, and it is a ceiling rather than the cost, because
+it still contains `plancton-server` with axum and tower-http, the CLI's argument
+parsing, `tracing-subscriber`, and a Rust runtime Albedo already links.
+
+**Expect the marginal cost to land between 2 and 3 MB**, taking Albedo from
+about 4.4 MB to about 7 MB. The README's "3.7 MB executable" headline will need
+rewriting. A 7 MB viewer is still comfortably the thing that README claims to be.
+
+The exact figure cannot be known before the two are actually linked, because fat
+LTO deduplicates across both trees. Measuring it is one evening: add the crates,
+wire one command, look at the exe.
+
+---
+
+## The build traps
+
+Two settings where Albedo and plancton want opposite things. Both are cheap to
+fix and expensive to discover late.
+
+- **`panic = "abort"`.** Albedo sets it. The engine runs jobs inside
+  `spawn_blocking`, where a panic fails that job and the application carries on.
+  Under `abort` the same panic kills Albedo, and it kills it during a thumbnail
+  render too, which means a single malformed mesh in a folder can take out the
+  Explorer preview for the whole folder. Either the engine gets a
+  `catch_unwind` boundary at the job entry point, or the release profile drops
+  `abort`. The boundary is the better answer: it is local, and it keeps the size
+  win.
+- **`opt-level = "s"`.** Albedo compiles for size, which is right for a viewer.
+  plancton's own manifest carries a comment saying retopology is compute bound
+  and the extra codegen time is repaid on every remesh. Merged, the decimator and
+  the BVH inherit `"s"` and get quietly slower with nothing reporting it. Fix:
+
+  ```toml
+  [profile.release.package.plancton-core]
+  opt-level = 3
+  [profile.release.package.plancton-remesh]
+  opt-level = 3
+  [profile.release.package.plancton-bake]
+  opt-level = 3
+  ```
+
+- **Build time.** plancton's tree alone took 1 min 53 s at `lto = true` and
+  `codegen-units = 1`. Added to Albedo's, expect the release build to roughly
+  double. This costs the developer, not the user, but it is worth knowing before
+  it surprises someone.
+
+---
+
+## Architecture: where the seam goes
+
+```
+Retopo pane (lazy chunk)
+      |  parameters, and the current scene
+      v
+GLTFExporter  ->  bytes  ->  Tauri command (spawn_blocking + catch_unwind)
+                                    |
+                                    v
+                    plancton-core / -remesh / -bake
+                                    |
+                       GLB + quad mask + deviation + maps
+                                    v
+              Albedo's three.js scene, as a second model
+```
+
+Decisions taken:
+
+- **Tauri commands, not the HTTP server.** Albedo's pitch is no account, no
+  upload, no network round trip, and opening a port would contradict it in the
+  one place it is loudest. Dropping `plancton-server` also drops axum and
+  tower-http from the binary. The cost is that the job pipeline and its progress
+  reporting have to be rebuilt on Tauri's event bus, which
+  `plancton-bureau/src/main.rs` already demonstrates: it pushes progress over
+  Tauri events off the same broadcast channel the websocket used, so the worker
+  code never learned about Tauri.
+- **Fed from the scene, not from the file.** Going through `GLTFExporter` is what
+  makes NIF and USD work. The alternative, re-reading the original bytes in Rust,
+  is faster but only ever supports glTF.
+- **The result is a second model in the scene, not a replacement.** Albedo is an
+  inspector, and the whole point of a retopology is comparing it to what it came
+  from. Source and result both live in the scene graph, with an A/B toggle.
+
+---
+
+## Phases
+
+### Phase 1: the seam [ ]
+- [ ] Add `plancton-core`, `plancton-remesh`, `plancton-bake` as git dependencies
+      on the plancton repository. Not path dependencies: the two are separate
+      public repositories and a path breaks a fresh clone.
+- [ ] Per package `opt-level = 3` overrides, and the `catch_unwind` boundary.
+- [ ] One Tauri command, `retopo_decimate`, taking GLB bytes and a target count,
+      returning GLB bytes. Nothing else. Prove the round trip.
+- [ ] Measure the binary and the cold start, both before and after, and write the
+      numbers into this file.
+
+### Phase 2: the tab [ ]
+- [ ] Eighth icon in the tab strip, tooltip Retopo, pane `data-pane="retopo"`.
+- [ ] The pane's module is a lazy chunk, fetched on first open. Verify the Vite
+      chunk boundary held rather than assuming it.
+- [ ] Target triangle count, method choice between Decimate, Rebuild and Pair.
+- [ ] Progress over the Tauri event bus, and cancellation.
+- [ ] Result lands in the scene as a second model, with an A/B toggle.
+
+### Phase 3: reading the result [ ]
+- [ ] Quad diagonal mask transported beside the GLB, honoured by a line material.
+- [ ] Deviation heatmap as a channel, next to the eleven that exist.
+- [ ] Statistics into the existing HUD: source count, result count, quad
+      coverage, reduction.
+
+### Phase 4: clean up and rebuild [ ]
+- [ ] Hole filling, tangential relax with reprojection, isotropic remeshing, quad
+      pairing, each an optional stage with its own reported numbers.
+- [ ] Crease angle exposed separately for decimation and for relax. They are not
+      the same question and sharing them once made relax silently do nothing.
+
+### Phase 5: baking [ ]
+- [ ] UV atlas, cage projection, the five maps: base colour with alpha, metallic
+      roughness, tangent space normal, emissive, ambient occlusion.
+- [ ] Every knob: map size, cage distance, island gutter, edge bleed, island
+      angle, occlusion reach.
+- [ ] The cage drawn as a translucent shell, live with the slider.
+- [ ] Baked maps land in the Matières slots through the existing `replaceMap`,
+      which means restore already works on them.
+
+### Phase 6: per material work [ ]
+- [ ] Ctrl-click to add to the selection, on top of `pick()`.
+- [ ] Triangle count per material, from the geometry groups.
+- [ ] Isolate and hide per material.
+- [ ] Decimate and bake restricted to the selection, leaving the rest untouched.
+
+### Phase 7: paying the rent [ ]
+- [ ] Export the result. GLB exists; OBJ is worth adding for one concrete reason,
+      it stores quads natively and glTF cannot.
+- [ ] Rewrite the README size claim.
+- [ ] `docs/FORMATS.md` and `docs/CONTROLS.md` updated for the new tab and its
+      keys.
+
+---
+
+## Preserved from plancton's roadmap
+
+Everything below is plancton's own planning, kept here so the integration does
+not amputate it. plancton's `ROADMAP.md` remains the authority in its own
+repository; this is what these items mean once the engine lives in Albedo.
+
+### The engine that arrives, already built
+
+- Half-edge style mesh with per corner attributes and a weld layer, so topology
+  never sees the duplicates a UV seam creates.
+- SAH BVH: ray casting and closest point.
+- glTF 2.0 and GLB import with `KHR_mesh_quantization` and `KHR_texture_transform`
+  decoded by hand, because the `gltf` crate's typed iterators reinterpret an
+  accessor whatever it declares and hand back plausible garbage.
+- Quadric error decimation, Garland-Heckbert, with the three guards that matter:
+  link condition, flip test, crease and seam constraint planes. Scale invariant.
+- Relax with reprojection, hole filling, isotropic remeshing, quad pairing.
+  Measured on a 406k pug: 7,256 triangles in 1.2 seconds, 86 percent quad
+  coverage.
+- UV atlas, cage projection, five maps, deterministic occlusion sampling so two
+  bakes of the same model agree exactly.
+
+### Still ahead, in plancton's order
+
+1. **Real-time polygroups.** Shape Diameter Function plus dihedral concavity into
+   an agglomerative merge tree, computed once. The slider is a cut through the
+   tree, so recolouring costs nothing. Isolate, merge, hide, export one mesh or
+   one material per group. In Albedo this wants to be a channel next to the
+   eleven, not a mode of its own.
+2. **Field-aligned quad remeshing.** Rust port of Instant Field-Aligned Meshes,
+   BSD 3-Clause. Multiresolution hierarchy, 4-RoSy orientation field with hard
+   constraints on creases, 4-PoSy position field, extraction, reprojection. The
+   orientation field is cached so changing density does not recompute it.
+3. **Painted guides and manual edge selection.** Draw curves the quad flow must
+   follow, the way ZRemesher curves do. This is the single feature separating an
+   automatic retopology from a usable one: the loops you want around an eye, a
+   mouth or a knee are not creases, and no angle threshold will ever find them.
+   Pays twice, as a hard constraint for the decimator now and for the orientation
+   field at item 2.
+4. **The Blender add-on.** A View3D sidebar panel that exports the selection,
+   posts it, polls and imports the result. **This one stays in plancton and does
+   not come here.** It is an HTTP client over `plancton-server`, and Albedo does
+   not open a port on purpose. Keeping the server crate alive in the plancton
+   repository is exactly what lets both exist.
+5. **Symmetry.** Principal plane by PCA, refined by ICP, then symmetric
+   remeshing, plus a forced axis selector.
+
+### Answers kept so they are not re-litigated
+
+- **Painting a zone to re-bake only that zone.** Half of it is easy and worth
+  doing early: the bake is already per texel and independent, so masking which
+  texels to recompute and merging over the previous map is a small change that
+  turns iterating on a bad patch from a minute into a second. The other half,
+  local *retopology* with a stitched border, waits for the field-aligned
+  remesher, because it needs a remesher that can be told to respect a fixed
+  boundary. So: a re-bake brush soon, a re-topologise brush much later.
+- **A brush for polygon density.** Yes, and it fits what exists. Density is a
+  scalar per vertex and both paths already have somewhere to multiply it in: the
+  target edge length in isotropic remeshing, the collapse cost in the decimator.
+  It is the same picking and painting machinery the guide curves need, so the two
+  should be built together. This is what turns "eight thousand triangles" into
+  "eight thousand triangles, most of them on the face".
+- **Per vertex cage rather than one distance.** Same machinery again, and the
+  cage display is the half you cannot skip. Right after the density brush.
+- **The maps beyond the core five.** Clearcoat, sheen, transmission, volume,
+  specular, iridescence and anisotropy are not baked, and the reason is upstream:
+  they are not read on import either, so there is nothing to bake from. Adding
+  one means a slot, a reader, a writer, a sampler and a shader term. Order:
+  transmission and volume first because glass and liquid are common and their
+  absence looks most wrong, then clearcoat, then specular. Note that Albedo reads
+  more of these than plancton does, so the reader half may already be here.
+- **UDIM.** Worth it, not yet. It matters when one model needs more than a single
+  4K map, which means film work or a hero asset. Every stage would have to learn
+  about tiles: packer, rasteriser, dilation, export, viewer. Large surface,
+  narrow audience. Revisit when the atlas is good enough that its resolution is
+  the limit.
+- **OBJ export.** Worth adding for one concrete reason: it stores quads natively
+  and glTF cannot. FBX is proprietary and its clean readers are licence problems.
+  USD is a large dependency, though Albedo already carries a USD reader, which
+  changes that calculation and should be revisited.
+
+### Known weaknesses, inherited as they are
+
+- **The atlas is not artist quality.** Chart growth plus plane projection then
+  fragment absorption. A satchel at 12k triangles gives roughly 240 charts where
+  a person would author a dozen. It bakes correctly, but the seam count is high.
+- **Chart count grows badly on models made of many thin parts.** That same
+  satchel with straps, buckles and rope gives 2,767 charts at 20k triangles. A
+  chart should be able to wrap around a strap rather than stopping at every angle
+  change.
+- **Tangents are not MikkTSpace.** Averaged per vertex from the atlas
+  coordinates, so a normal map baked here has a faint shading error against a
+  Blender render on strongly stretched triangles.
+- **No streaming.** Meshes are held whole in memory, twice over while a job runs.
+  Fine at a million triangles, not at ten. This matters more inside Albedo than
+  it did in plancton, because Albedo may already be holding a large scene.
+
+### Lessons that each cost a debugging session
+
+- **An absolute epsilon is a bug in disguise.** The flip test compared a triangle
+  area to `f32::EPSILON`, so on a dense mesh every face read as already
+  degenerate: a 406k asset came out untouched with 609,573 refusals and zero
+  collapses. Every fixture happened to be one unit across. Anything comparing a
+  length or an area now compares it against something of the same scale, with a
+  test at 0.001, 1 and 1000.
+- **A library that reads bytes without checking their type hands you plausible
+  garbage.**
+- **Relaxation inherited the decimation crease angle** and pinned eighty six
+  percent of the vertices, so it silently did nothing. A mesh reduced fifty to one
+  is faceted everywhere; the two thresholds are not the same question.
+- **A rectangle fifty units long has four perfect right angles.** Scoring quad
+  candidates on corner angles alone accepted a 50:1 sliver. Shape quality needs
+  two independent measurements, angles and elongation.
+- **The worst triangle is the wrong thing to report.** It sits on a crease, which
+  relaxation pins on purpose. The mean is the honest number; the worst is
+  context.
+
+### Rejected, with reasons, so they are not proposed again
+
+| Thing | Why not |
+| --- | --- |
+| [P3-SAM / Hunyuan3D-Part](https://github.com/Tencent-Hunyuan/Hunyuan3D-Part) | Its licence excludes the European Union outright. |
+| [PartField](https://github.com/nv-tlabs/PartField) | The PartNet trained weights cannot be redistributed, and it needs Python and CUDA. |
+| [quadwild-bimdf](https://github.com/cgg-bern/quadwild-bimdf) | GPL-3.0. Reachable only as a separate process, never linked. |
+| xatlas through `xatlas-rs-v2` | Needs bindgen, which needs libclang, on every machine and every CI runner. Vendoring the C++ with a hand written FFI stays open. |
+| `mikktspace` crate | Drags in nalgebra 0.26 for a few hundred lines of tangent maths. |
+| Merging the plancton repository into this one | The CLI and the HTTP server have users this application will never have, and the Blender bridge needs the port Albedo refuses to open. Libraries in, everything else stays where it works. |
