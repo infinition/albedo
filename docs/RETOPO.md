@@ -187,10 +187,19 @@ fix and expensive to discover late.
   `spawn_blocking`, where a panic fails that job and the application carries on.
   Under `abort` the same panic kills Albedo, and it kills it during a thumbnail
   render too, which means a single malformed mesh in a folder can take out the
-  Explorer preview for the whole folder. Either the engine gets a
-  `catch_unwind` boundary at the job entry point, or the release profile drops
-  `abort`. The boundary is the better answer: it is local, and it keeps the size
-  win.
+  Explorer preview for the whole folder.
+
+  **A `catch_unwind` boundary does not fix this**, and an earlier draft of this
+  document said it did. `catch_unwind` catches an unwind; under `panic = "abort"`
+  there is no unwind to catch, the process is gone before any handler runs.
+  `panic` is also one of the few profile keys Cargo refuses in a per package
+  override, so it cannot be relaxed for the engine alone.
+
+  So the choice is binary: keep `abort` and accept that one malformed mesh kills
+  the application, or drop it from the release profile and pay for the unwinding
+  tables. Given that the same executable renders Explorer thumbnails one process
+  per file, dropping `abort` is the answer. The size it costs is measured below
+  rather than guessed.
 - **`opt-level = "s"`.** Albedo compiles for size, which is right for a viewer.
   plancton's own manifest carries a comment saying retopology is compute bound
   and the extra codegen time is repaid on every remesh. Merged, the decimator and
@@ -230,14 +239,26 @@ GLTFExporter  ->  bytes  ->  Tauri command (spawn_blocking + catch_unwind)
 
 Decisions taken:
 
-- **Tauri commands, not the HTTP server.** Albedo's pitch is no account, no
-  upload, no network round trip, and opening a port would contradict it in the
-  one place it is loudest. Dropping `plancton-server` also drops axum and
-  tower-http from the binary. The cost is that the job pipeline and its progress
-  reporting have to be rebuilt on Tauri's event bus, which
-  `plancton-bureau/src/main.rs` already demonstrates: it pushes progress over
-  Tauri events off the same broadcast channel the websocket used, so the worker
-  code never learned about Tauri.
+- **Three front doors, one set of handlers.** The tab is not the only way in.
+  The engine arrives with a CLI and an HTTP API that already work, and both are
+  kept.
+
+  | Door | How | Default |
+  | --- | --- | :---: |
+  | The Retopo tab | Tauri commands, progress on the event bus | on |
+  | `albedo.exe remesh <file> --faces N --bake --uv-size N` | headless, same path as `--thumbnail` | on |
+  | `POST /api/v1/...` for Blender, Maya, Houdini | `plancton-server`'s axum router | **off** |
+
+  The API is opt-in behind an explicit flag. Albedo's pitch is no account, no
+  upload, no network round trip, and that stays true of every default: no port
+  is opened unless someone asks for one on the command line. What the flag buys
+  is that the Blender add-on works against Albedo, and against a build that can
+  read NIF and USD, which the plancton binary never could.
+
+  `plancton-bureau/src/main.rs` shows how the tab side works without a socket: it
+  pushes progress over Tauri events off the same broadcast channel the websocket
+  used, so the worker code never had to learn about Tauri. Same handlers, same
+  tests, three doors.
 - **Fed from the scene, not from the file.** Going through `GLTFExporter` is what
   makes NIF and USD work. The alternative, re-reading the original bytes in Rust,
   is faster but only ever supports glTF.
@@ -249,10 +270,27 @@ Decisions taken:
 
 ## Phases
 
+> **Before anything: the build cache does not survive moving the project.**
+> Albedo was built at `C:\Users\infinition\Desktop\Albedo` and now lives at
+> `C:\DEV\coding\Github\Albedo`. `cargo build --release` fails with exit 101 and
+> `failed to read plugin permissions: ...\Desktop\Albedo\...\app_hide.toml`,
+> because every build script `output` file in `target/` recorded the old
+> absolute path. `cargo clean -p tauri` does **not** fix it: the stale path is in
+> the plugin build scripts and in the application's own, not only in tauri's.
+> Only a full `cargo clean --release` does. Worth knowing before mistaking it for
+> something the integration broke.
+
 ### Phase 1: the seam [ ]
-- [ ] Add `plancton-core`, `plancton-remesh`, `plancton-bake` as git dependencies
-      on the plancton repository. Not path dependencies: the two are separate
-      public repositories and a path breaks a fresh clone.
+- [ ] Add `plancton-core`, `plancton-remesh`, `plancton-bake` and
+      `plancton-server` as dependencies.
+
+      **A path dependency, for now, and it must not ship that way.** The clean
+      answer is a git dependency on the plancton repository, but that repository
+      has never been pushed: its remote is configured and there is not a single
+      remote tracking ref, so a git dependency cannot resolve today. Until
+      plancton is published, the path is relative and five levels deep, which
+      works on one machine and breaks on every other. Switching it is a one line
+      change and it belongs in phase 7, before any release.
 - [ ] Per package `opt-level = 3` overrides, and the `catch_unwind` boundary.
 - [ ] One Tauri command, `retopo_decimate`, taking GLB bytes and a target count,
       returning GLB bytes. Nothing else. Prove the round trip.
@@ -343,10 +381,10 @@ repository; this is what these items mean once the engine lives in Albedo.
    Pays twice, as a hard constraint for the decimator now and for the orientation
    field at item 2.
 4. **The Blender add-on.** A View3D sidebar panel that exports the selection,
-   posts it, polls and imports the result. **This one stays in plancton and does
-   not come here.** It is an HTTP client over `plancton-server`, and Albedo does
-   not open a port on purpose. Keeping the server crate alive in the plancton
-   repository is exactly what lets both exist.
+   posts it, polls and imports the result. It is a thin HTTP client over an API
+   that already exists and is already tested, so it is the smallest item on this
+   list by a wide margin. It works against Albedo once the server flag is on, and
+   against a build that reads NIF and USD, which the plancton binary never could.
 5. **Symmetry.** Principal plane by PCA, refined by ICP, then symmetric
    remeshing, plus a forced axis selector.
 
