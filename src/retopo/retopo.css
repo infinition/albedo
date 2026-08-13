@@ -88,6 +88,32 @@ body.peeking #retopo .rt-hud { display: none; }
   color: var(--dim, #8b929c);
 }
 
+/* A heading inside a block, for a group that is not worth its own block. */
+.rt-sub {
+  margin: 10px 0 2px;
+  font-size: 11px;
+  color: var(--fg, #e6e9ef);
+  opacity: 0.75;
+}
+
+/*
+ * Options gated by a switch stay on screen, dimmed and inert.
+ *
+ * Hiding them made the tool look like it could not do the thing at all, which
+ * is worse than a little visual noise. Learned in plancton, kept here.
+ */
+[data-el="bakeTools"],
+[data-el="aoTools"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 0.15s ease;
+}
+.rt-off {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
 /* --- the action bar ------------------------------------------------------ */
 
 /*
@@ -98,31 +124,47 @@ body.peeking #retopo .rt-hud { display: none; }
 .rt-bar {
   position: absolute;
   left: 50%;
-  bottom: 14px;
+  bottom: var(--gap, 14px);
   transform: translateX(-50%);
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 8px 8px 11px;
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
   backdrop-filter: blur(8px);
   border: 1px solid var(--line, #2a2e35);
+  max-width: calc(100vw - 2 * var(--gap, 14px));
 }
 .rt-bar button {
   min-height: 34px;
   padding: 0 16px;
   font-size: 12px;
+  white-space: nowrap;
 }
+.rt-note {
+  font-size: 11px;
+  color: var(--dim, #8b929c);
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-note:empty { display: none; }
 
 /* --- the head-up display ------------------------------------------------- */
 
 /*
  * The numbers you glance at after every run, without opening anything.
+ *
+ * It sits *under* Albedo's own top left cluster rather than beside it. Put at
+ * the same height it covered the file name and the open button, which is the
+ * kind of collision that only shows up on a real model with a long name.
  */
 .rt-hud {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: calc(var(--gap, 14px) + 48px);
+  left: var(--gap, 14px);
   display: flex;
   gap: 14px;
   padding: 8px 12px;
@@ -143,6 +185,38 @@ body.peeking #retopo .rt-hud { display: none; }
 .rt-hud dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+/* A stat that has never been filled in should not shout as loudly as one that
+   has. Otherwise four em dashes read as four numbers at a glance. */
+.rt-hud dd.rt-void { color: var(--dim, #8b929c); }
+
+/* --- progress ------------------------------------------------------------ */
+
+/*
+ * On the action bar rather than in the panel, because the panel scrolls and a
+ * progress bar you have to scroll to find is not one.
+ */
+.rt-progress {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--line, #2a2e35) 80%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.rt-bar.busy .rt-progress { opacity: 1; }
+.rt-progress i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: var(--accent, #7cc4ff);
+  /* Not a transition on width: the engine reports one step per percent and a
+     150ms ease on each would lag a whole second behind by the end. */
 }
 
 /*

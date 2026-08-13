@@ -427,14 +427,50 @@ Decisions taken:
 > The result reloads through the engine's own reader, so the GLB it writes is
 > one this application can open again.
 
-### Phase 5: baking [ ]
-- [ ] UV atlas, cage projection, the five maps: base colour with alpha, metallic
-      roughness, tangent space normal, emissive, ambient occlusion.
-- [ ] Every knob: map size, cage distance, island gutter, edge bleed, island
-      angle, occlusion reach.
+### Phase 5: baking [~]
+- [x] UV atlas, cage projection, the five maps: base colour with alpha, metallic
+      roughness, tangent space normal, emissive, ambient occlusion. The result
+      leaves as a textured low poly rather than a bare one plus loose PNGs.
+- [x] Every knob exposed: atlas size, cage out and in, island gutter, edge bleed,
+      island angle, occlusion rays and reach, and which maps to make.
+- [x] Options gated by a switch stay on screen, dimmed and inert. Hiding them
+      made the tool look like it could not do the thing at all.
+- [x] The run button says what it will do, because the method segment is at the
+      top of a scrolling panel and the button is at the bottom of the window:
+      Décimer, Reconstruire, Décimer et projeter, Reconstruire et projeter.
+- [x] A progress bar on the action bar, not in the panel, because a panel
+      scrolls and a progress bar you have to scroll to find is not one. The
+      wording follows the fraction, so it says "projection des textures" once
+      the engine has moved on to that stage.
+- [x] A miss rate above fifteen percent says so in words rather than leaving it
+      in a number. A miss is a ray that fell back to the nearest surface point
+      instead of finding the high poly; a lot of them means the cage is too
+      tight for this pair of meshes.
 - [ ] The cage drawn as a translucent shell, live with the slider.
-- [ ] Baked maps land in the Matières slots through the existing `replaceMap`,
-      which means restore already works on them.
+- [ ] Baked maps surfaced in the Matières slots, so the existing restore works
+      on them.
+
+> **Verified against plancton itself, on the identical invocation.**
+> `--faces 8600 --bake --uv-size 4096` on the tombstones:
+>
+> | | charts | utilisation | hits | misses |
+> | --- | ---: | ---: | ---: | ---: |
+> | Albedo | 103 | 83 % | 5,714,289 | 2,885,321 |
+> | plancton | 103 | 83 % | 5,714,289 | 2,885,321 |
+>
+> Identical. The seam is faithful, which is the only thing this test was for.
+>
+> Getting there caught a real bug of my own: `island_angle_deg` had been set to
+> 66 while the code comment claimed the defaults mirrored plancton's. The engine
+> default is 50, and at 66 the same model came out with 85 charts instead of 103.
+> Every default in `RemeshRequest` is worth checking against the engine's own
+> rather than guessed, because a value that merely feels right makes results from
+> the two front doors incomparable.
+>
+> The high miss rate on that model is plancton's own behaviour and not something
+> the integration introduced. It is already written down in its known weaknesses:
+> chart count grows badly on models made of many thin parts, and the miss rate
+> rises with it.
 
 ### Phase 6: per material work [ ]
 - [ ] Ctrl-click to add to the selection, on top of `pick()`.

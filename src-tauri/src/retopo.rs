@@ -66,6 +66,44 @@ pub struct RemeshRequest {
     pub relax_angle_deg: f32,
     /// Pair adjacent triangles into quads and carry the diagonal mask out.
     pub pair_quads: bool,
+
+    // --- the bake ---
+    /// Reproject the source onto the result and write the maps into it.
+    pub bake: bool,
+    /// Side of the square atlas, in texels.
+    pub map_size: u32,
+    /// How far above the surface a ray starts, as a share of the bounding box
+    /// diagonal. Too small and it misses anything poking out of the low poly;
+    /// too large and it reaches across a gap onto the next part.
+    pub cage_out: f32,
+    /// How far below the surface it keeps looking.
+    pub cage_in: f32,
+    /// Empty texels between islands, so mip levels cannot mix two charts.
+    pub gutter: u32,
+    /// Painted colour smeared past every chart border, so filtering never
+    /// samples the background. Not the same thing as the gutter, and both
+    /// matter.
+    pub bleed: u32,
+    /// Above this angle a chart stops growing and a new one starts.
+    pub island_angle_deg: f32,
+    /// Tangent space normal map from the high poly geometry.
+    pub bake_normal: bool,
+    /// Metallic and roughness, read off the high poly.
+    ///
+    /// Without it the whole low poly inherits one pair of scalars, so a gold
+    /// ring on a wooden handle comes back as matte wood. Albedo is not a
+    /// material.
+    pub bake_metallic_roughness: bool,
+    /// Emissive, for anything that gives off light rather than reflecting it.
+    /// Dropped automatically when nothing on the model emits.
+    pub bake_emissive: bool,
+    /// Ambient occlusion, by cosine weighted hemisphere sampling.
+    pub bake_ao: bool,
+    /// Rays per texel for occlusion. Sixteen is enough to read.
+    pub ao_samples: u32,
+    /// How far occlusion looks, as a share of the bounding box diagonal. Short
+    /// means creases only, long means the whole silhouette shades itself.
+    pub ao_distance: f32,
 }
 
 impl Default for RemeshRequest {
@@ -82,6 +120,25 @@ impl Default for RemeshRequest {
             relax_iterations: 0,
             relax_angle_deg: 75.0,
             pair_quads: false,
+            bake: false,
+            map_size: 2048,
+            cage_out: 0.02,
+            cage_in: 0.02,
+            gutter: 4,
+            bleed: 8,
+            // 50, taken from `AtlasOptions::default()` rather than picked
+            // because it felt right. It was 66 here first, which is how the same
+            // model came out with 85 charts where plancton gives 103. Every
+            // default in this struct is worth checking against the engine's own
+            // instead of guessed, which is the only way a result obtained here
+            // and one obtained from plancton's CLI can be compared at all.
+            island_angle_deg: 50.0,
+            bake_normal: true,
+            bake_metallic_roughness: true,
+            bake_emissive: true,
+            bake_ao: false,
+            ao_samples: 16,
+            ao_distance: 0.15,
         }
     }
 }
@@ -115,6 +172,14 @@ pub struct RemeshReport {
     pub quads: usize,
     /// Share of the surface covered by quads rather than lone triangles.
     pub quad_fraction: f32,
+    /// Atlas charts, and how much of the square they actually fill.
+    pub charts: usize,
+    pub utilisation: f32,
+    /// Rays that found the high poly, and rays that did not. A miss rate that
+    /// climbs is a cage too short, or a chart wrapped around something thin.
+    pub hits: usize,
+    pub misses: usize,
+    pub maps: Vec<String>,
     /// Largest distance from the result back to the source, in model units.
     pub deviation_max: f32,
     pub millis: u128,
@@ -168,6 +233,15 @@ pub fn remesh_file(
     }
     progress(0.05);
 
+    // Progress is apportioned by what each stage actually costs rather than
+    // evenly. Baking is the slow one by a wide margin, several seconds against
+    // one, so when it is on it takes most of the bar and the rest compresses.
+    let (r0, r1, x0, x1, b0, b1) = if req.bake {
+        (0.05, 0.38, 0.38, 0.48, 0.52, 0.97)
+    } else {
+        (0.05, 0.65, 0.65, 0.85, 0.92, 0.92)
+    };
+
     // The source, as it will be measured against afterwards. Built before the
     // reduction so relaxation and the deviation both compare to what came in.
     let source_bvh = plancton_core::Bvh::build(&mesh);
@@ -180,7 +254,7 @@ pub fn remesh_file(
                 sharp_angle_deg: req.sharp_angle_deg,
                 ..Default::default()
             };
-            let (m, s) = plancton_remesh::isotropic(&mesh, &opts, &mut |f| progress(0.05 + f * 0.6));
+            let (m, s) = plancton_remesh::isotropic(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
             report.collapses = s.collapses;
             m
         }
@@ -192,7 +266,7 @@ pub fn remesh_file(
                 seam_penalty: req.seam_penalty,
                 ..Default::default()
             };
-            let (m, s) = plancton_remesh::decimate(&mesh, &opts, &mut |f| progress(0.05 + f * 0.6));
+            let (m, s) = plancton_remesh::decimate(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
             report.collapses = s.collapses;
             report.rejected_topology = s.rejected_topology;
             report.rejected_flip = s.rejected_flip;
@@ -200,7 +274,7 @@ pub fn remesh_file(
             m
         }
     };
-    progress(0.65);
+    progress(r1);
 
     // Stage 3: relax, always reprojected. The tangential projection is what
     // stops a sphere deflating a little on every pass.
@@ -212,13 +286,13 @@ pub fn remesh_file(
             ..Default::default()
         };
         let s = plancton_remesh::relax(&mut result, Some(&source_bvh), &opts, &mut |f| {
-            progress(0.65 + f * 0.2)
+            progress(x0 + f * (x1 - x0))
         });
         // The mean, not the worst. See the field's own comment.
         report.aspect_before = s.mean_before;
         report.aspect_after = s.mean_after;
     }
-    progress(0.85);
+    progress(x1);
 
     report.output_triangles = result.triangle_count();
 
@@ -235,7 +309,65 @@ pub fn remesh_file(
         }
         let _ = std::fs::write(sidecar(output, "quads"), &raw);
     }
-    progress(0.92);
+    progress(b0);
+
+    // Stage 5: bake. The source is reprojected onto the result and the maps are
+    // written into it, so what leaves here is a textured low poly rather than a
+    // bare one plus a pile of loose PNGs.
+    //
+    // Five maps and not one. Baking base colour alone was a real omission and it
+    // showed immediately: a gold ring on a wooden handle came back as matte wood,
+    // because the whole low poly inherited a single pair of metallic and
+    // roughness scalars.
+    if req.bake {
+        let opts = plancton_bake::BakeOptions {
+            atlas: plancton_bake::AtlasOptions {
+                resolution: req.map_size,
+                // The gutter and the bleed are two different things and both
+                // matter. This is the empty space between islands, so a mip
+                // level cannot mix two charts.
+                padding: req.gutter,
+                max_chart_angle_deg: req.island_angle_deg,
+                ..Default::default()
+            },
+            cage_out: req.cage_out,
+            cage_in: req.cage_in,
+            bake_normal: req.bake_normal,
+            bake_metallic_roughness: req.bake_metallic_roughness,
+            bake_emissive: req.bake_emissive,
+            bake_ao: req.bake_ao,
+            ao_samples: req.ao_samples,
+            ao_distance: req.ao_distance,
+            // And this is the painted colour smeared past each border, so
+            // filtering never samples the background through a seam.
+            dilate: req.bleed,
+        };
+        let baked = plancton_bake::bake(&result, &mesh, &opts, &mut |f| {
+            progress(b0 + f * (b1 - b0))
+        })
+        .map_err(|e| format!("bake: {e:#}"))?;
+
+        report.charts = baked.stats.charts;
+        report.utilisation = baked.stats.utilisation;
+        report.hits = baked.stats.hits;
+        report.misses = baked.stats.misses;
+        report.maps.push("Couleur de base".into());
+        if baked.stats.has_metallic_roughness {
+            report.maps.push("Métal et rugosité".into());
+        }
+        if baked.stats.has_normal {
+            report.maps.push("Normale".into());
+        }
+        // Emissive is dropped when nothing on the model emits, so asking for it
+        // costs nothing and the report says whether it actually happened.
+        if baked.stats.has_emissive {
+            report.maps.push("Émissif".into());
+        }
+        if baked.stats.has_ao {
+            report.maps.push("Occlusion".into());
+        }
+        result = baked.mesh;
+    }
 
     // How far the result actually moved, per vertex, for the heatmap.
     let dev = plancton_core::wire::deviation_against(&result, &source_bvh);
@@ -278,6 +410,21 @@ albedo remesh <modèle.glb> --faces <N> [options]
   --relax-angle <d>  angle de pli du lissage, défaut 75, volontairement
                      différent de --angle
   --quads            apparier les triangles en quads
+
+ Bake, la source reprojetée sur le résultat :
+  --bake             produire les maps et les écrire dans le résultat
+  --uv-size <N>      côté de l'atlas en texels, défaut 2048
+  --cage-out <f>     départ du rayon au-dessus de la surface, défaut 0.02
+  --cage-in <f>      profondeur de recherche sous la surface, défaut 0.02
+  --gutter <N>       texels vides entre îlots, défaut 4
+  --bleed <N>        texels de bavure peints hors des îlots, défaut 8
+  --island-angle <d> angle au-delà duquel un îlot s'arrête, défaut 66
+  --no-normal        ne pas produire la normale
+  --no-mr            ne pas produire métal et rugosité
+  --no-emissive      ne pas produire l'émissif
+  --ao               produire l'occlusion ambiante
+  --ao-samples <N>   rayons par texel, défaut 16
+  --ao-distance <f>  portée de l'occlusion, défaut 0.15
 ";
 
 /// `albedo.exe remesh …`, or `None` when this is an ordinary launch.
@@ -343,6 +490,58 @@ pub fn cli_main() -> Option<i32> {
             }
             "--relax-angle" => {
                 req.relax_angle_deg = take(i).and_then(|v| v.parse().ok()).unwrap_or(75.0);
+                i += 2;
+            }
+            "--bake" => {
+                req.bake = true;
+                i += 1;
+            }
+            "--uv-size" => {
+                req.map_size = take(i).and_then(|v| v.parse().ok()).unwrap_or(2048);
+                i += 2;
+            }
+            "--cage-out" => {
+                req.cage_out = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.02);
+                i += 2;
+            }
+            "--cage-in" => {
+                req.cage_in = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.02);
+                i += 2;
+            }
+            "--gutter" => {
+                req.gutter = take(i).and_then(|v| v.parse().ok()).unwrap_or(4);
+                i += 2;
+            }
+            "--bleed" => {
+                req.bleed = take(i).and_then(|v| v.parse().ok()).unwrap_or(8);
+                i += 2;
+            }
+            "--island-angle" => {
+                req.island_angle_deg = take(i).and_then(|v| v.parse().ok()).unwrap_or(50.0);
+                i += 2;
+            }
+            "--no-normal" => {
+                req.bake_normal = false;
+                i += 1;
+            }
+            "--no-mr" => {
+                req.bake_metallic_roughness = false;
+                i += 1;
+            }
+            "--no-emissive" => {
+                req.bake_emissive = false;
+                i += 1;
+            }
+            "--ao" => {
+                req.bake_ao = true;
+                i += 1;
+            }
+            "--ao-samples" => {
+                req.ao_samples = take(i).and_then(|v| v.parse().ok()).unwrap_or(16);
+                i += 2;
+            }
+            "--ao-distance" => {
+                req.ao_distance = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.15);
                 i += 2;
             }
             // How the tab drives this process: progress as parsable lines and
@@ -417,6 +616,16 @@ pub fn cli_main() -> Option<i32> {
                         r.quads,
                         r.quad_fraction * 100.0
                     );
+                }
+                if r.charts > 0 {
+                    println!(
+                        "atlas : {} îlots, {:.0} % occupé, {} touches, {} manques",
+                        r.charts,
+                        r.utilisation * 100.0,
+                        r.hits,
+                        r.misses
+                    );
+                    println!("maps : {}", r.maps.join(", "));
                 }
                 println!("écrit : {}", output.display());
             }
@@ -513,6 +722,37 @@ pub async fn retopo_decimate(
         }
         if request.pair_quads {
             cmd.arg("--quads");
+        }
+        if request.bake {
+            cmd.arg("--bake")
+                .arg("--uv-size")
+                .arg(request.map_size.to_string())
+                .arg("--cage-out")
+                .arg(request.cage_out.to_string())
+                .arg("--cage-in")
+                .arg(request.cage_in.to_string())
+                .arg("--gutter")
+                .arg(request.gutter.to_string())
+                .arg("--bleed")
+                .arg(request.bleed.to_string())
+                .arg("--island-angle")
+                .arg(request.island_angle_deg.to_string());
+            if !request.bake_normal {
+                cmd.arg("--no-normal");
+            }
+            if !request.bake_metallic_roughness {
+                cmd.arg("--no-mr");
+            }
+            if !request.bake_emissive {
+                cmd.arg("--no-emissive");
+            }
+            if request.bake_ao {
+                cmd.arg("--ao")
+                    .arg("--ao-samples")
+                    .arg(request.ao_samples.to_string())
+                    .arg("--ao-distance")
+                    .arg(request.ao_distance.to_string());
+            }
         }
         no_window(&mut cmd);
 

@@ -1860,6 +1860,7 @@ async function toggleRetopo() {
     viewer,
     importPart,
     onBusy: setBusy,
+    toast,
     // The right edge holds one panel at a time. Retopo is a state of the viewer
     // rather than a second viewer, so it never sits beside the inspector: the
     // two would overlap, and the third surface would be showing the same model

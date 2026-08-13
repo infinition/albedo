@@ -85,14 +85,89 @@ const SHELL = `
   </div>
 
   <div class="rt-block">
+    <h2>Textures</h2>
+    <label class="rt-check"><input type="checkbox" data-el="bake" /><span>Projeter la source sur le résultat</span></label>
+    <p class="rt-hint">Le maillage réduit porte encore la disposition d'UV de
+      l'original, et passé un certain point cette disposition ne décrit plus la
+      surface sur laquelle elle est posée. Le bake est ce qui rend une réduction
+      agressive utilisable.</p>
+
+    <div data-el="bakeTools">
+      <label class="rt-field">
+        <span>Taille de l'atlas <span class="rt-num" data-el="mapSizeValue">2048</span></span>
+        <input type="range" data-el="mapSize" min="8" max="13" step="1" value="11" />
+      </label>
+
+      <p class="rt-sub">Cartes produites</p>
+      <label class="rt-check"><input type="checkbox" checked disabled /><span>Couleur de base</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mMR" checked /><span>Métal et rugosité</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mNormal" checked /><span>Normale</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mEmissive" checked /><span>Émissif</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mAo" /><span>Occlusion ambiante</span></label>
+      <p class="rt-hint">La couleur de base seule ne suffit pas : sans métal ni
+        rugosité, tout le résultat hérite d'une seule paire de scalaires, et une
+        boucle en laiton sur un manche en bois revient en bois mat. L'émissif est
+        abandonné tout seul quand rien n'émet, donc le laisser coché ne coûte
+        rien.</p>
+
+      <div data-el="aoTools">
+        <label class="rt-field">
+          <span>Rayons par texel <span class="rt-num" data-el="aoSamplesValue">16</span></span>
+          <input type="range" data-el="aoSamples" min="4" max="128" step="4" value="16" />
+        </label>
+        <label class="rt-field">
+          <span>Portée de l'occlusion <span class="rt-num" data-el="aoDistanceValue">0.15</span></span>
+          <input type="range" data-el="aoDistance" min="0.01" max="1" step="0.01" value="0.15" />
+        </label>
+        <p class="rt-hint">Courte, seuls les creux s'assombrissent ; longue, toute
+          la silhouette s'ombre elle-même. La séquence de tirage est déterministe,
+          donc deux bakes du même modèle se ressemblent exactement et comparer
+          deux réglages n'est pas une devinette.</p>
+      </div>
+
+      <p class="rt-sub">Cage</p>
+      <label class="rt-field">
+        <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.02</span></span>
+        <input type="range" data-el="cageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
+      </label>
+      <label class="rt-field">
+        <span>Vers l'intérieur <span class="rt-num" data-el="cageInValue">0.02</span></span>
+        <input type="range" data-el="cageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
+      </label>
+      <p class="rt-hint">Trop courte, le rayon rate ce qui dépasse du maillage
+        réduit ; trop longue, il traverse un vide et touche la pièce d'à côté.</p>
+
+      <p class="rt-sub">Atlas</p>
+      <label class="rt-field">
+        <span>Écart entre îlots <span class="rt-num" data-el="gutterValue">4</span></span>
+        <input type="range" data-el="gutter" min="0" max="32" step="1" value="4" />
+      </label>
+      <label class="rt-field">
+        <span>Bavure hors des îlots <span class="rt-num" data-el="bleedValue">8</span></span>
+        <input type="range" data-el="bleed" min="0" max="32" step="1" value="8" />
+      </label>
+      <label class="rt-field">
+        <span>Angle de rupture d'îlot <span class="rt-num" data-el="islandValue">50°</span></span>
+        <input type="range" data-el="island" min="10" max="120" step="1" value="50" />
+      </label>
+      <p class="rt-hint">Ce sont deux choses différentes et les deux comptent :
+        l'écart est du vide entre les îlots pour qu'aucun niveau de mip ne les
+        mélange, la bavure est de la couleur peinte au-delà de chaque bord pour
+        que le filtrage n'aille jamais chercher le fond.</p>
+    </div>
+  </div>
+
+  <div class="rt-block">
     <h2>Dernier passage</h2>
     <p class="rt-hint" data-el="report">Rien encore.</p>
   </div>
 </div>
 
-<div class="rt-bar">
+<div class="rt-bar" data-el="bar">
   <button class="wide" type="button" data-el="run">Décimer</button>
+  <span class="rt-note" data-el="note"></span>
   <button class="wide" type="button" data-el="close">Fermer</button>
+  <div class="rt-progress"><i data-el="fill"></i></div>
 </div>
 `;
 
@@ -111,7 +186,7 @@ function countTriangles(root) {
 
 const fr = (n) => n.toLocaleString("fr-FR");
 
-export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }) {
+export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, toast }) {
   const host = document.createElement("div");
   host.id = "retopo";
   host.innerHTML = SHELL;
@@ -141,10 +216,15 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
     el.mDecimate.classList.toggle("active", next === "decimate");
     el.mIsotropic.classList.toggle("active", next === "isotropic");
     el.methodHint.textContent = METHOD_HINT[next];
+    // The run button says what it will do, and the method is what decides that.
+    paint();
   }
 
   /** The budget in triangles, from the slider's percentage. */
   const budget = () => Math.max(4, Math.round((source * Number(el.target.value)) / 100));
+
+  /** The atlas side, from the slider's exponent. */
+  const mapSize = () => 2 ** Number(el.mapSize.value);
 
   function paint() {
     el.targetValue.textContent = source ? `${fr(budget())} · ${el.target.value} %` : `${el.target.value} %`;
@@ -153,12 +233,44 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
     el.relaxValue.textContent = el.relax.value;
     el.relaxAngleValue.textContent = `${el.relaxAngle.value}°`;
 
-    el.hudSource.textContent = source ? fr(source) : "—";
-    el.hudResult.textContent = last ? fr(last.outputTriangles) : "—";
-    el.hudCut.textContent = last
-      ? `${(100 - (last.outputTriangles / last.inputTriangles) * 100).toFixed(1)} %`
-      : "—";
-    el.hudQuads.textContent = last?.quads ? `${(last.quadFraction * 100).toFixed(0)} %` : "—";
+    // The atlas slider is an exponent, because the useful sizes are powers of
+    // two and a linear 256..8192 slider spends most of its travel on values
+    // nobody picks.
+    el.mapSizeValue.textContent = String(mapSize());
+    el.cageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
+    el.cageInValue.textContent = Number(el.cageIn.value).toFixed(3);
+    el.gutterValue.textContent = el.gutter.value;
+    el.bleedValue.textContent = el.bleed.value;
+    el.islandValue.textContent = `${el.island.value}°`;
+    el.aoSamplesValue.textContent = el.aoSamples.value;
+    el.aoDistanceValue.textContent = Number(el.aoDistance.value).toFixed(2);
+
+    el.bakeTools.classList.toggle("rt-off", !el.bake.checked);
+    el.aoTools.classList.toggle("rt-off", !el.mAo.checked);
+
+    setStat(el.hudSource, source ? fr(source) : null);
+    setStat(el.hudResult, last ? fr(last.outputTriangles) : null);
+    setStat(
+      el.hudCut,
+      last ? `${(100 - (last.outputTriangles / last.inputTriangles) * 100).toFixed(1)} %` : null
+    );
+    setStat(el.hudQuads, last?.quads ? `${(last.quadFraction * 100).toFixed(0)} %` : null);
+
+    // The button says what it will do, because the method segment is above the
+    // fold and the button is at the bottom of the window.
+    el.run.textContent = el.bake.checked
+      ? method === "isotropic"
+        ? "Reconstruire et projeter"
+        : "Décimer et projeter"
+      : method === "isotropic"
+        ? "Reconstruire"
+        : "Décimer";
+  }
+
+  /** A stat nobody has filled in yet should not read as loudly as a real one. */
+  function setStat(node, text) {
+    node.textContent = text ?? "—";
+    node.classList.toggle("rt-void", text == null);
   }
 
   function refresh() {
@@ -168,17 +280,31 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
     paint();
   }
 
-  for (const k of ["target", "angle", "seam", "relax", "relaxAngle"]) {
-    el[k].addEventListener("input", paint);
+  const LIVE = [
+    "target", "angle", "seam", "relax", "relaxAngle",
+    "mapSize", "cageOut", "cageIn", "gutter", "bleed", "island",
+    "aoSamples", "aoDistance",
+  ];
+  for (const k of LIVE) el[k].addEventListener("input", paint);
+  for (const k of ["bake", "mAo", "holes", "boundary", "quads", "mMR", "mNormal", "mEmissive"]) {
+    el[k].addEventListener("change", paint);
   }
   el.mDecimate.addEventListener("click", () => setMethod("decimate"));
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
+
+  /** The bar, the fill and the note, in one place so they cannot disagree. */
+  function say(text, fraction) {
+    el.note.textContent = text || "";
+    el.bar.classList.toggle("busy", running);
+    if (typeof fraction === "number") el.fill.style.width = `${Math.round(fraction * 100)}%`;
+  }
 
   async function decimate() {
     if (running || !tauri || !viewer.current) return;
     running = true;
     el.run.disabled = true;
-    el.report.textContent = "Export de la scène…";
+    el.fill.style.width = "0%";
+    say("Export de la scène…", 0);
     onBusy?.(true);
 
     let stop = null;
@@ -197,9 +323,14 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(dirs.input, new Uint8Array(glb));
 
-      el.report.textContent = "Décimation…";
+      const verb = method === "isotropic" ? "Reconstruction" : "Décimation";
+      say(`${verb}…`, 0);
       stop = await tauri.event.listen("retopo://progress", (e) => {
-        el.report.textContent = `Décimation… ${Math.round((e.payload || 0) * 100)} %`;
+        const f = e.payload || 0;
+        // The engine apportions its own bar by what each stage costs, so the
+        // wording follows the fraction rather than being timed here.
+        const what = !el.bake.checked || f < 0.5 ? verb : "Projection des textures";
+        say(`${what}… ${Math.round(f * 100)} %`, f);
       });
 
       const r = await tauri.core.invoke("retopo_decimate", {
@@ -215,10 +346,23 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
           relaxIterations: Number(el.relax.value),
           relaxAngleDeg: Number(el.relaxAngle.value),
           pairQuads: el.quads.checked,
+          bake: el.bake.checked,
+          mapSize: mapSize(),
+          cageOut: Number(el.cageOut.value),
+          cageIn: Number(el.cageIn.value),
+          gutter: Number(el.gutter.value),
+          bleed: Number(el.bleed.value),
+          islandAngleDeg: Number(el.island.value),
+          bakeNormal: el.mNormal.checked,
+          bakeMetallicRoughness: el.mMR.checked,
+          bakeEmissive: el.mEmissive.checked,
+          bakeAo: el.mAo.checked,
+          aoSamples: Number(el.aoSamples.value),
+          aoDistance: Number(el.aoDistance.value),
         },
       });
 
-      el.report.textContent = "Chargement du résultat…";
+      say("Chargement du résultat…", 1);
       await importPart(dirs.output);
       last = r;
 
@@ -251,13 +395,36 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
       if (r.quads) {
         lines.push(`${fr(r.quads)} quads, ${(r.quadFraction * 100).toFixed(0)} % de la surface.`);
       }
+      if (r.charts) {
+        const total = r.hits + r.misses;
+        const miss = total ? (r.misses / total) * 100 : 0;
+        lines.push(
+          `Atlas : ${fr(r.charts)} îlots, ${(r.utilisation * 100).toFixed(0)} % occupé, ` +
+            `${miss.toFixed(1)} % de rayons manqués.`
+        );
+        lines.push(`Cartes : ${r.maps.join(", ")}.`);
+        // A miss is a ray that fell back to the nearest surface point rather
+        // than finding the high poly. A few are normal; a lot means the cage is
+        // too tight for this pair of meshes, or a chart wrapped around something
+        // thin. Worth saying out loud rather than leaving in a number.
+        if (miss > 15) {
+          lines.push("Beaucoup de manques : essaie une cage plus longue.");
+        }
+      }
       el.report.textContent = lines.join(" ");
+
+      const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
+      toast?.(`${fr(r.outputTriangles)} triangles, ${cut} % de moins`);
+      say("");
     } catch (e) {
       el.report.textContent = String(e);
+      say("");
+      toast?.("La retopologie a échoué");
     } finally {
       stop?.();
       running = false;
       onBusy?.(false);
+      el.bar.classList.remove("busy");
       refresh();
     }
   }

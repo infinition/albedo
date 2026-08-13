@@ -25,6 +25,7 @@ serde_json = "1"
 # and works on exactly one machine. See docs/RETOPO.md.
 plancton-core = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-core" }
 plancton-remesh = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-remesh" }
+plancton-bake = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-bake" }
 
 # Attaching the shell provider from inside the application, so a portable copy
 # can offer it without an installer.
@@ -53,10 +54,14 @@ strip = true
 opt-level = 3
 [profile.release.package.plancton-remesh]
 opt-level = 3
+[profile.release.package.plancton-bake]
+opt-level = 3
 
 # The BVH and the decimator are unusable at `opt-level = 0` on a real mesh, so a
 # debug build still optimises them while keeping fast recompiles of our own code.
 [profile.dev.package.plancton-core]
 opt-level = 3
 [profile.dev.package.plancton-remesh]
+opt-level = 3
+[profile.dev.package.plancton-bake]
 opt-level = 3
