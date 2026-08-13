@@ -168,13 +168,38 @@ honest number is the last row, and it is a ceiling rather than the cost, because
 it still contains `plancton-server` with axum and tower-http, the CLI's argument
 parsing, `tracing-subscriber`, and a Rust runtime Albedo already links.
 
-**Expect the marginal cost to land between 2 and 3 MB**, taking Albedo from
-about 4.4 MB to about 7 MB. The README's "3.7 MB executable" headline will need
-rewriting. A 7 MB viewer is still comfortably the thing that README claims to be.
+### The real number, now that the two are linked
 
-The exact figure cannot be known before the two are actually linked, because fat
-LTO deduplicates across both trees. Measuring it is one evening: add the crates,
-wire one command, look at the exe.
+The estimate above was 2 to 3 MB. It was wrong, and low. Measured on this
+machine, both builds at Albedo's release profile:
+
+| Build | Bytes | Link time |
+| --- | ---: | ---: |
+| `albedo.exe`, before | 3,947,008 | 3 m 55 s |
+| `albedo.exe`, with decimation wired | **8,893,440** | 5 m 58 s |
+| **Cost** | **+4,946,432 (+125 %)** | +2 m |
+
+The old 4.4 MB binary on disk was stale, from before the project moved: a fresh
+baseline is 3.95 MB, which is the "3.7 MB executable" the README claims, so that
+claim was accurate.
+
+Three reasons the estimate missed, and only the first was in it:
+
+1. `gltf` and `image` are not small.
+2. **The engine is built at `opt-level = 3`, not `"s"`.** That is deliberate and
+   it is the whole point of the per package override, but it means the engine's
+   code is optimised for speed in a binary otherwise optimised for size.
+3. **Dropping `panic = "abort"` adds unwinding tables to the entire binary**, not
+   to the engine alone. This is the one that was missed: it is not a cost of the
+   engine, it is a cost the engine's presence imposes on Albedo's own code and on
+   every dependency it already had.
+
+And this is decimation only. The baker is not wired yet, so the number will grow
+again in phase 5.
+
+Whether 8.9 MB is acceptable is a judgement, not a measurement. It is still one
+file with nothing to install, which is the promise that matters, but the README's
+headline number has to be rewritten rather than quietly left wrong.
 
 ---
 
@@ -280,7 +305,7 @@ Decisions taken:
 > Only a full `cargo clean --release` does. Worth knowing before mistaking it for
 > something the integration broke.
 
-### Phase 1: the seam [ ]
+### Phase 1: the seam [x]
 - [ ] Add `plancton-core`, `plancton-remesh`, `plancton-bake` and
       `plancton-server` as dependencies.
 
@@ -291,19 +316,52 @@ Decisions taken:
       plancton is published, the path is relative and five levels deep, which
       works on one machine and breaks on every other. Switching it is a one line
       change and it belongs in phase 7, before any release.
-- [ ] Per package `opt-level = 3` overrides, and the `catch_unwind` boundary.
-- [ ] One Tauri command, `retopo_decimate`, taking GLB bytes and a target count,
-      returning GLB bytes. Nothing else. Prove the round trip.
-- [ ] Measure the binary and the cold start, both before and after, and write the
-      numbers into this file.
+- [x] Per package `opt-level = 3` overrides for `plancton-core` and
+      `plancton-remesh`, in release and in dev, and `panic = "abort"` removed
+      from the release profile so the `catch_unwind` boundary in
+      `src/retopo.rs` can actually fire.
+- [x] Two Tauri commands. `retopo_workdir` hands back the two paths a run uses,
+      chosen by Rust so the webview needs no path API and the capability set
+      does not grow. `retopo_decimate` does the work on a blocking thread and
+      reports progress on the event bus, one event per percent rather than one
+      per collapse.
+- [x] **Files, not IPC payloads.** The frontend writes its exported GLB to the
+      path Rust chose and reads the result back through the loader that already
+      exists. A 960k triangle model would otherwise cross the bridge twice as a
+      JSON array of numbers.
+- [x] Measure the binary before and after, and write the numbers into this file.
+      Done above, and the estimate they replaced was wrong by a factor of two.
+- [ ] Measure cold start, before and after, on a folder of models rather than a
+      single launch. This is the number the thumbnail provider actually cares
+      about and it is not taken yet.
 
-### Phase 2: the tab [ ]
-- [ ] Eighth icon in the tab strip, tooltip Retopo, pane `data-pane="retopo"`.
-- [ ] The pane's module is a lazy chunk, fetched on first open. Verify the Vite
-      chunk boundary held rather than assuming it.
-- [ ] Target triangle count, method choice between Decimate, Rebuild and Pair.
-- [ ] Progress over the Tauri event bus, and cancellation.
-- [ ] Result lands in the scene as a second model, with an A/B toggle.
+### Phase 2: the tab [~]
+- [x] Eighth icon in the tab strip, tooltip Retopo, pane `data-pane="retopo"`.
+      Measured: 8 tabs, and the strip does not overflow at the inspector's 324
+      pixels.
+- [x] The pane's module is a lazy chunk, fetched on first open. **Verified, not
+      assumed**: the panel's code lands in its own 2,648 byte chunk, the startup
+      bundle contains zero occurrences of it, and the network log shows the chunk
+      requested 24 seconds after load, which is when the tab was clicked.
+- [x] Budget as a percentage of the source, resolved to an exact triangle count
+      next to the slider, plus the three guards that decide what survives:
+      open borders, crease angle, seam cost.
+- [x] Progress on the Tauri event bus.
+- [x] Result lands in the scene beside the source through `importPart`, which
+      gives it the same loader and the same material corrections a plain open
+      would.
+- [x] The run reports its refusals, not only its triangle count. A run with a
+      large refusal count and a barely moved count is a guard firing on every
+      candidate, and it looks exactly like a run with nothing left to collapse
+      unless both numbers are on screen.
+- [ ] Method choice between Decimate, Rebuild and Pair. Only Decimate is wired.
+- [ ] Cancellation.
+- [ ] An A/B toggle between source and result.
+
+> The pane overflows horizontally by 4 pixels. So do Caméra, Rendu and Effets,
+> for the same reason: a full width `input[type=range]`. Left alone on purpose.
+> Matching the other seven panes matters more than winning 4 pixels in one of
+> them.
 
 ### Phase 3: reading the result [ ]
 - [ ] Quad diagonal mask transported beside the GLB, honoured by a line material.

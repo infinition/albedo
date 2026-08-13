@@ -339,6 +339,24 @@ function showDimensions() {
   $("dimensions").textContent = `${n(x)} × ${n(y)} × ${n(z)} unités`;
 }
 
+/**
+ * Retopology, fetched the first time its tab is opened and not before.
+ *
+ * Same reasoning as the library, and it counts for more here: this executable is
+ * also the Explorer thumbnail provider, one process per file, so a decimator's
+ * panel parsed at startup would be paid once per model in a browsed folder. The
+ * icon is always in the strip; nothing behind it exists until it is clicked.
+ */
+let retopo = null;
+async function ensureRetopo() {
+  if (retopo) {
+    retopo.refresh();
+    return;
+  }
+  const { createRetopo } = await import("./retopo/index.js");
+  retopo = createRetopo({ tauri, viewer, importPart, onBusy: setBusy });
+}
+
 function showStats(stats, extra) {
   const n = (v) => v.toLocaleString("fr-FR");
   const parts = [];
@@ -349,6 +367,9 @@ function showStats(stats, extra) {
   parts.push(`${stats.materials} mat`, `${stats.textures} tex`);
   if (extra) parts.push(extra);
   $("stats").textContent = parts.join(" · ");
+  // The Retopo panel is a budget expressed against the triangle count, so it is
+  // wrong the moment this number moves. Only if the panel was ever opened.
+  retopo?.refresh();
 }
 
 /** Open a path coming from the OS (dialog, "Open with", drag & drop). */
@@ -1165,6 +1186,9 @@ function showPane(name, remember = true) {
   // reads across the bridge, and nobody needs the answer until they are looking
   // at the panel that shows it.
   if (name === "scene") refreshShellState();
+  // The whole retopology panel, its module and the exporter it reaches for are
+  // one lazy chunk, fetched here and never at startup.
+  if (name === "retopo") ensureRetopo();
   for (const tab of document.querySelectorAll(".tab")) {
     tab.classList.toggle("active", tab.dataset.pane === name);
   }

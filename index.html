@@ -112,6 +112,9 @@
           <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
             <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
           </button>
+          <button class="tab" type="button" data-pane="retopo" title="Retopo" aria-label="Retopo">
+            <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
+          </button>
         </nav>
 
         <div class="pane active" data-pane="render">
@@ -494,6 +497,40 @@
           <p id="export-note" class="hint"></p>
           <div id="tree" class="tree">—</div>
         </section>
+        </div>
+
+        <div class="pane" data-pane="retopo">
+        <div id="retopo-tools" hidden>
+        <section>
+          <h2>Budget</h2>
+          <label class="field">
+            <span>Triangles <span id="retopo-target-value" class="mono">—</span></span>
+            <input type="range" id="retopo-target" min="1" max="90" step="1" value="10" />
+          </label>
+          <p class="hint">La part du maillage source à garder. Un budget dépensé par
+            l'erreur quadrique met les triangles là où la silhouette en a besoin,
+            pas régulièrement.</p>
+        </section>
+
+        <section>
+          <h2>Garde-fous</h2>
+          <label class="check"><input type="checkbox" id="retopo-boundary" checked /><span>Épingler les bords ouverts</span></label>
+          <label class="field"><span>Angle de pli <span id="retopo-angle-value" class="mono">40°</span></span>
+            <input type="range" id="retopo-angle" min="5" max="90" step="1" value="40" /></label>
+          <label class="field"><span>Coût d'une couture <span id="retopo-seam-value" class="mono">4</span></span>
+            <input type="range" id="retopo-seam" min="0" max="20" step="1" value="4" /></label>
+          <p class="hint">Une arête plus pliée que l'angle compte comme un pli et résiste.
+            Le coût d'une couture protège les bords d'UV, dont la rupture se voit dans
+            la texture bien avant de se voir dans la forme.</p>
+        </section>
+
+        <section>
+          <button id="retopo-run" class="wide" type="button">Décimer</button>
+          <p id="retopo-note" class="hint"></p>
+          <p id="retopo-report" class="hint mono" hidden>—</p>
+        </section>
+        </div>
+        <p class="hint" id="retopo-empty">Ouvre un modèle pour le retopologiser.</p>
         </div>
       </aside>
       </div>

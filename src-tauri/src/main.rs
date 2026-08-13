@@ -3,6 +3,7 @@
 #![windows_subsystem = "windows"]
 
 mod library;
+mod retopo;
 mod shell;
 
 use std::path::PathBuf;
@@ -405,6 +406,8 @@ fn main() {
             library::thumbnail_save,
             library::thumbnail_render,
             library::thumbnails_prune,
+            retopo::retopo_workdir,
+            retopo::retopo_decimate,
             startup_file,
             supported_extensions,
             scan_textures,

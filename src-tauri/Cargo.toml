@@ -16,6 +16,16 @@ tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# The retopology and baking engine. Pure Rust: no CUDA, no Python, no C++, and
+# nothing to install on a build machine.
+#
+# These are path dependencies and they must not ship as such. The clean answer
+# is a git dependency on the plancton repository, but that repository has never
+# been pushed, so a git dependency cannot resolve. The path is five levels deep
+# and works on exactly one machine. See docs/RETOPO.md.
+plancton-core = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-core" }
+plancton-remesh = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-remesh" }
+
 # Attaching the shell provider from inside the application, so a portable copy
 # can offer it without an installer.
 [target.'cfg(windows)'.dependencies]
@@ -26,5 +36,25 @@ windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Libr
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
 strip = true
+# `panic = "abort"` used to be here and cannot come back while the engine is in.
+# This executable is also the Explorer thumbnail provider, one process per file,
+# so a panic on one malformed mesh would take out the preview for a whole
+# folder. The engine catches its own panics, and `catch_unwind` needs an unwind
+# to catch. Cargo also refuses `panic` in a per package override, so it cannot be
+# relaxed for the engine alone. See docs/RETOPO.md.
+
+# Retopology is compute bound and would otherwise inherit `opt-level = "s"`,
+# which is right for a viewer and wrong for a decimator running quadric error
+# metrics over a million triangles.
+[profile.release.package.plancton-core]
+opt-level = 3
+[profile.release.package.plancton-remesh]
+opt-level = 3
+
+# The BVH and the decimator are unusable at `opt-level = 0` on a real mesh, so a
+# debug build still optimises them while keeping fast recompiles of our own code.
+[profile.dev.package.plancton-core]
+opt-level = 3
+[profile.dev.package.plancton-remesh]
+opt-level = 3
