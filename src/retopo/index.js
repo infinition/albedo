@@ -24,22 +24,28 @@ const SHELL = `
   <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
   <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
   <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
+  <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
 </dl>
 
 <div class="rt-panel" data-el="panel">
   <div class="rt-block">
-    <h2>Budget</h2>
+    <h2>Méthode</h2>
+    <div class="segment" role="group" aria-label="Méthode">
+      <button class="seg active" type="button" data-el="mDecimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
+      <button class="seg" type="button" data-el="mIsotropic" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
+    </div>
     <label class="rt-field">
       <span>Triangles <span class="rt-num" data-el="targetValue">—</span></span>
       <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
     </label>
-    <p class="rt-hint">La part du maillage source à garder. Un budget dépensé par
-      l'erreur quadrique met les triangles là où la silhouette en a besoin, pas
-      régulièrement.</p>
+    <p class="rt-hint" data-el="methodHint">L'erreur quadrique met les triangles là
+      où la silhouette en a besoin, pas régulièrement. C'est ce que veut un
+      accessoire figé.</p>
   </div>
 
   <div class="rt-block">
     <h2>Garde-fous</h2>
+    <label class="rt-check"><input type="checkbox" data-el="holes" /><span>Combler les trous d'abord</span></label>
     <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span>Épingler les bords ouverts</span></label>
     <label class="rt-field">
       <span>Angle de pli <span class="rt-num" data-el="angleValue">40°</span></span>
@@ -52,6 +58,30 @@ const SHELL = `
     <p class="rt-hint">Une arête plus pliée que l'angle compte comme un pli et
       résiste. Le coût d'une couture protège les bords d'UV, dont la rupture se
       voit dans la texture bien avant de se voir dans la forme.</p>
+  </div>
+
+  <div class="rt-block">
+    <h2>Lissage</h2>
+    <label class="rt-field">
+      <span>Passes <span class="rt-num" data-el="relaxValue">0</span></span>
+      <input type="range" data-el="relax" min="0" max="10" step="1" value="0" />
+    </label>
+    <label class="rt-field">
+      <span>Angle de pli du lissage <span class="rt-num" data-el="relaxAngleValue">75°</span></span>
+      <input type="range" data-el="relaxAngle" min="20" max="150" step="5" value="75" />
+    </label>
+    <p class="rt-hint">Chaque passe est reprojetée sur la source, sinon une sphère
+      dégonfle un peu à chaque fois. Cet angle n'est pas celui du dessus, et c'est
+      voulu : un maillage réduit cinquante fois est facetté partout, donc l'angle
+      qui veut dire « pli » pour un décimateur veut dire « tout le modèle » pour
+      un lisseur.</p>
+  </div>
+
+  <div class="rt-block">
+    <h2>Quads</h2>
+    <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
+    <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
+      fichier comme un masque de diagonale, un entier par triangle.</p>
   </div>
 
   <div class="rt-block">
@@ -94,6 +124,24 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
   let last = null;
   let running = false;
   let open = false;
+  let method = "decimate";
+
+  const METHOD_HINT = {
+    decimate:
+      "L'erreur quadrique met les triangles là où la silhouette en a besoin, pas " +
+      "régulièrement. C'est ce que veut un accessoire figé.",
+    isotropic:
+      "Des arêtes de longueur égale et une valence de six, ce qui donne des boucles " +
+      "prévisibles autour d'une articulation. C'est ce que veut un modèle qui va se " +
+      "déformer ou se subdiviser, et c'est aussi ce dont l'appairage en quads a besoin.",
+  };
+
+  function setMethod(next) {
+    method = next;
+    el.mDecimate.classList.toggle("active", next === "decimate");
+    el.mIsotropic.classList.toggle("active", next === "isotropic");
+    el.methodHint.textContent = METHOD_HINT[next];
+  }
 
   /** The budget in triangles, from the slider's percentage. */
   const budget = () => Math.max(4, Math.round((source * Number(el.target.value)) / 100));
@@ -102,12 +150,15 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
     el.targetValue.textContent = source ? `${fr(budget())} · ${el.target.value} %` : `${el.target.value} %`;
     el.angleValue.textContent = `${el.angle.value}°`;
     el.seamValue.textContent = el.seam.value;
+    el.relaxValue.textContent = el.relax.value;
+    el.relaxAngleValue.textContent = `${el.relaxAngle.value}°`;
 
     el.hudSource.textContent = source ? fr(source) : "—";
     el.hudResult.textContent = last ? fr(last.outputTriangles) : "—";
     el.hudCut.textContent = last
       ? `${(100 - (last.outputTriangles / last.inputTriangles) * 100).toFixed(1)} %`
       : "—";
+    el.hudQuads.textContent = last?.quads ? `${(last.quadFraction * 100).toFixed(0)} %` : "—";
   }
 
   function refresh() {
@@ -117,7 +168,11 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
     paint();
   }
 
-  for (const k of ["target", "angle", "seam"]) el[k].addEventListener("input", paint);
+  for (const k of ["target", "angle", "seam", "relax", "relaxAngle"]) {
+    el[k].addEventListener("input", paint);
+  }
+  el.mDecimate.addEventListener("click", () => setMethod("decimate"));
+  el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
 
   async function decimate() {
     if (running || !tauri || !viewer.current) return;
@@ -151,10 +206,15 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
         input: dirs.input,
         output: dirs.output,
         request: {
+          method,
           targetTriangles: budget(),
+          fillHoles: el.holes.checked,
           preserveBoundary: el.boundary.checked,
           sharpAngleDeg: Number(el.angle.value),
           seamPenalty: Number(el.seam.value),
+          relaxIterations: Number(el.relax.value),
+          relaxAngleDeg: Number(el.relaxAngle.value),
+          pairQuads: el.quads.checked,
         },
       });
 
@@ -166,11 +226,32 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
       // count and a barely moved triangle count is a guard firing on every
       // candidate, and it looks exactly like a run that simply had nothing left
       // to collapse unless the numbers are on screen.
-      el.report.textContent =
+      const lines = [
         `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)} triangles en ` +
-        `${(r.millis / 1000).toFixed(2)} s. ${fr(r.collapses)} fusions, ` +
-        `refus : ${fr(r.rejectedTopology)} topologie, ${fr(r.rejectedFlip)} retournement. ` +
-        `Écart maximum ${r.maxError.toPrecision(3)} unité.`;
+          `${(r.millis / 1000).toFixed(2)} s, déviation maximum ` +
+          `${r.deviationMax.toPrecision(3)} unité.`,
+      ];
+      if (r.holesFilled || r.holesLeft) {
+        lines.push(`Trous : ${fr(r.holesFilled)} comblés, ${fr(r.holesLeft)} laissés ouverts.`);
+      }
+      if (r.rejectedTopology || r.rejectedFlip) {
+        lines.push(
+          `${fr(r.collapses)} fusions, refus : ${fr(r.rejectedTopology)} topologie, ` +
+            `${fr(r.rejectedFlip)} retournement.`
+        );
+      }
+      // The mean, never the worst. The worst triangle sits on a crease, which
+      // relaxation pins on purpose, so it barely moves even when the mesh
+      // improved throughout.
+      if (r.aspectAfter > 0) {
+        lines.push(
+          `Rapport d'aspect moyen : ${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}.`
+        );
+      }
+      if (r.quads) {
+        lines.push(`${fr(r.quads)} quads, ${(r.quadFraction * 100).toFixed(0)} % de la surface.`);
+      }
+      el.report.textContent = lines.join(" ");
     } catch (e) {
       el.report.textContent = String(e);
     } finally {
@@ -183,6 +264,7 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }
 
   el.run.addEventListener("click", decimate);
   el.close.addEventListener("click", () => api.hide());
+  setMethod("decimate");
 
   const api = {
     get open() {

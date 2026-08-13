@@ -37,26 +37,51 @@ use serde::{Deserialize, Serialize};
 /// only value a user should be forced to think about is the triangle budget.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct DecimateRequest {
+pub struct RemeshRequest {
+    /// `decimate` spends a budget where the silhouette needs it. `isotropic`
+    /// rebuilds toward even edge lengths and a valence of six, which is what a
+    /// model that will deform or subdivide wants instead.
+    pub method: String,
     /// Stop once this many triangles remain.
     pub target_triangles: usize,
+    /// Close boundary loops before anything else runs. A hole reached by the
+    /// bake later is a hole the cage projects through.
+    pub fill_holes: bool,
     /// Pin open borders in place.
     pub preserve_boundary: bool,
     /// Dihedral angle, in degrees, above which an edge counts as a crease.
     pub sharp_angle_deg: f32,
     /// Extra cost for collapsing across a UV seam or a normal split.
     pub seam_penalty: f32,
+    /// Tangential relax passes, each one reprojected onto the source.
+    pub relax_iterations: u32,
+    /// The crease angle **relaxation** uses, which is deliberately not the one
+    /// decimation uses.
+    ///
+    /// Sharing them once cost a debugging session: relax inherited the
+    /// decimation angle, pinned eighty six percent of the vertices and silently
+    /// did nothing. A mesh reduced fifty to one is faceted everywhere, so the
+    /// angle that means "crease" to a decimator means "the whole model" to a
+    /// smoother. Two questions, two numbers.
+    pub relax_angle_deg: f32,
+    /// Pair adjacent triangles into quads and carry the diagonal mask out.
+    pub pair_quads: bool,
 }
 
-impl Default for DecimateRequest {
+impl Default for RemeshRequest {
     fn default() -> Self {
         // Mirrors plancton's own defaults rather than inventing a second set,
         // so a result obtained here and one obtained from its CLI agree.
         Self {
+            method: "decimate".into(),
             target_triangles: 0,
+            fill_holes: false,
             preserve_boundary: true,
             sharp_angle_deg: 40.0,
             seam_penalty: 4.0,
+            relax_iterations: 0,
+            relax_angle_deg: 75.0,
+            pair_quads: false,
         }
     }
 }
@@ -68,9 +93,9 @@ impl Default for DecimateRequest {
 /// met". A run with a large refusal count and an untouched triangle count is the
 /// signature of a guard firing on every candidate, which has happened before and
 /// cost a debugging session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DecimateReport {
+pub struct RemeshReport {
     pub input_triangles: usize,
     pub output_triangles: usize,
     pub collapses: usize,
@@ -78,25 +103,53 @@ pub struct DecimateReport {
     pub rejected_flip: usize,
     /// Largest accepted surface displacement, in model units.
     pub max_error: f32,
+    /// Boundary loops closed, and the ones left alone for being too large.
+    pub holes_filled: usize,
+    pub holes_left: usize,
+    /// Mean triangle aspect ratio before and after relaxation. The mean is the
+    /// honest number here: the worst triangle sits on a crease, which relaxation
+    /// pins on purpose, so it barely moves even when the mesh improved
+    /// throughout.
+    pub aspect_before: f32,
+    pub aspect_after: f32,
+    pub quads: usize,
+    /// Share of the surface covered by quads rather than lone triangles.
+    pub quad_fraction: f32,
+    /// Largest distance from the result back to the source, in model units.
+    pub deviation_max: f32,
     pub millis: u128,
 }
 
-/// Decimate one GLB into another. The whole engine call, with no Tauri in it.
+/// Run the whole pipeline on one GLB and write another. No Tauri in it.
 ///
 /// Shared by the `remesh` subcommand and, later, the HTTP handler, so the doors
-/// cannot drift apart.
-pub fn decimate_file(
+/// cannot drift apart. The order is the one plancton settled on: close holes on
+/// the source first, because a boundary the decimator has to respect is a
+/// boundary the bake later projects through; then reduce; then relax, which only
+/// makes sense once the triangles it is smoothing exist; then pair.
+///
+/// Two things travel beside the GLB, because glTF has nowhere to put them:
+///
+/// - `<output>.quads`, one `u32` per triangle. Bit `k` set means the edge from
+///   corner `k` to corner `k+1` is a real edge; the cleared bit on a paired
+///   triangle is the quad's diagonal. glTF has no quads, so this is how quad
+///   topology survives a format that cannot hold it.
+/// - `<output>.dev`, one `f32` per vertex, the distance back to the source
+///   through its BVH. This is what a deviation heatmap reads.
+pub fn remesh_file(
     input: &Path,
     output: &Path,
-    req: &DecimateRequest,
+    req: &RemeshRequest,
     progress: &mut dyn FnMut(f32),
-) -> Result<DecimateReport, String> {
+) -> Result<RemeshReport, String> {
     let started = std::time::Instant::now();
+    let mut report = RemeshReport::default();
 
     let bytes = std::fs::read(input).map_err(|e| format!("lecture impossible: {e}"))?;
-    let mesh = plancton_core::glb::load_bytes(&bytes).map_err(|e| format!("{e:#}"))?;
+    let mut mesh = plancton_core::glb::load_bytes(&bytes).map_err(|e| format!("{e:#}"))?;
 
     let source_count = mesh.triangle_count();
+    report.input_triangles = source_count;
     if req.target_triangles == 0 {
         return Err("aucun budget de triangles".into());
     }
@@ -107,27 +160,106 @@ pub fn decimate_file(
         ));
     }
 
-    let options = plancton_remesh::DecimateOptions {
-        target_triangles: req.target_triangles,
-        preserve_boundary: req.preserve_boundary,
-        sharp_angle_deg: req.sharp_angle_deg,
-        seam_penalty: req.seam_penalty,
-        ..Default::default()
+    // Stage 1: holes. Cheap, so it gets the first five percent of the bar.
+    if req.fill_holes {
+        let fill = plancton_remesh::fill_holes(&mut mesh, &plancton_remesh::FillOptions { max_loop_edges: 5_000 });
+        report.holes_filled = fill.loops_filled;
+        report.holes_left = fill.loops_found.saturating_sub(fill.loops_filled);
+    }
+    progress(0.05);
+
+    // The source, as it will be measured against afterwards. Built before the
+    // reduction so relaxation and the deviation both compare to what came in.
+    let source_bvh = plancton_core::Bvh::build(&mesh);
+
+    // Stage 2: reduce.
+    let mut result = match req.method.as_str() {
+        "isotropic" => {
+            let opts = plancton_remesh::IsotropicOptions {
+                target_triangles: req.target_triangles,
+                sharp_angle_deg: req.sharp_angle_deg,
+                ..Default::default()
+            };
+            let (m, s) = plancton_remesh::isotropic(&mesh, &opts, &mut |f| progress(0.05 + f * 0.6));
+            report.collapses = s.collapses;
+            m
+        }
+        _ => {
+            let opts = plancton_remesh::DecimateOptions {
+                target_triangles: req.target_triangles,
+                preserve_boundary: req.preserve_boundary,
+                sharp_angle_deg: req.sharp_angle_deg,
+                seam_penalty: req.seam_penalty,
+                ..Default::default()
+            };
+            let (m, s) = plancton_remesh::decimate(&mesh, &opts, &mut |f| progress(0.05 + f * 0.6));
+            report.collapses = s.collapses;
+            report.rejected_topology = s.rejected_topology;
+            report.rejected_flip = s.rejected_flip;
+            report.max_error = s.max_error;
+            m
+        }
     };
-    let (result, stats) = plancton_remesh::decimate(&mesh, &options, progress);
+    progress(0.65);
+
+    // Stage 3: relax, always reprojected. The tangential projection is what
+    // stops a sphere deflating a little on every pass.
+    if req.relax_iterations > 0 {
+        let opts = plancton_remesh::RelaxOptions {
+            iterations: req.relax_iterations,
+            preserve_features: true,
+            sharp_angle_deg: req.relax_angle_deg,
+            ..Default::default()
+        };
+        let s = plancton_remesh::relax(&mut result, Some(&source_bvh), &opts, &mut |f| {
+            progress(0.65 + f * 0.2)
+        });
+        // The mean, not the worst. See the field's own comment.
+        report.aspect_before = s.mean_before;
+        report.aspect_after = s.mean_after;
+    }
+    progress(0.85);
+
+    report.output_triangles = result.triangle_count();
+
+    // Stage 4: pair into quads, and carry the mask out beside the file.
+    if req.pair_quads {
+        let opts = plancton_remesh::QuadOptions::default();
+        let pairing = plancton_remesh::pair_into_quads(&result, &opts);
+        report.quads = pairing.stats.quads;
+        report.quad_fraction = pairing.stats.quad_fraction;
+
+        let mut raw = Vec::with_capacity(pairing.edge_mask.len() * 4);
+        for m in &pairing.edge_mask {
+            raw.extend_from_slice(&m.to_le_bytes());
+        }
+        let _ = std::fs::write(sidecar(output, "quads"), &raw);
+    }
+    progress(0.92);
+
+    // How far the result actually moved, per vertex, for the heatmap.
+    let dev = plancton_core::wire::deviation_against(&result, &source_bvh);
+    report.deviation_max = dev.iter().copied().fold(0.0f32, f32::max);
+    let mut raw = Vec::with_capacity(dev.len() * 4);
+    for d in &dev {
+        raw.extend_from_slice(&d.to_le_bytes());
+    }
+    let _ = std::fs::write(sidecar(output, "dev"), &raw);
 
     let out = plancton_core::glb::to_bytes(&result).map_err(|e| format!("{e:#}"))?;
     std::fs::write(output, &out).map_err(|e| format!("écriture impossible: {e}"))?;
+    progress(1.0);
 
-    Ok(DecimateReport {
-        input_triangles: stats.input_triangles,
-        output_triangles: stats.output_triangles,
-        collapses: stats.collapses,
-        rejected_topology: stats.rejected_topology,
-        rejected_flip: stats.rejected_flip,
-        max_error: stats.max_error,
-        millis: started.elapsed().as_millis(),
-    })
+    report.millis = started.elapsed().as_millis();
+    Ok(report)
+}
+
+/// `result.glb` plus an extension, so the extras sit next to what they describe.
+fn sidecar(output: &Path, ext: &str) -> PathBuf {
+    let mut name = output.file_name().unwrap_or_default().to_os_string();
+    name.push(".");
+    name.push(ext);
+    output.with_file_name(name)
 }
 
 // --- the command line ------------------------------------------------------
@@ -137,9 +269,15 @@ albedo remesh <modèle.glb> --faces <N> [options]
 
   --faces <N>        budget de triangles (obligatoire)
   --out <fichier>    sortie, par défaut <modèle>-retopo.glb
-  --angle <degrés>   angle de pli, défaut 40
+  --isotropic        reconstruire vers des arêtes régulières au lieu de décimer
+  --holes            combler les trous avant de réduire
+  --angle <degrés>   angle de pli pour la réduction, défaut 40
   --seam <coût>      coût d'une couture d'UV, défaut 4
   --open-borders     laisser les bords ouverts se faire décimer
+  --relax <passes>   passes de lissage reprojetées, défaut 0
+  --relax-angle <d>  angle de pli du lissage, défaut 75, volontairement
+                     différent de --angle
+  --quads            apparier les triangles en quads
 ";
 
 /// `albedo.exe remesh …`, or `None` when this is an ordinary launch.
@@ -160,7 +298,7 @@ pub fn cli_main() -> Option<i32> {
 
     let mut input: Option<String> = None;
     let mut output: Option<String> = None;
-    let mut req = DecimateRequest::default();
+    let mut req = RemeshRequest::default();
     let mut machine = false;
 
     let mut i = 1;
@@ -186,6 +324,26 @@ pub fn cli_main() -> Option<i32> {
             "--open-borders" => {
                 req.preserve_boundary = false;
                 i += 1;
+            }
+            "--isotropic" => {
+                req.method = "isotropic".into();
+                i += 1;
+            }
+            "--holes" => {
+                req.fill_holes = true;
+                i += 1;
+            }
+            "--quads" => {
+                req.pair_quads = true;
+                i += 1;
+            }
+            "--relax" => {
+                req.relax_iterations = take(i).and_then(|v| v.parse().ok()).unwrap_or(0);
+                i += 2;
+            }
+            "--relax-angle" => {
+                req.relax_angle_deg = take(i).and_then(|v| v.parse().ok()).unwrap_or(75.0);
+                i += 2;
             }
             // How the tab drives this process: progress as parsable lines and
             // the report as JSON, rather than the prose a person wants.
@@ -232,22 +390,35 @@ pub fn cli_main() -> Option<i32> {
         }
     };
 
-    match decimate_file(&input, &output, &req, &mut progress) {
-        Ok(report) => {
+    match remesh_file(&input, &output, &req, &mut progress) {
+        Ok(r) => {
             if machine {
-                println!(
-                    "report {}",
-                    serde_json::to_string(&report).unwrap_or_default()
-                );
+                println!("report {}", serde_json::to_string(&r).unwrap_or_default());
             } else {
                 println!(
-                    "{} → {} triangles en {:.2} s, écart max {:.5}\nécrit : {}",
-                    report.input_triangles,
-                    report.output_triangles,
-                    report.millis as f64 / 1000.0,
-                    report.max_error,
-                    output.display()
+                    "{} → {} triangles en {:.2} s, déviation max {:.5}",
+                    r.input_triangles,
+                    r.output_triangles,
+                    r.millis as f64 / 1000.0,
+                    r.deviation_max
                 );
+                if r.holes_filled > 0 || r.holes_left > 0 {
+                    println!("trous : {} comblés, {} laissés ouverts", r.holes_filled, r.holes_left);
+                }
+                if r.aspect_after > 0.0 {
+                    println!(
+                        "rapport d'aspect moyen : {:.3} → {:.3}",
+                        r.aspect_before, r.aspect_after
+                    );
+                }
+                if r.quads > 0 {
+                    println!(
+                        "quads : {} ({:.0} % de la surface)",
+                        r.quads,
+                        r.quad_fraction * 100.0
+                    );
+                }
+                println!("écrit : {}", output.display());
             }
             Some(0)
         }
@@ -306,8 +477,8 @@ pub async fn retopo_decimate(
     app: tauri::AppHandle,
     input: String,
     output: String,
-    request: DecimateRequest,
-) -> Result<DecimateReport, String> {
+    request: RemeshRequest,
+) -> Result<RemeshReport, String> {
     use tauri::Emitter;
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -324,11 +495,24 @@ pub async fn retopo_decimate(
             .arg(request.sharp_angle_deg.to_string())
             .arg("--seam")
             .arg(request.seam_penalty.to_string())
+            .arg("--relax")
+            .arg(request.relax_iterations.to_string())
+            .arg("--relax-angle")
+            .arg(request.relax_angle_deg.to_string())
             .arg("--machine")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         if !request.preserve_boundary {
             cmd.arg("--open-borders");
+        }
+        if request.method == "isotropic" {
+            cmd.arg("--isotropic");
+        }
+        if request.fill_holes {
+            cmd.arg("--holes");
+        }
+        if request.pair_quads {
+            cmd.arg("--quads");
         }
         no_window(&mut cmd);
 
@@ -336,7 +520,7 @@ pub async fn retopo_decimate(
 
         // The report arrives on the same pipe as the progress, tagged, so there
         // is one stream to read and no second channel to keep in step.
-        let mut report: Option<DecimateReport> = None;
+        let mut report: Option<RemeshReport> = None;
         if let Some(out) = child.stdout.take() {
             for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
                 if let Some(rest) = line.strip_prefix("progress ") {

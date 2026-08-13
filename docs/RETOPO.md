@@ -390,17 +390,42 @@ Decisions taken:
 > Matching the other seven panes matters more than winning 4 pixels in one of
 > them.
 
-### Phase 3: reading the result [ ]
-- [ ] Quad diagonal mask transported beside the GLB, honoured by a line material.
+### Phase 3: reading the result [~]
+- [x] **The two things glTF cannot hold now travel beside it.** `<output>.quads`
+      is one `u32` per triangle, the edge mask whose cleared bit is a quad's
+      diagonal. `<output>.dev` is one `f32` per vertex, the distance back to the
+      source through its BVH. Both written by the engine, both cross-checked
+      against the counts they describe: 34,400 bytes for 8,600 triangles and
+      21,376 for 5,344 vertices, exactly four bytes each.
+- [x] Statistics in a head-up display: source, result, reduction, quad coverage.
+- [ ] A line material that honours the quad mask, so the pairing is visible
+      rather than merely computed.
 - [ ] Deviation heatmap as a channel, next to the eleven that exist.
-- [ ] Statistics into the existing HUD: source count, result count, quad
-      coverage, reduction.
 
-### Phase 4: clean up and rebuild [ ]
-- [ ] Hole filling, tangential relax with reprojection, isotropic remeshing, quad
-      pairing, each an optional stage with its own reported numbers.
-- [ ] Crease angle exposed separately for decimation and for relax. They are not
-      the same question and sharing them once made relax silently do nothing.
+### Phase 4: clean up and rebuild [x]
+- [x] Hole filling, tangential relax with reprojection, isotropic remeshing and
+      quad pairing, each an optional stage with its own reported numbers, in the
+      order plancton settled on: close holes first, reduce, then relax, then
+      pair.
+- [x] Crease angle exposed separately for decimation and for relax, with the
+      reason written next to it in the panel. Sharing them once made relax pin
+      eighty six percent of the vertices and silently do nothing.
+- [x] The aspect ratio reported is the **mean**, never the worst. The worst
+      triangle sits on a crease, which relaxation pins on purpose, so it barely
+      moves even when the mesh improved throughout.
+
+> **Measured end to end**, tombstones at 237,646 triangles, through the child
+> process, holes and relax and pairing all on:
+>
+> ```
+> 237646 → 8600 triangles en 4.35 s, déviation max 0.00430
+> trous : 1 comblés, 0 laissés ouverts
+> rapport d'aspect moyen : 3.460 → 2.197
+> quads : 2705 (63 % de la surface)
+> ```
+>
+> The result reloads through the engine's own reader, so the GLB it writes is
+> one this application can open again.
 
 ### Phase 5: baking [ ]
 - [ ] UV atlas, cage projection, the five maps: base colour with alpha, metallic
