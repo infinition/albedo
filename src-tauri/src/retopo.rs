@@ -1,20 +1,35 @@
 //! Retopology and baking, the Rust half.
 //!
 //! The engine comes from the plancton crates: quadric error decimation with the
-//! link condition, flip test and crease constraints, plus the isotropic
-//! rebuilder, the quad pairing and the cage baker. None of it knows about Tauri
-//! or about this application, which is the point: the same functions serve the
-//! Retopo tab, the `remesh` command line and the optional HTTP API.
+//! link condition, flip test and crease constraints. None of it knows about
+//! Tauri or about this application, which is the point: the same functions serve
+//! the Retopo tab, the `remesh` command line and, later, the optional HTTP API.
+//!
+//! **The engine runs in a child process, and that is not an accident.**
+//! Measured on this machine, at Albedo's release profile:
+//!
+//! | Build | Bytes |
+//! |---|---:|
+//! | Albedo alone | 3,947,008 |
+//! | with the engine, `panic = "abort"` kept | 4,720,128 |
+//! | with the engine, `panic = "abort"` dropped | 8,893,440 |
+//!
+//! The engine costs 0.77 MB. Dropping `abort` so a `catch_unwind` could fire
+//! costs 4.17 MB, because unwinding tables land on the whole binary and not on
+//! the engine alone. Paying five times the engine's own weight for a guard is a
+//! bad trade, and a child process is a better guard anyway: it survives a stack
+//! overflow and an allocation failure, which no `catch_unwind` ever catches.
+//!
+//! The pattern is already in this repository. `shell-thumbnails` runs
+//! `albedo.exe --thumbnail` one process per file for exactly this reason.
 //!
 //! **Files, not IPC payloads.** A model worth retopologising is tens of
 //! megabytes, and Tauri's default command encoding would turn that into a JSON
-//! array of numbers on the way in and again on the way out. The frontend writes
-//! its exported GLB to a temporary file, hands over the path, and reads the
-//! result back through the loader it already has. Nothing large crosses the
-//! bridge.
+//! array of numbers on the way in and again on the way out.
 
-use std::panic::AssertUnwindSafe;
-use std::path::Path;
+use std::io::BufRead;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 
@@ -53,7 +68,7 @@ impl Default for DecimateRequest {
 /// met". A run with a large refusal count and an untouched triangle count is the
 /// signature of a guard firing on every candidate, which has happened before and
 /// cost a debugging session.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecimateReport {
     pub input_triangles: usize,
@@ -68,8 +83,8 @@ pub struct DecimateReport {
 
 /// Decimate one GLB into another. The whole engine call, with no Tauri in it.
 ///
-/// Shared by the command, the `remesh` subcommand and the HTTP handler, so the
-/// three doors cannot drift apart.
+/// Shared by the `remesh` subcommand and, later, the HTTP handler, so the doors
+/// cannot drift apart.
 pub fn decimate_file(
     input: &Path,
     output: &Path,
@@ -81,28 +96,24 @@ pub fn decimate_file(
     let bytes = std::fs::read(input).map_err(|e| format!("lecture impossible: {e}"))?;
     let mesh = plancton_core::glb::load_bytes(&bytes).map_err(|e| format!("{e:#}"))?;
 
-    let mut options = plancton_remesh::DecimateOptions {
+    let source_count = mesh.triangle_count();
+    if req.target_triangles == 0 {
+        return Err("aucun budget de triangles".into());
+    }
+    if req.target_triangles >= source_count {
+        return Err(format!(
+            "le budget ({}) n'est pas inférieur au maillage source ({source_count})",
+            req.target_triangles
+        ));
+    }
+
+    let options = plancton_remesh::DecimateOptions {
         target_triangles: req.target_triangles,
         preserve_boundary: req.preserve_boundary,
         sharp_angle_deg: req.sharp_angle_deg,
         seam_penalty: req.seam_penalty,
         ..Default::default()
     };
-    // A target of zero means "no budget given", which would ask the decimator to
-    // collapse the model out of existence. Refuse it here rather than let the
-    // engine run to nothing.
-    if options.target_triangles == 0 {
-        return Err("aucun budget de triangles".into());
-    }
-    let source_count = mesh.triangle_count();
-    if options.target_triangles >= source_count {
-        return Err(format!(
-            "le budget ({}) n'est pas inférieur au maillage source ({source_count})",
-            options.target_triangles
-        ));
-    }
-    options.target_triangles = options.target_triangles.min(source_count);
-
     let (result, stats) = plancton_remesh::decimate(&mesh, &options, progress);
 
     let out = plancton_core::glb::to_bytes(&result).map_err(|e| format!("{e:#}"))?;
@@ -119,30 +130,152 @@ pub fn decimate_file(
     })
 }
 
-/// The same call, with a panic turned back into an error.
+// --- the command line ------------------------------------------------------
+
+const USAGE: &str = "\
+albedo remesh <modèle.glb> --faces <N> [options]
+
+  --faces <N>        budget de triangles (obligatoire)
+  --out <fichier>    sortie, par défaut <modèle>-retopo.glb
+  --angle <degrés>   angle de pli, défaut 40
+  --seam <coût>      coût d'une couture d'UV, défaut 4
+  --open-borders     laisser les bords ouverts se faire décimer
+";
+
+/// `albedo.exe remesh …`, or `None` when this is an ordinary launch.
 ///
-/// The engine is a large amount of geometry code fed by files this application
-/// did not write, and a malformed mesh reaching an unchecked index is a real
-/// possibility. This executable is also the Explorer thumbnail provider, one
-/// process per file, so a panic that escapes does not merely lose a job: it
-/// takes out the preview for the folder.
+/// Returns an exit code, and the caller must exit on it before Tauri is built:
+/// there is no window here, no webview and no event loop, only geometry.
 ///
-/// This boundary only works because the release profile no longer sets
-/// `panic = "abort"`. Under `abort` there is no unwind to catch and the process
-/// is gone before any of this runs. See `docs/RETOPO.md`.
-pub fn decimate_guarded(
-    input: &Path,
-    output: &Path,
-    req: &DecimateRequest,
-    progress: &mut dyn FnMut(f32),
-) -> Result<DecimateReport, String> {
-    match std::panic::catch_unwind(AssertUnwindSafe(|| {
-        decimate_file(input, output, req, progress)
-    })) {
-        Ok(result) => result,
-        Err(_) => Err("le moteur a échoué sur ce maillage".into()),
+/// This is also the crash boundary the Retopo tab relies on. A malformed mesh
+/// that reaches an unchecked index takes this process down and the application
+/// carries on, which is the whole reason the release profile can keep
+/// `panic = "abort"` and its 4.17 MB.
+pub fn cli_main() -> Option<i32> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) != Some("remesh") {
+        return None;
+    }
+    attach_console();
+
+    let mut input: Option<String> = None;
+    let mut output: Option<String> = None;
+    let mut req = DecimateRequest::default();
+    let mut machine = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        let take = |i: usize| args.get(i + 1).cloned();
+        match args[i].as_str() {
+            "--faces" => {
+                req.target_triangles = take(i).and_then(|v| v.parse().ok()).unwrap_or(0);
+                i += 2;
+            }
+            "--out" => {
+                output = take(i);
+                i += 2;
+            }
+            "--angle" => {
+                req.sharp_angle_deg = take(i).and_then(|v| v.parse().ok()).unwrap_or(40.0);
+                i += 2;
+            }
+            "--seam" => {
+                req.seam_penalty = take(i).and_then(|v| v.parse().ok()).unwrap_or(4.0);
+                i += 2;
+            }
+            "--open-borders" => {
+                req.preserve_boundary = false;
+                i += 1;
+            }
+            // How the tab drives this process: progress as parsable lines and
+            // the report as JSON, rather than the prose a person wants.
+            "--machine" => {
+                machine = true;
+                i += 1;
+            }
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                return Some(0);
+            }
+            other if !other.starts_with('-') && input.is_none() => {
+                input = Some(other.to_string());
+                i += 1;
+            }
+            other => {
+                eprintln!("option inconnue : {other}\n\n{USAGE}");
+                return Some(2);
+            }
+        }
+    }
+
+    let Some(input) = input else {
+        eprintln!("{USAGE}");
+        return Some(2);
+    };
+    let input = PathBuf::from(input);
+    let output = output.map(PathBuf::from).unwrap_or_else(|| {
+        let stem = input.file_stem().map(|s| s.to_string_lossy().into_owned());
+        input.with_file_name(format!("{}-retopo.glb", stem.unwrap_or_default()))
+    });
+
+    let mut last = -1.0f32;
+    let mut progress = |fraction: f32| {
+        if !machine {
+            return;
+        }
+        // One line per percent, not one per collapse: a 406k mesh makes hundreds
+        // of thousands of calls and a pipe is not free.
+        let rounded = (fraction * 100.0).floor();
+        if rounded > last {
+            last = rounded;
+            println!("progress {}", rounded / 100.0);
+        }
+    };
+
+    match decimate_file(&input, &output, &req, &mut progress) {
+        Ok(report) => {
+            if machine {
+                println!(
+                    "report {}",
+                    serde_json::to_string(&report).unwrap_or_default()
+                );
+            } else {
+                println!(
+                    "{} → {} triangles en {:.2} s, écart max {:.5}\nécrit : {}",
+                    report.input_triangles,
+                    report.output_triangles,
+                    report.millis as f64 / 1000.0,
+                    report.max_error,
+                    output.display()
+                );
+            }
+            Some(0)
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            Some(1)
+        }
     }
 }
+
+/// Borrow the calling terminal's console, so a GUI subsystem binary can answer.
+///
+/// Without this the executable is silent when run from a shell: it is linked as
+/// a windows subsystem application on purpose, so that opening a model never
+/// flashes a console behind it. Attaching the parent's console gives the command
+/// line its output back without giving the window one.
+#[cfg(windows)]
+fn attach_console() {
+    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+    unsafe {
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_console() {}
+
+// --- the tab ---------------------------------------------------------------
 
 /// Where a run's two files live.
 ///
@@ -167,6 +300,7 @@ pub fn retopo_workdir() -> Result<Workdir, String> {
     })
 }
 
+/// Run the engine in a child copy of this executable and report what it said.
 #[tauri::command]
 pub async fn retopo_decimate(
     app: tauri::AppHandle,
@@ -176,27 +310,73 @@ pub async fn retopo_decimate(
 ) -> Result<DecimateReport, String> {
     use tauri::Emitter;
 
-    // Geometry is compute bound and holds the thread for seconds at a time. On
-    // the async runtime that would stall every other command; on a blocking
-    // thread it stalls nothing.
     tauri::async_runtime::spawn_blocking(move || {
-        let mut last = -1.0f32;
-        let mut progress = |fraction: f32| {
-            // One event per percent, not one per collapse. A 406k mesh makes
-            // hundreds of thousands of calls and the bridge is not free.
-            let rounded = (fraction * 100.0).floor();
-            if rounded > last {
-                last = rounded;
-                let _ = app.emit("retopo://progress", rounded / 100.0);
+        let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
+
+        let mut cmd = Command::new(exe);
+        cmd.arg("remesh")
+            .arg(&input)
+            .arg("--out")
+            .arg(&output)
+            .arg("--faces")
+            .arg(request.target_triangles.to_string())
+            .arg("--angle")
+            .arg(request.sharp_angle_deg.to_string())
+            .arg("--seam")
+            .arg(request.seam_penalty.to_string())
+            .arg("--machine")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if !request.preserve_boundary {
+            cmd.arg("--open-borders");
+        }
+        no_window(&mut cmd);
+
+        let mut child = cmd.spawn().map_err(|e| format!("lancement impossible: {e}"))?;
+
+        // The report arrives on the same pipe as the progress, tagged, so there
+        // is one stream to read and no second channel to keep in step.
+        let mut report: Option<DecimateReport> = None;
+        if let Some(out) = child.stdout.take() {
+            for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                if let Some(rest) = line.strip_prefix("progress ") {
+                    if let Ok(f) = rest.trim().parse::<f32>() {
+                        let _ = app.emit("retopo://progress", f);
+                    }
+                } else if let Some(rest) = line.strip_prefix("report ") {
+                    report = serde_json::from_str(rest).ok();
+                }
             }
-        };
-        decimate_guarded(
-            Path::new(&input),
-            Path::new(&output),
-            &request,
-            &mut progress,
-        )
+        }
+
+        let mut stderr = String::new();
+        if let Some(mut e) = child.stderr.take() {
+            use std::io::Read;
+            let _ = e.read_to_string(&mut stderr);
+        }
+        let status = child.wait().map_err(|e| format!("attente échouée: {e}"))?;
+
+        match report {
+            Some(r) if status.success() => Ok(r),
+            _ if !stderr.trim().is_empty() => Err(stderr.trim().to_string()),
+            // No message and no report means the child died rather than
+            // refused: a panic, a stack overflow or an allocation failure. It
+            // took the geometry down with it and left this window alone, which
+            // is the entire point of running it over there.
+            _ => Err("le moteur a échoué sur ce maillage".into()),
+        }
     })
     .await
     .map_err(|e| format!("tâche interrompue: {e}"))?
 }
+
+/// No console flash behind the window when the child starts.
+#[cfg(windows)]
+fn no_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn no_window(_cmd: &mut Command) {}

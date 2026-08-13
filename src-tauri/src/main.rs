@@ -385,6 +385,17 @@ fn find_textures(model_path: String, names: Vec<String>) -> Vec<TexEntry> {
 }
 
 fn main() {
+    // `albedo.exe remesh <modèle> --faces N` is geometry and nothing else: no
+    // window, no webview, no event loop. It returns before Tauri is ever built.
+    //
+    // It is also the crash boundary the Retopo tab relies on. The tab spawns a
+    // child copy of this executable rather than calling the engine in process,
+    // so a malformed mesh takes the child down and leaves the window alone. That
+    // is what lets the release profile keep `panic = "abort"`.
+    if let Some(code) = retopo::cli_main() {
+        std::process::exit(code);
+    }
+
     let headless = thumb_job().is_some();
     if headless {
         // Generous: a first run pays for the webview starting up, and a heavy

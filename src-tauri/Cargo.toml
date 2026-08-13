@@ -30,19 +30,21 @@ plancton-remesh = { path = "../../../../../Users/infinition/Desktop/plancton/cra
 # can offer it without an installer.
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.5"
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Console"] }
 
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = "s"
+panic = "abort"
 strip = true
-# `panic = "abort"` used to be here and cannot come back while the engine is in.
-# This executable is also the Explorer thumbnail provider, one process per file,
-# so a panic on one malformed mesh would take out the preview for a whole
-# folder. The engine catches its own panics, and `catch_unwind` needs an unwind
-# to catch. Cargo also refuses `panic` in a per package override, so it cannot be
-# relaxed for the engine alone. See docs/RETOPO.md.
+# `panic = "abort"` stays, and the engine runs in a child process because of it.
+#
+# Dropping it so a `catch_unwind` could fire was measured at 4,173,312 bytes,
+# five times what the engine itself weighs, because unwinding tables land on the
+# whole binary rather than on the engine alone. A child process is the cheaper
+# guard and the stronger one: it also survives a stack overflow and an
+# allocation failure, which no `catch_unwind` catches. See docs/RETOPO.md.
 
 # Retopology is compute bound and would otherwise inherit `opt-level = "s"`,
 # which is right for a viewer and wrong for a decimator running quadric error
