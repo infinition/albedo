@@ -18,6 +18,16 @@ import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 
 const $ = (id) => document.getElementById(id);
+
+/**
+ * The Retopo mode, declared here and wired at the bottom.
+ *
+ * Split on purpose. `showStats` refreshes it whenever the triangle count moves
+ * and runs long before the wiring does, so the binding has to exist from the
+ * first line; the wiring needs `hud` and the viewer, which do not exist until
+ * much later.
+ */
+let retopo = null;
 const app = $("app");
 
 // Declared here rather than beside the edit mode they belong to, and this is
@@ -337,24 +347,6 @@ function showDimensions() {
   const y = box.max.y - box.min.y;
   const z = box.max.z - box.min.z;
   $("dimensions").textContent = `${n(x)} × ${n(y)} × ${n(z)} unités`;
-}
-
-/**
- * Retopology, fetched the first time its tab is opened and not before.
- *
- * Same reasoning as the library, and it counts for more here: this executable is
- * also the Explorer thumbnail provider, one process per file, so a decimator's
- * panel parsed at startup would be paid once per model in a browsed folder. The
- * icon is always in the strip; nothing behind it exists until it is clicked.
- */
-let retopo = null;
-async function ensureRetopo() {
-  if (retopo) {
-    retopo.refresh();
-    return;
-  }
-  const { createRetopo } = await import("./retopo/index.js");
-  retopo = createRetopo({ tauri, viewer, importPart, onBusy: setBusy });
 }
 
 function showStats(stats, extra) {
@@ -1186,9 +1178,6 @@ function showPane(name, remember = true) {
   // reads across the bridge, and nobody needs the answer until they are looking
   // at the panel that shows it.
   if (name === "scene") refreshShellState();
-  // The whole retopology panel, its module and the exporter it reaches for are
-  // one lazy chunk, fetched here and never at startup.
-  if (name === "retopo") ensureRetopo();
   for (const tab of document.querySelectorAll(".tab")) {
     tab.classList.toggle("active", tab.dataset.pane === name);
   }
@@ -1849,6 +1838,47 @@ async function toggleLibrary() {
   library.toggle();
 }
 $("btn-library").addEventListener("click", toggleLibrary);
+
+/**
+ * Retopology, a third mode beside the inspector and the library.
+ *
+ * Not a pane inside the inspector: the tool has a triangle budget, three guards,
+ * a bake with six knobs and a per material selection to come, and none of that
+ * belongs in a 324 pixel column. Its module and stylesheet are one lazy chunk,
+ * fetched on the first open and never at startup, which counts for more here
+ * than elsewhere: this executable is also the Explorer thumbnail provider, one
+ * process per file.
+ */
+async function toggleRetopo() {
+  if (retopo) {
+    retopo.toggle();
+    return;
+  }
+  const { createRetopo } = await import("./retopo/index.js");
+  retopo = createRetopo({
+    tauri,
+    viewer,
+    importPart,
+    onBusy: setBusy,
+    // The right edge holds one panel at a time. Retopo is a state of the viewer
+    // rather than a second viewer, so it never sits beside the inspector: the
+    // two would overlap, and the third surface would be showing the same model
+    // as the second.
+    onOpenChange: (on) => {
+      if (on) hud.toggleInspector(false);
+      $("btn-retopo").classList.toggle("active", on);
+      $("btn-retopo").setAttribute("aria-pressed", String(on));
+    },
+  });
+  retopo.show();
+}
+$("btn-retopo").addEventListener("click", toggleRetopo);
+// The other half of the same rule, and it does not care which handler runs
+// first: retopo can only be open while the inspector is closed, so a click on
+// the inspector button is always a click that opens it.
+$("btn-inspector").addEventListener("click", () => {
+  if (retopo?.open) retopo.hide();
+});
 
 
 // --- post-processing ------------------------------------------------------

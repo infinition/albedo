@@ -1,8 +1,8 @@
 # Retopo: bringing the plancton engine into Albedo
 
-How the retopology and baking engine becomes Albedo's eighth tab, what Albedo
-already provides for free, what has to be rebuilt, and what must not be broken
-on the way.
+How the retopology and baking engine becomes a third mode in Albedo, beside the
+inspector and the library. What Albedo already provides for free, what has to be
+rebuilt, and what must not be broken on the way.
 
 Legend: **[x]** done and measured, **[~]** in progress, **[ ]** planned.
 
@@ -16,7 +16,7 @@ tangential relax with reprojection, quad pairing, a UV atlas and a cage
 projection that bakes five PBR maps from a high poly onto a low one. It is pure
 Rust, no CUDA, no Python, no C++, and it is built on Tauri 2 exactly like Albedo.
 
-It arrives here as a tab, not as a merge.
+It arrives here as a mode, not as a merge.
 
 **plancton stays its own repository.** It keeps its name, its CLI, its HTTP
 server and the Blender bridge that server exists for. What changes is that its
@@ -24,21 +24,19 @@ three library crates become a dependency Albedo consumes, and its desktop shell
 `plancton-bureau` stops being built, because Albedo *is* the shell now. That is
 the only casualty and it is the redundant part.
 
-Inside Albedo the name disappears. There is no plancton tab, no plancton menu,
-no plancton branding. There is a **Retopo** tab, and it does retopology and
-baking, in the same French single-word register as Rendu, Matières, Caméra,
-Décor, Effets, Photo and Scène.
+Inside Albedo the name disappears. There is no plancton mode, no plancton menu,
+no plancton branding. There is a **Retopo** mode, and it does retopology and
+baking, in the same French register as Bibliothèque and Inspecteur beside it.
 
 ### Why "Retopo" and not "Remesh" or "Retopo & Bake"
 
-The tab strip is icons with a `title` tooltip, and every existing tooltip is one
-French noun. A two word English label would be the only one of its kind, which
-is exactly the sort of small inconsistency that makes an interface feel
-assembled rather than designed.
+Every button in that cluster carries one French noun as its tooltip. A two word
+English label would be the only one of its kind, which is exactly the sort of
+small inconsistency that makes an interface feel assembled rather than designed.
 
 Baking is not in the name because baking is a consequence here, not a peer
 activity: you bake *because* you decimated, to carry the detail you just threw
-away onto the mesh that remains. It is a section inside the tab, next to the
+away onto the mesh that remains. It is a block inside the panel, next to the
 button whose cost it changes, which is where plancton eventually put it too
 after trying it as its own tab twice.
 
@@ -144,14 +142,14 @@ So, three rules, none of them negotiable:
 1. **Nothing about Retopo initialises at boot.** `src-tauri/src/main.rs` already
    branches on `thumb_job()`. Every engine construction goes behind "this is not
    a thumbnail render", and behind first use even then.
-2. **The tab is a lazy chunk.** The Asset Manager is the precedent: it is fetched
-   on first interaction, not parsed at startup. `vite.config.js` pins chunk
-   boundaries specifically so a loader used by two lazy chunks does not get
-   hoisted back into the startup bundle. Retopo gets the same treatment, and the
-   pin has to be checked, not assumed.
-3. **The icon is always there, the tab is inert until clicked.** No engine, no
-   worker, no allocation until the pane is opened for the first time in a
-   session.
+2. **The mode is a lazy chunk, its stylesheet included.** The Asset Manager is
+   the precedent: fetched on first interaction, not parsed at startup.
+   `vite.config.js` pins chunk boundaries specifically so a loader used by two
+   lazy chunks does not get hoisted back into the startup bundle. Retopo gets the
+   same treatment, and the pin has to be checked, not assumed.
+3. **The icon is always there, the mode does not exist until clicked.** No
+   engine, no worker, no DOM and no allocation until it is opened for the first
+   time in a session.
 
 ### Measured, so the size argument is settled
 
@@ -335,14 +333,43 @@ Decisions taken:
       single launch. This is the number the thumbnail provider actually cares
       about and it is not taken yet.
 
-### Phase 2: the tab [~]
-- [x] Eighth icon in the tab strip, tooltip Retopo, pane `data-pane="retopo"`.
-      Measured: 8 tabs, and the strip does not overflow at the inspector's 324
-      pixels.
-- [x] The pane's module is a lazy chunk, fetched on first open. **Verified, not
-      assumed**: the panel's code lands in its own 2,648 byte chunk, the startup
-      bundle contains zero occurrences of it, and the network log shows the chunk
-      requested 24 seconds after load, which is when the tab was clicked.
+### Phase 2: the mode [~]
+
+> **It is a mode, not a tab.** It began as an eighth inspector pane and that was
+> wrong: the tool has a triangle budget, three guards, a bake with six knobs and
+> a per material selection still to come, and none of that belongs in a 324 pixel
+> column. It is now a third mode beside the inspector and the library, which is
+> also what makes plancton's finished interface reusable. Measured, and this is
+> the number that settles it: of the 1,075 lines in plancton's `ui.js`, only
+> **28** call into its viewer. The interface is barely welded to the renderer
+> underneath it, so its layout, its stylesheet and its 217 translated strings can
+> come over and be rewired onto three.js. `viewer.js`, 1,066 lines, is the part
+> that does not come.
+>
+> **Unlike the library, the mode does not cover the viewport.** You cannot judge
+> a retopology without looking at it, so the host passes every pointer event
+> through and only its own panels take them back. Verified: a click at the centre
+> of the window reaches the viewer, a click on the panel reaches the panel.
+>
+> **One panel on the right edge at a time.** Retopo is a state of the viewer
+> rather than a second viewer, so it and the inspector close each other.
+> Verified in both directions. With the library open and peeking, the chrome
+> confines itself to the preview strip: three surfaces at once would be one too
+> many, and the third would be showing the same model as the second.
+
+- [x] Its own icon in the top right cluster, beside Bibliothèque and Inspecteur.
+- [x] The mode's module and stylesheet are a lazy chunk, fetched on first open.
+      **Verified, not assumed**: 4,898 bytes of JavaScript and 2,277 of CSS in
+      chunks of their own, zero occurrences in the 115,982 byte startup bundle,
+      and the network log shows the chunk requested when the button was clicked
+      rather than at load.
+- [x] A head-up display and an action bar, both taken from plancton's
+      arrangement: the numbers you glance at after every run without opening
+      anything, and the things you actually do kept visible whatever the panel is
+      scrolled to.
+- [x] The panel does **not** inherit the 4 pixel horizontal overflow the
+      inspector panes have. A range in a flex column is given the width it has
+      rather than asked for its own.
 - [x] Budget as a percentage of the source, resolved to an exact triangle count
       next to the slider, plus the three guards that decide what survives:
       open borders, crease angle, seam cost.
@@ -358,7 +385,7 @@ Decisions taken:
 - [ ] Cancellation.
 - [ ] An A/B toggle between source and result.
 
-> The pane overflows horizontally by 4 pixels. So do Caméra, Rendu and Effets,
+> The inspector panes overflow horizontally by 4 pixels, Caméra, Rendu and Effets alike,
 > for the same reason: a full width `input[type=range]`. Left alone on purpose.
 > Matching the other seven panes matters more than winning 4 pixels in one of
 > them.

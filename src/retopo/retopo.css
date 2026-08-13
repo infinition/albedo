@@ -1,0 +1,163 @@
+/*
+ * The Retopo mode.
+ *
+ * Loaded with its module, never at startup. This executable is also the Explorer
+ * thumbnail provider, one process per file, so a decimator's chrome parsed at
+ * boot would be paid once per model in a browsed folder.
+ *
+ * Unlike the library, this mode does not cover the viewport. You cannot judge a
+ * retopology without looking at it, so the mode is chrome around the model
+ * rather than a screen in front of it: the host lets every pointer event
+ * through and only its own panels take them back.
+ */
+
+#retopo {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+#retopo.open { opacity: 1; }
+#retopo.open .rt-panel,
+#retopo.open .rt-bar,
+#retopo.open .rt-hud { pointer-events: auto; }
+
+/*
+ * Retopo is a state of the viewer, not a second one, so it never shares the
+ * right edge with the inspector: opening either closes the other, and the rule
+ * below is only the visual half of that.
+ *
+ * With the library open the viewport is the preview strip it leaves on the
+ * right, so the chrome follows it there rather than drawing across the grid.
+ * Three surfaces at once would be one too many, and the third would be showing
+ * the same model as the second.
+ */
+body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
+body.peeking #retopo .rt-panel { width: auto; left: 12px; }
+body.peeking #retopo .rt-hud { display: none; }
+
+/* --- the panel ----------------------------------------------------------- */
+
+.rt-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 68px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line, #2a2e35);
+}
+.rt-panel h2 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim, #8b929c);
+}
+.rt-block { display: flex; flex-direction: column; gap: 8px; }
+.rt-block + .rt-block {
+  padding-top: 12px;
+  border-top: 1px solid var(--line, #2a2e35);
+}
+
+/* The panel is a column, so a range is given the width it has rather than
+   asked for its own. Without this the three sliders push the panel four pixels
+   past its own right edge, which is what the inspector panes still do. */
+.rt-panel input[type="range"] { width: 100%; min-width: 0; box-sizing: border-box; }
+
+.rt-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.rt-field > span { display: flex; justify-content: space-between; gap: 8px; }
+.rt-field .rt-num { color: var(--dim, #8b929c); font-variant-numeric: tabular-nums; }
+
+.rt-check { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+
+.rt-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--dim, #8b929c);
+}
+
+/* --- the action bar ------------------------------------------------------ */
+
+/*
+ * Always visible, whatever the panel is scrolled to. These are the things you
+ * actually do, and in plancton they used to sit inside panels, so which one you
+ * could reach depended on which section was open.
+ */
+.rt-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line, #2a2e35);
+}
+.rt-bar button {
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 12px;
+}
+
+/* --- the head-up display ------------------------------------------------- */
+
+/*
+ * The numbers you glance at after every run, without opening anything.
+ */
+.rt-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--panel, #16181c) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line, #2a2e35);
+}
+.rt-hud div { display: flex; flex-direction: column; gap: 2px; }
+.rt-hud dt {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim, #8b929c);
+}
+.rt-hud dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Under a certain width the panel stops being a column beside the model and
+ * becomes a sheet under it, because a 360 pixel panel on a 700 pixel window
+ * leaves nothing to look at. Same lesson plancton learned on a phone.
+ */
+@container (max-width: 900px), (max-width: 900px) {
+  .rt-panel {
+    left: 12px;
+    width: auto;
+    max-height: 46vh;
+    bottom: auto;
+    top: auto;
+    bottom: 68px;
+  }
+  .rt-hud { font-size: 10px; }
+}

@@ -1,15 +1,70 @@
+import "./retopo.css";
+
 /**
- * Retopology, the browser half.
+ * The Retopo mode.
  *
- * This module is a lazy chunk. Nothing in here is parsed until the Retopo tab is
- * opened for the first time, which matters more than usual: this executable is
- * also the Explorer thumbnail provider, one process per file, and a viewer used
- * only to look at a model should never pay for a decimator it does not call.
+ * A third mode beside the inspector and the library, and not a pane inside the
+ * inspector: the tool has a triangle budget, three guards, a bake with six knobs
+ * and a per material selection to come, and none of that fits a 324 pixel
+ * column. It is chrome around the viewport rather than a screen in front of it,
+ * because you cannot judge a retopology without looking at it.
+ *
+ * This module, its stylesheet and the exporter it reaches for are one lazy
+ * chunk. Nothing here is parsed until the mode is opened for the first time,
+ * which matters more than usual: this executable is also the Explorer thumbnail
+ * provider, one process per file.
  *
  * Nothing large crosses the bridge. The exported GLB goes to a file the Rust
- * side chose, and the result comes back through the loader the application
- * already has, so a fifty megabyte model never becomes a JSON array of numbers.
+ * side chose, the engine runs in a child process, and the result comes back
+ * through the loader the application already has.
  */
+
+const SHELL = `
+<dl class="rt-hud" data-el="hud">
+  <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
+  <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
+  <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
+</dl>
+
+<div class="rt-panel" data-el="panel">
+  <div class="rt-block">
+    <h2>Budget</h2>
+    <label class="rt-field">
+      <span>Triangles <span class="rt-num" data-el="targetValue">—</span></span>
+      <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
+    </label>
+    <p class="rt-hint">La part du maillage source à garder. Un budget dépensé par
+      l'erreur quadrique met les triangles là où la silhouette en a besoin, pas
+      régulièrement.</p>
+  </div>
+
+  <div class="rt-block">
+    <h2>Garde-fous</h2>
+    <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span>Épingler les bords ouverts</span></label>
+    <label class="rt-field">
+      <span>Angle de pli <span class="rt-num" data-el="angleValue">40°</span></span>
+      <input type="range" data-el="angle" min="5" max="90" step="1" value="40" />
+    </label>
+    <label class="rt-field">
+      <span>Coût d'une couture <span class="rt-num" data-el="seamValue">4</span></span>
+      <input type="range" data-el="seam" min="0" max="20" step="1" value="4" />
+    </label>
+    <p class="rt-hint">Une arête plus pliée que l'angle compte comme un pli et
+      résiste. Le coût d'une couture protège les bords d'UV, dont la rupture se
+      voit dans la texture bien avant de se voir dans la forme.</p>
+  </div>
+
+  <div class="rt-block">
+    <h2>Dernier passage</h2>
+    <p class="rt-hint" data-el="report">Rien encore.</p>
+  </div>
+</div>
+
+<div class="rt-bar">
+  <button class="wide" type="button" data-el="run">Décimer</button>
+  <button class="wide" type="button" data-el="close">Fermer</button>
+</div>
+`;
 
 /** Triangles actually drawn, which is not the same as vertices. */
 function countTriangles(root) {
@@ -24,63 +79,51 @@ function countTriangles(root) {
   return Math.round(total);
 }
 
-const groupFr = (n) => n.toLocaleString("fr-FR");
+const fr = (n) => n.toLocaleString("fr-FR");
 
-export function createRetopo({ tauri, viewer, importPart, onBusy }) {
-  const $ = (id) => document.getElementById(id);
+export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange }) {
+  const host = document.createElement("div");
+  host.id = "retopo";
+  host.innerHTML = SHELL;
+  document.getElementById("app").appendChild(host);
 
-  const tools = $("retopo-tools");
-  const empty = $("retopo-empty");
-  const target = $("retopo-target");
-  const targetValue = $("retopo-target-value");
-  const angle = $("retopo-angle");
-  const angleValue = $("retopo-angle-value");
-  const seam = $("retopo-seam");
-  const seamValue = $("retopo-seam-value");
-  const boundary = $("retopo-boundary");
-  const run = $("retopo-run");
-  const note = $("retopo-note");
-  const report = $("retopo-report");
+  const el = {};
+  for (const node of host.querySelectorAll("[data-el]")) el[node.dataset.el] = node;
 
   let source = 0;
+  let last = null;
   let running = false;
+  let open = false;
 
   /** The budget in triangles, from the slider's percentage. */
-  const budget = () => Math.max(4, Math.round((source * Number(target.value)) / 100));
+  const budget = () => Math.max(4, Math.round((source * Number(el.target.value)) / 100));
 
   function paint() {
-    targetValue.textContent = source
-      ? `${groupFr(budget())} · ${target.value} %`
-      : `${target.value} %`;
-    angleValue.textContent = `${angle.value}°`;
-    seamValue.textContent = seam.value;
+    el.targetValue.textContent = source ? `${fr(budget())} · ${el.target.value} %` : `${el.target.value} %`;
+    el.angleValue.textContent = `${el.angle.value}°`;
+    el.seamValue.textContent = el.seam.value;
+
+    el.hudSource.textContent = source ? fr(source) : "—";
+    el.hudResult.textContent = last ? fr(last.outputTriangles) : "—";
+    el.hudCut.textContent = last
+      ? `${(100 - (last.outputTriangles / last.inputTriangles) * 100).toFixed(1)} %`
+      : "—";
   }
 
-  /**
-   * Called whenever the scene changes, and on first open.
-   *
-   * The panel is inert rather than absent when there is nothing loaded: hiding
-   * the controls entirely makes the tool look like it cannot do the thing at
-   * all, which reads worse than a dimmed panel.
-   */
   function refresh() {
     source = viewer.current ? countTriangles(viewer.root) : 0;
-    tools.hidden = source === 0;
-    empty.hidden = source > 0;
-    run.disabled = source === 0 || running || !tauri;
+    el.run.disabled = source === 0 || running || !tauri;
+    el.run.title = source === 0 ? "Ouvre un modèle d'abord" : "";
     paint();
   }
 
-  for (const input of [target, angle, seam]) {
-    input.addEventListener("input", paint);
-  }
+  for (const k of ["target", "angle", "seam"]) el[k].addEventListener("input", paint);
 
   async function decimate() {
     if (running || !tauri || !viewer.current) return;
     running = true;
-    run.disabled = true;
-    report.hidden = true;
-    note.textContent = "Export de la scène…";
+    el.run.disabled = true;
+    el.report.textContent = "Export de la scène…";
     onBusy?.(true);
 
     let stop = null;
@@ -95,14 +138,13 @@ export function createRetopo({ tauri, viewer, importPart, onBusy }) {
         binary: true,
         includeCustomExtensions: true,
       });
-      const bytes = new Uint8Array(glb);
 
       const { writeFile } = await import("@tauri-apps/plugin-fs");
-      await writeFile(dirs.input, bytes);
+      await writeFile(dirs.input, new Uint8Array(glb));
 
-      note.textContent = "Décimation…";
+      el.report.textContent = "Décimation…";
       stop = await tauri.event.listen("retopo://progress", (e) => {
-        note.textContent = `Décimation… ${Math.round((e.payload || 0) * 100)} %`;
+        el.report.textContent = `Décimation… ${Math.round((e.payload || 0) * 100)} %`;
       });
 
       const r = await tauri.core.invoke("retopo_decimate", {
@@ -110,29 +152,27 @@ export function createRetopo({ tauri, viewer, importPart, onBusy }) {
         output: dirs.output,
         request: {
           targetTriangles: budget(),
-          preserveBoundary: boundary.checked,
-          sharpAngleDeg: Number(angle.value),
-          seamPenalty: Number(seam.value),
+          preserveBoundary: el.boundary.checked,
+          sharpAngleDeg: Number(el.angle.value),
+          seamPenalty: Number(el.seam.value),
         },
       });
 
-      note.textContent = "Chargement du résultat…";
+      el.report.textContent = "Chargement du résultat…";
       await importPart(dirs.output);
+      last = r;
 
       // The refusals are shown rather than swallowed. A run with a large refusal
       // count and a barely moved triangle count is a guard firing on every
       // candidate, and it looks exactly like a run that simply had nothing left
       // to collapse unless the numbers are on screen.
-      const kept = ((r.outputTriangles / r.inputTriangles) * 100).toFixed(1);
-      report.textContent =
-        `${groupFr(r.inputTriangles)} → ${groupFr(r.outputTriangles)} triangles ` +
-        `(${kept} %) · ${groupFr(r.collapses)} fusions · ` +
-        `refus ${groupFr(r.rejectedTopology)} topologie, ${groupFr(r.rejectedFlip)} retournement · ` +
-        `écart max ${r.maxError.toPrecision(3)} · ${(r.millis / 1000).toFixed(2)} s`;
-      report.hidden = false;
-      note.textContent = "";
+      el.report.textContent =
+        `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)} triangles en ` +
+        `${(r.millis / 1000).toFixed(2)} s. ${fr(r.collapses)} fusions, ` +
+        `refus : ${fr(r.rejectedTopology)} topologie, ${fr(r.rejectedFlip)} retournement. ` +
+        `Écart maximum ${r.maxError.toPrecision(3)} unité.`;
     } catch (e) {
-      note.textContent = String(e);
+      el.report.textContent = String(e);
     } finally {
       stop?.();
       running = false;
@@ -141,8 +181,28 @@ export function createRetopo({ tauri, viewer, importPart, onBusy }) {
     }
   }
 
-  run.addEventListener("click", decimate);
-  refresh();
+  el.run.addEventListener("click", decimate);
+  el.close.addEventListener("click", () => api.hide());
 
-  return { refresh };
+  const api = {
+    get open() {
+      return open;
+    },
+    show() {
+      open = true;
+      host.classList.add("open");
+      onOpenChange?.(true);
+      refresh();
+    },
+    hide() {
+      open = false;
+      host.classList.remove("open");
+      onOpenChange?.(false);
+    },
+    toggle() {
+      open ? api.hide() : api.show();
+    },
+    refresh,
+  };
+  return api;
 }
