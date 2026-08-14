@@ -1,4 +1,5 @@
 import { buildCage } from "./cage.js";
+import { ICONS } from "./icons.js";
 import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
 import "./retopo.css";
 
@@ -24,63 +25,50 @@ import "./retopo.css";
 
 const SHELL = `
 <div class="rt-stack">
-<dl class="rt-hud" data-el="hud">
-  <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
-  <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
-  <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
-  <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
-</dl>
-
 <div class="rt-top" data-el="top">
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Affichage</span>
-    <div class="segment" role="group" aria-label="Affichage">
-      <button class="seg active" type="button" data-ch="shaded" title="Rendu physique">Rendu</button>
-      <button class="seg" type="button" data-ch="unlit" title="Texture telle qu'elle a été peinte, sans éclairage">Peint</button>
-      <button class="seg" type="button" data-ch="albedo" title="Couleur de base seule">Albedo</button>
-      <button class="seg" type="button" data-ch="normalGeom" title="Normales de géométrie, pour lire la facettisation">Normales</button>
-      <button class="seg" type="button" data-ch="uv" title="Damier d'UV, pour juger l'atlas">UV</button>
-    </div>
+
+  <dl class="rt-counts" data-el="hud">
+    <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
+    <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
+    <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
+    <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
+  </dl>
+
+  <span class="rt-tsep"></span>
+
+  <div class="rt-tgroup" role="group" aria-label="Affichage">
+    <button class="rt-i active" type="button" data-ch="shaded" data-icon="shaded" title="Rendu physique"></button>
+    <button class="rt-i" type="button" data-ch="unlit" data-icon="unlit" title="Peint : la texture telle qu'elle a été faite, sans éclairage"></button>
+    <button class="rt-i" type="button" data-ch="albedo" data-icon="albedo" title="Couleur de base seule"></button>
+    <button class="rt-i" type="button" data-ch="normalGeom" data-icon="normalGeom" title="Normales de géométrie"></button>
+    <button class="rt-i" type="button" data-ch="uv" data-icon="uv" title="Damier d'UV"></button>
+    <button class="rt-i" type="button" data-view="charts" data-icon="charts" data-el="btnCharts" title="Îlots de l'atlas, une couleur par îlot" disabled></button>
+    <button class="rt-i" type="button" data-view="deviation" data-icon="deviation" data-el="btnDeviation" title="Écart au modèle d'origine" disabled></button>
   </div>
 
   <span class="rt-tsep"></span>
 
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Arêtes</span>
-    <div class="segment" role="group" aria-label="Arêtes">
-      <button class="seg active" type="button" data-wire="off" title="Aucune arête">Aucune</button>
-      <button class="seg" type="button" data-wire="dark" title="Traits sombres, pour un modèle clair">Sombres</button>
-      <button class="seg" type="button" data-wire="light" title="Traits clairs, pour un modèle sombre">Claires</button>
-    </div>
+  <div class="rt-tgroup" role="group" aria-label="Arêtes">
+    <button class="rt-i active" type="button" data-wire="off" data-icon="wireOff" title="Aucune arête"></button>
+    <button class="rt-i" type="button" data-wire="dark" data-icon="wireDark" title="Arêtes sombres, pour un modèle clair"></button>
+    <button class="rt-i" type="button" data-wire="light" data-icon="wireLight" title="Arêtes claires, pour un modèle sombre"></button>
+    <button class="rt-i" type="button" data-el="flat" data-icon="flat" aria-pressed="false" title="Ombrage plat : chaque triangle sa normale"></button>
+    <button class="rt-i" type="button" data-el="xray" data-icon="xray" aria-pressed="false" title="Rayons X : voir à travers la surface"></button>
   </div>
 
   <span class="rt-tsep"></span>
 
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Facettes</span>
-    <button class="seg" type="button" data-el="flat" aria-pressed="false"
-            title="Ombrage plat : chaque triangle sa normale, pour lire la facettisation">◈</button>
+  <div class="rt-tgroup" role="group" aria-label="Comparer">
+    <button class="rt-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
+    <button class="rt-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
+    <button class="rt-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
+    <button class="rt-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
+    <button class="rt-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
   </div>
 
   <span class="rt-tsep"></span>
 
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Comparer</span>
-    <div class="segment" role="group" aria-label="Comparer">
-      <button class="seg" type="button" data-ab="source" title="La source seule">Source</button>
-      <button class="seg" type="button" data-ab="result" title="Le résultat seul">Résultat</button>
-      <button class="seg active" type="button" data-ab="both" title="Les deux dans la scène">Les deux</button>
-      <button class="seg" type="button" data-ab="split" title="Rideau déplaçable : source à gauche, résultat à droite">Rideau</button>
-      <button class="seg" type="button" data-ab="ghost" title="Résultat plein, source en transparence par-dessus">Fantôme</button>
-    </div>
-  </div>
-
-  <span class="rt-tsep"></span>
-
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Caméra</span>
-    <button class="seg" type="button" data-el="frame" title="Recadrer">⌖</button>
-  </div>
+  <button class="rt-i" type="button" data-el="frame" data-icon="frame" title="Recadrer"></button>
 </div>
 </div>
 
@@ -317,6 +305,13 @@ export function createRetopo({
 
   const el = {};
   for (const node of host.querySelectorAll("[data-el]")) el[node.dataset.el] = node;
+
+  // The icons are set from the map rather than written inline in the template,
+  // so the same glyph cannot end up drawn two slightly different ways in two
+  // places, and so the template stays readable as a layout.
+  for (const node of host.querySelectorAll("[data-icon]")) {
+    node.innerHTML = ICONS[node.dataset.icon] || "";
+  }
 
   let source = 0;
   let last = null;
