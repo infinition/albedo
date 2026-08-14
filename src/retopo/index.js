@@ -1,3 +1,4 @@
+import { buildCage } from "./cage.js";
 import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
 import "./retopo.css";
 
@@ -186,6 +187,11 @@ const SHELL = `
   <section class="rt-page" data-tab="atlas">
     <div data-el="atlasTools">
       <p class="rt-sub">Cage</p>
+      <label class="rt-check"><input type="checkbox" data-el="showCage" /><span>Dessiner la cage</span></label>
+      <p class="rt-hint">Une distance de cage ne veut rien dire tant qu'on n'a pas
+        vu la coque qu'elle décrit : trop courte, les rayons manquent ce qui
+        dépasse du maillage réduit ; trop longue, ils vont chercher la pièce d'à
+        côté et cuisent un chambranle sur une porte.</p>
       <label class="rt-field">
         <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.020</span></span>
         <input type="range" data-el="cageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
@@ -308,6 +314,26 @@ export function createRetopo({
 
   // --- seeing the quads ---------------------------------------------------
 
+  /** The drawn bake cage, rebuilt with each result. */
+  let cage = null;
+
+  /**
+   * Point the shell at the current result and the current slider.
+   *
+   * Called after a run and whenever the distance changes, which is the whole
+   * interaction: the number only means something while you are watching the
+   * shell move.
+   */
+  function syncCage() {
+    if (!cage) {
+      el.showCage.checked = false;
+      return;
+    }
+    cage.setDistance(Number(el.cageOut.value));
+    cage.setVisible(el.showCage.checked);
+    viewer.invalidate?.();
+  }
+
   /** Shared by every patched material, so a toggle is an assignment. */
   const wireU = makeWireUniforms();
   /** True once a result carrying a pairing has been prepared. */
@@ -339,6 +365,13 @@ export function createRetopo({
     // has nothing to cut on its own side and the left half stays empty.
     const src = viewer.parts?.[0]?.object;
     if (src && src !== object) applyWire(src, wireU, null);
+
+    // The cage wraps the low poly, because that is the surface the baker fires
+    // its rays from.
+    cage?.dispose();
+    cage = buildCage(object);
+    if (cage) object.add(cage.object);
+    syncCage();
     syncViewport();
     // A new result has to join whatever comparison was already on screen.
     setAB(compareMode);
@@ -910,6 +943,9 @@ export function createRetopo({
    * under the cursor, and there is nothing to hunt for while a long decimation
    * is grinding.
    */
+  el.showCage.addEventListener("change", syncCage);
+  el.cageOut.addEventListener("input", syncCage);
+
   el.run.addEventListener("click", () => {
     if (running) tauri?.core.invoke("retopo_cancel").catch(() => {});
     else run();
