@@ -272,8 +272,8 @@ const SHELL = `
   <label class="rt-switch" title="Reprojeter les textures de la source sur le résultat">
     <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
   </label>
-  <button type="button" data-el="undo" title="Annuler le dernier résultat" disabled>↶</button>
-  <button type="button" data-el="redo" title="Refaire" disabled>↷</button>
+  <button class="rt-i" type="button" data-el="undo" data-icon="undo" title="Annuler le dernier résultat" disabled></button>
+  <button class="rt-i" type="button" data-el="redo" data-icon="redo" title="Refaire" disabled></button>
   <span class="rt-note" data-el="history"></span>
   <button class="wide" type="button" data-el="run">Décimer</button>
   <button class="wide" type="button" data-el="rebake" disabled

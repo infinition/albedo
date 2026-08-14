@@ -238,6 +238,10 @@ body.peeking.retopo-open { --peek: 50%; }
   font-size: 12px;
   white-space: nowrap;
 }
+/* The history buttons speak the bar's icon language, not the text one: they are
+   verbs on the same footing as the icons above, and a glyph typed as a character
+   sits differently in every font it lands in. */
+.rt-bar .rt-i { min-height: 30px; width: 30px; padding: 0; }
 .rt-note {
   font-size: 11px;
   color: var(--dim, #8b929c);
