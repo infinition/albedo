@@ -143,11 +143,38 @@ export class ChannelView {
 
   /** The distinct materials of the loaded model, for the inspector list. */
   materials() {
+    // Two passes, and that is not an accident: a material carried by several
+    // meshes only has its full triangle count once every mesh has been seen, so
+    // counting and building rows in one traverse undercounts everything but the
+    // last mesh to use it.
+    const counts = new Map();
+    this.viewer.root.traverse((o) => {
+      if (!o.isMesh && !o.isSkinnedMesh) return;
+      this.remember(o);
+      const list = (() => {
+        const source = this.original.get(o);
+        return Array.isArray(source) ? source : [source];
+      })();
+      const g = o.geometry;
+      const total = g?.index ? g.index.count / 3 : (g?.attributes?.position?.count ?? 0) / 3;
+      // A geometry with groups spends each group on one material; without them
+      // the whole mesh belongs to the single material it carries.
+      const groups = g?.groups?.length ? g.groups : null;
+      list.forEach((m, i) => {
+        if (!m) return;
+        const n = groups
+          ? groups
+              .filter((gr) => (gr.materialIndex ?? 0) === i)
+              .reduce((a, gr) => a + gr.count / 3, 0)
+          : total / list.length;
+        counts.set(m.uuid, (counts.get(m.uuid) ?? 0) + n);
+      });
+    });
+
     const out = [];
     const seen = new Set();
     this.viewer.root.traverse((o) => {
       if (!o.isMesh && !o.isSkinnedMesh) return;
-      this.remember(o);
       const source = this.original.get(o);
       for (const m of Array.isArray(source) ? source : [source]) {
         if (!m || seen.has(m.uuid)) continue;
@@ -160,6 +187,8 @@ export class ChannelView {
           invisible: ChannelView.invisible(m),
           deadVertexColors: !!m.userData?.deadVertexColors,
           hidden: this.hiddenMaterials.has(m.uuid),
+          /** Triangles this material is responsible for, across every mesh. */
+          triangles: Math.round(counts.get(m.uuid) ?? 0),
         });
       }
     });

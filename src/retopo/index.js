@@ -120,6 +120,16 @@ const SHELL = `
       différence entre « fais-en 5 000 triangles » et « fais-le aussi petit que
       possible sans que ça se voie ». À zéro, seul le budget décide.</p>
 
+    <p class="rt-sub">Portée</p>
+    <div class="segment" role="group" aria-label="Portée">
+      <button class="seg active" type="button" data-scope="all" title="Tout le modèle">Tout</button>
+      <button class="seg" type="button" data-scope="visible" title="Seulement ce qui n'est pas masqué dans l'onglet Matières">Matières visibles</button>
+    </div>
+    <p class="rt-hint" data-el="scopeHint">Masque une matière dans l'onglet
+      Matières et choisis « Matières visibles » pour la laisser tranquille. Le
+      masquage qui existe déjà sert de sélection, plutôt qu'une seconde
+      sélection qui dirait la même chose ailleurs.</p>
+
     <p class="rt-sub">Quads</p>
     <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
     <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
@@ -295,6 +305,7 @@ export function createRetopo({
   sourcePath,
   applyChannel,
   setWireframe,
+  channels,
 }) {
   const host = document.createElement("div");
   host.id = "retopo";
@@ -309,6 +320,8 @@ export function createRetopo({
   let running = false;
   let open = false;
   let method = "decimate";
+  /** `all` or `visible`: which materials the run is allowed to touch. */
+  let scope = "all";
   /** The two files the last run left behind, so a bake can be redone alone. */
   let lastRun = null;
 
@@ -855,18 +868,68 @@ export function createRetopo({
    * says elsewhere it will not do. Every other format still has to be exported,
    * which is what makes a NIF or a USD retopologisable at all.
    */
+  /**
+   * Meshes every one of whose materials is hidden, so the export can leave them
+   * out.
+   *
+   * Hiding swaps a material for one that writes neither colour nor depth, which
+   * is right for looking but invisible to an exporter: the geometry is still
+   * there and still gets written. So the meshes are marked not-visible for the
+   * duration of the export and put back straight after.
+   *
+   * All or nothing per mesh. A mesh carrying four materials with one hidden
+   * cannot be half exported without splitting its geometry, and splitting
+   * geometry to honour a display toggle is a much bigger promise than this
+   * control makes.
+   */
+  async function withScope(fn) {
+    if (scope !== "visible") return fn();
+    const hidden = new Set(
+      (channels?.materials?.() || []).filter((m) => m.hidden).map((m) => m.uuid)
+    );
+    if (!hidden.size) return fn();
+
+    const touched = [];
+    viewer.root.traverse((o) => {
+      if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible) return;
+      // The *original* materials, because the ones on the mesh right now may be
+      // the channel view's stand-ins and carry different uuids.
+      const source = channels?.original?.get(o) ?? o.material;
+      const uuids = (Array.isArray(source) ? source : [source]).map((m) => m?.uuid);
+      if (uuids.length && uuids.every((u) => u && hidden.has(u))) {
+        touched.push(o);
+        o.visible = false;
+      }
+    });
+    try {
+      // Awaited, not returned. `finally` around a returned promise runs before
+      // the promise settles, so the meshes would come back visible while the
+      // exporter was still walking the scene and the filter would do nothing.
+      return await fn();
+    } finally {
+      for (const o of touched) o.visible = true;
+    }
+  }
+
   async function inputFor(dirs) {
     const p = sourcePath?.();
-    if (isGltf(p)) return p;
+    // The fast path hands the engine the file on disk, which by definition
+    // carries the whole model: a restricted run has to go through the exporter.
+    if (isGltf(p) && scope === "all") return p;
 
     say("Export de la scène…", 0);
     // The group, not the object inside it: the orientation buttons and the edit
     // handles both write to the group.
     const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-    const glb = await new GLTFExporter().parseAsync(viewer.root, {
-      binary: true,
-      includeCustomExtensions: true,
-    });
+    const glb = await withScope(() =>
+      new GLTFExporter().parseAsync(viewer.root, {
+        binary: true,
+        includeCustomExtensions: true,
+        // The default, said out loud because the whole scope control rests on
+        // it: anything marked not-visible does not reach the file.
+        onlyVisible: true,
+      })
+    );
     const { writeFile } = await import("@tauri-apps/plugin-fs");
     await writeFile(dirs.input, new Uint8Array(glb));
     return dirs.input;
@@ -1007,6 +1070,13 @@ export function createRetopo({
    * under the cursor, and there is nothing to hunt for while a long decimation
    * is grinding.
    */
+  for (const b of host.querySelectorAll("[data-scope]")) {
+    b.addEventListener("click", () => {
+      for (const o of host.querySelectorAll("[data-scope]")) o.classList.toggle("active", o === b);
+      scope = b.dataset.scope;
+    });
+  }
+
   el.showCage.addEventListener("change", syncCage);
   el.cageOut.addEventListener("input", syncCage);
 

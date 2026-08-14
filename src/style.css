@@ -723,3 +723,15 @@ details[open] summary::before { content: "▾ "; }
   /* A short window has no room for a raised scrubber */
   #timeline { bottom: var(--gap); width: min(460px, 52cqw); }
 }
+
+/* Triangles a material is responsible for. A curiosity in the inspector, and
+   the number that decides a budget in Retopo. Tabular so a column of them can be
+   compared down the list rather than read one at a time. */
+.mat-count {
+  font-size: 10px;
+  color: var(--dim, #8b929c);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex: none;
+}
+.mat-count:empty { display: none; }

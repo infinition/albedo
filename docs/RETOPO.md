@@ -72,9 +72,9 @@ expensive.
 | Restore the original | [x] | `channels.restoreMaterial(uuid)` |
 | Click a material in the viewport to select it | [x] | `pick(x, y)` in `src/viewer/viewer.js` |
 | Ctrl-click to add to the selection | [ ] | trivial on top of `pick()` |
-| Triangle count per material | [ ] | trivial from the geometry groups |
-| Isolate and hide per material | [ ] | |
-| Decimate and bake a selection only | [ ] | the engine's job |
+| Triangle count per material | [x] | two passes, see below |
+| Isolate and hide per material | [x] | already existed, now load bearing |
+| Decimate and bake a selection only | [~] | whole meshes yes, groups no |
 
 These are not sketches. `replaceMap` does the part that costs an afternoon: the
 incoming texture inherits `flipY`, wrapping, repeat, offset, centre and rotation

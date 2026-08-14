@@ -807,7 +807,9 @@ function paintMaterialList() {
   $("matter-empty").hidden = list.length > 0;
   holder.textContent = "";
 
-  for (const { uuid, name, textured, alphaLost, invisible, deadVertexColors, hidden } of list) {
+  for (const {
+    uuid, name, textured, alphaLost, invisible, deadVertexColors, hidden, triangles,
+  } of list) {
     const row = document.createElement("div");
     row.className = "mat-row";
 
@@ -834,6 +836,14 @@ function paintMaterialList() {
     label.classList.toggle("selected", uuid === selectedMaterial);
     label.title = defect ? `${name} : ${defect}` : textured ? `${name} (texturé)` : name;
     label.addEventListener("click", () => selectMaterial(uuid));
+
+    // How many triangles this material is responsible for. In the inspector it
+    // is a curiosity; in Retopo it is the number that says where a budget will
+    // actually go, and which material is worth hiding before a restricted run.
+    const count = document.createElement("span");
+    count.className = "mat-count";
+    count.textContent = triangles ? triangles.toLocaleString("fr-FR") : "";
+    count.title = triangles ? `${triangles.toLocaleString("fr-FR")} triangles` : "";
 
     const group = document.createElement("div");
     group.className = "segment";
@@ -865,7 +875,7 @@ function paintMaterialList() {
     });
     group.appendChild(hide);
 
-    row.append(label, group);
+    row.append(label, count, group);
     holder.appendChild(row);
     if (uuid === selectedMaterial) holder.appendChild(textureBlock(uuid));
   }
@@ -1864,6 +1874,9 @@ async function toggleRetopo() {
     // When the model came off disk as glTF the engine opens that file itself,
     // rather than being handed a forty megabyte re-export across the bridge.
     sourcePath: () => openedPath,
+    // For the scope control: it reads which materials are hidden, and it needs
+    // the originals to match uuids against the channel view's stand-ins.
+    channels,
     // The view controls in the mode's top bar drive the same channel state the
     // inspector does, so the two can never disagree about what is on screen.
     applyChannel,
