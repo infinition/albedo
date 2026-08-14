@@ -727,6 +727,17 @@ repository; this is what these items mean once the engine lives in Albedo.
 
 ### Lessons that each cost a debugging session
 
+- **An unverified text replacement is a change you only think you made.** Twice in
+  one session a scripted edit missed its anchor and did nothing, silently. Once it
+  left this document claiming four finished things were still to do. Once it
+  inserted a *call* to `paintHistory` while the block *defining* it never landed,
+  so `refresh()` threw, the model import failed, and the drop overlay stayed up
+  and ate every click — a model visible behind a veil, untouchable. Anchors are
+  asserted now.
+- **Click everything before believing any of it.** The regression above survives
+  every check that reads code and dies instantly to one that runs it. Driving all
+  27 buttons, 16 sliders and 10 checkboxes of the mode takes one command and would
+  have caught it before it ever reached a build.
 - **An absolute epsilon is a bug in disguise.** The flip test compared a triangle
   area to `f32::EPSILON`, so on a dense mesh every face read as already
   degenerate: a 406k asset came out untouched with 609,573 refusals and zero
