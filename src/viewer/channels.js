@@ -91,6 +91,8 @@ export class ChannelView {
     this.built = new Map(); // uuid|channel -> material, so toggling is cheap
     this.mode = "shaded";
     this.wireframe = false;
+    /** Flat faces rather than smooth ones: a mode of the lit look. */
+    this.flat = false;
     /**
      * The wireframe overlay, once someone has asked for one.
      *
@@ -120,6 +122,13 @@ export class ChannelView {
   /** Every material this class hands out goes through here. */
   dress(material) {
     this.wire?.patch(material);
+    // Flat shading is a property of the material, so it is applied on the way
+    // out like the wire patch: a stand-in built earlier follows whatever the
+    // switch says now instead of freezing the look it was built under.
+    if (material.flatShading !== this.flat) {
+      material.flatShading = this.flat;
+      material.needsUpdate = true;
+    }
     return material;
   }
 
@@ -417,7 +426,7 @@ export class ChannelView {
       return out;
     }
     if (channel === "normalGeom") {
-      return new THREE.MeshNormalMaterial({ side: mat.side, flatShading: false });
+      return new THREE.MeshNormalMaterial({ side: mat.side, flatShading: this.flat });
     }
     if (channel === "uv") {
       return new THREE.MeshBasicMaterial({ map: uvChecker(), side: mat.side });
@@ -513,5 +522,17 @@ export class ChannelView {
   setWireOnly(on) {
     if (this.wire) this.wire.uniforms.uWireOnly.value = on ? 1 : 0;
     this.viewer.invalidate();
+  }
+
+  /**
+   * One flat colour per face, or the smooth gradient.
+   *
+   * A property of the lit materials, applied by `dress` on the way out, so it
+   * survives every channel switch. Only the channels that actually light the
+   * surface (shaded, normalGeom) show it, which is where the question is asked.
+   */
+  setFlat(on) {
+    this.flat = on;
+    this.apply(this.mode);
   }
 }

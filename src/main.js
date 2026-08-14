@@ -602,6 +602,28 @@ async function setWireOnly(on, remember = true) {
 }
 
 /**
+ * One flat colour per face, or the smooth gradient.
+ *
+ * A toggle rather than a channel: the lit look stays lit, only the facets go
+ * hard, which is what makes a wireframe view readable in the tools that show
+ * one. It goes through the channel view so every material, stand-in included,
+ * follows the switch.
+ */
+function setFlat(on, remember = true) {
+  $("vb-flat").setAttribute("aria-pressed", String(on));
+  $("vb-flat").classList.toggle("active", on);
+  channels.setFlat(on);
+  if (remember) prefs.set("flat", on);
+  paintViewbar();
+}
+
+$("vb-flat").addEventListener("click", () => {
+  const on = $("vb-flat").getAttribute("aria-pressed") !== "true";
+  setFlat(on);
+  toast(on ? "Ombrage simple" : "Ombrage lissé");
+});
+
+/**
  * Read the bar's state back from the controls it drives.
  *
  * The active channel is read off the panel's own list rather than from
@@ -694,6 +716,10 @@ function paintViewbar() {
   const only = wireOnlyOn && on;
   $("vb-wire-only").setAttribute("aria-pressed", String(only));
   $("vb-wire-only").classList.toggle("active", only);
+  // Flat shading is a look, read from the channel view rather than from a
+  // button that would have to remember its own state.
+  $("vb-flat").setAttribute("aria-pressed", String(channels.flat));
+  $("vb-flat").classList.toggle("active", channels.flat);
 }
 
 viewer.alsoKeep = () => {
@@ -2533,6 +2559,7 @@ function applyPrefs() {
   $("opt-wire-dark").checked = p.wireDark;
   setWireframe(p.wireframe, false);
   setWireOnly(p.wireOnly, false);
+  setFlat(p.flat, false);
   $("opt-exposure").value = String(p.exposure);
   viewer.setExposure(p.exposure);
   $("opt-fov").value = String(p.fov);
@@ -3820,10 +3847,36 @@ function materialOfHit(hit) {
   return source[group] ?? source[0];
 }
 
+/** "qwerty" | "azerty", once the first keypress has said which. */
+let keyLayout = null;
+/**
+ * Which layout is under the hands.
+ *
+ * The four keys that swap between QWERTY and AZERTY (A/Q and W/Z) are matched
+ * by their physical position in the shortcuts, so the shortcut follows the
+ * printed letter instead of the muscle memory: on AZERTY the keycap Z sits
+ * where W does on QWERTY, and Ctrl+Z was closing the document rather than
+ * undoing. The first keypress reveals the layout (the keycap A is on the QWERTY
+ * Q key), and the language is the guess until then.
+ */
+function detectLayout(e) {
+  // The first press of W or A says it all: on AZERTY the keycap W prints z and
+  // the keycap A prints q, the exact mirror of QWERTY.
+  if (e.code === "KeyW") keyLayout = e.key === "z" ? "azerty" : "qwerty";
+  else if (e.code === "KeyA") keyLayout = e.key === "q" ? "azerty" : "qwerty";
+  return keyLayout || ((navigator.language || "").toLowerCase().startsWith("fr") ? "azerty" : "qwerty");
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
   if (library?.isOpen && e.code !== "KeyB") return;
-  switch (e.code) {
+  // On AZERTY, report W/Z and A/Q at the physical positions their letters
+  // occupy, so every case below matches the keycap the user reads.
+  const azerty = detectLayout(e) === "azerty";
+  const code = azerty
+    ? { KeyW: "KeyZ", KeyZ: "KeyW", KeyA: "KeyQ", KeyQ: "KeyA" }[e.code] || e.code
+    : e.code;
+  switch (code) {
     case "Space":
       // in fly mode the space bar lifts the camera instead
       if (nav.mode === "fly") return;

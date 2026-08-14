@@ -33,6 +33,8 @@ export const DEFAULTS = {
   wireOnly: false,
   /** Dark lines rather than light ones: neither works on every model. */
   wireDark: false,
+  /** Flat faces rather than smooth ones, for reading the topology. */
+  flat: false,
   exposure: 1,
   fov: 45,
   projection: "perspective",

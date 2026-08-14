@@ -93,10 +93,8 @@ const BAR_COLOUR = `
           title="Écart au modèle d'origine : du bleu au rouge"></button>
 `;
 
-/** Three ways of looking through or at a surface, while judging its topology. */
+/** Two ways of looking through or at a surface, while judging its topology. */
 const BAR_LAYERS = `
-  <button class="tb-i tb-t" type="button" data-el="flat" data-icon="flat" aria-pressed="false"
-          title="Ombrage plat : chaque triangle sa normale, pour voir les faces réelles"></button>
   <button class="tb-i tb-t" type="button" data-el="opaque" data-icon="opaque" aria-pressed="false"
           title="Forcer la surface opaque, pour que le fil de fer cesse de la traverser"></button>
   <button class="tb-i tb-t" type="button" data-el="xray" data-icon="xray" aria-pressed="false"
@@ -679,21 +677,6 @@ export function createRetopo({
    * whether this mode is open or not -- which is what the relay was pretending to
    * achieve.
    */
-  el.flat.addEventListener("click", () => {
-    const on = el.flat.getAttribute("aria-pressed") !== "true";
-    toggle(el.flat, on);
-    viewer.root.traverse((n) => {
-      if (!n.isMesh && !n.isSkinnedMesh) return;
-      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
-        if (!m || !("flatShading" in m)) continue;
-        m.flatShading = on;
-        m.needsUpdate = true;
-      }
-    });
-    viewer.invalidate?.();
-    say2(on ? "Ombrage plat" : "Ombrage lisse");
-  });
-
   /*
    * Force the surface solid.
    *
