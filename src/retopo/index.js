@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import { applyWire, makeWireUniforms, setWireColor } from "./wire.js";
 import "./retopo.css";
 
 /**
@@ -46,7 +46,19 @@ const SHELL = `
 
   <div class="rt-tgroup">
     <span class="rt-tlabel">Arêtes</span>
-    <button class="seg" type="button" data-el="wire" aria-pressed="false" title="Fil de fer">▧</button>
+    <div class="segment" role="group" aria-label="Arêtes">
+      <button class="seg active" type="button" data-wire="off" title="Aucune arête">Aucune</button>
+      <button class="seg" type="button" data-wire="dark" title="Traits sombres, pour un modèle clair">Sombres</button>
+      <button class="seg" type="button" data-wire="light" title="Traits clairs, pour un modèle sombre">Claires</button>
+    </div>
+  </div>
+
+  <span class="rt-tsep"></span>
+
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Facettes</span>
+    <button class="seg" type="button" data-el="flat" aria-pressed="false"
+            title="Ombrage plat : chaque triangle sa normale, pour lire la facettisation">◈</button>
   </div>
 
   <span class="rt-tsep"></span>
@@ -292,66 +304,33 @@ export function createRetopo({
 
   // --- seeing the quads ---------------------------------------------------
 
-  /** The quad wireframe built for the last result, if it has one. */
-  let quadWire = null;
+  /** Shared by every patched material, so a toggle is an assignment. */
+  const wireU = makeWireUniforms();
+  /** True once a result carrying a pairing has been prepared. */
+  let hasQuads = false;
 
   /**
-   * Draw the pairing, because otherwise it is a number in a report.
+   * Teach the result's materials to draw their own edges.
    *
-   * glTF has no quads, so the result really is a triangle soup and the generic
-   * wireframe draws it as one: every quad crossed out by its own diagonal. The
-   * mask that travelled beside the file says which edges are real, so the lines
-   * built here are the only place the pairing is visible at all. A run with 63 %
-   * quads and a wireframe full of triangles looks like a run that did nothing.
+   * The pairing has to be visible or it is a number in a report: glTF has no
+   * quads, so the result really is a triangle soup and any ordinary wireframe
+   * draws it as one, every quad crossed out by its own diagonal. The mask that
+   * travelled beside the file says which edges are real, and the shader hides
+   * the rest.
    */
-  async function attachQuadWire(object, path) {
-    quadWire = null;
-    let mask;
-    try {
-      mask = await tauri?.core.invoke("retopo_quad_mask", { output: path });
-    } catch {
-      return;
-    }
-    if (!mask?.length) return;
-
-    // One geometry for the whole result, so the pairing is one draw call rather
-    // than one per mesh.
-    const pts = [];
-    let t = 0;
-    object.traverse((n) => {
-      const g = n.isMesh && n.geometry;
-      if (!g) return;
-      const pos = g.attributes.position;
-      const idx = g.index;
-      const count = idx ? idx.count / 3 : pos.count / 3;
-      const at = (i) => (idx ? idx.getX(i) : i);
-      for (let f = 0; f < count; f++, t++) {
-        const m = mask[t];
-        if (m === undefined) return;
-        for (let k = 0; k < 3; k++) {
-          // A cleared bit is a diagonal: the one edge that must not be drawn.
-          if (!(m & (1 << k))) continue;
-          const a = at(f * 3 + k);
-          const b = at(f * 3 + ((k + 1) % 3));
-          pts.push(
-            pos.getX(a), pos.getY(a), pos.getZ(a),
-            pos.getX(b), pos.getY(b), pos.getZ(b)
-          );
-        }
+  async function dressResult(object, path) {
+    if (!object) return;
+    let mask = null;
+    if (tauri) {
+      try {
+        mask = await tauri.core.invoke("retopo_quad_mask", { output: path });
+      } catch {
+        mask = null;
       }
-    });
-    if (!pts.length) return;
-
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    quadWire = new THREE.LineSegments(
-      geom,
-      new THREE.LineBasicMaterial({ color: 0x7cc4ff, transparent: true, opacity: 0.85 })
-    );
-    quadWire.visible = false;
-    // Under the object's own transform, so it follows the result rather than
-    // sitting where the result used to be.
-    object.add(quadWire);
+    }
+    hasQuads = !!mask?.length;
+    wireU.uQuads.value = hasQuads ? 1 : 0;
+    applyWire(object, wireU, mask);
     viewer.invalidate?.();
   }
 
@@ -364,20 +343,37 @@ export function createRetopo({
     });
   }
 
-  el.wire.addEventListener("click", () => {
-    const on = el.wire.getAttribute("aria-pressed") !== "true";
-    el.wire.setAttribute("aria-pressed", String(on));
-    el.wire.classList.toggle("active", on);
-    // When the result has a pairing, the quad lines replace the generic
-    // wireframe on it rather than joining it. Drawing both would draw every
-    // diagonal the pairing exists to hide, which is the one thing this is for.
-    if (quadWire) {
-      quadWire.visible = on;
-      el.wire.title = on ? "Quads affichés" : "Fil de fer, quads compris";
+  for (const b of host.querySelectorAll("[data-wire]")) {
+    b.addEventListener("click", () => {
+      for (const o of host.querySelectorAll("[data-wire]")) o.classList.toggle("active", o === b);
+      const mode = b.dataset.wire;
+      wireU.uWire.value = mode === "off" ? 0 : 1;
+      setWireColor(wireU, mode === "light");
       viewer.invalidate?.();
-    } else {
-      setWireframe?.(on);
-    }
+    });
+  }
+
+  /*
+   * Flat shading, which is not a stylistic choice here.
+   *
+   * A decimated mesh keeps the smooth normals it inherited, and those normals
+   * lie: they draw a curve across a face that is now dead flat. Flat shading
+   * shows the faces you actually have, which is the only honest way to judge how
+   * far a budget went.
+   */
+  el.flat.addEventListener("click", () => {
+    const on = el.flat.getAttribute("aria-pressed") !== "true";
+    el.flat.setAttribute("aria-pressed", String(on));
+    el.flat.classList.toggle("active", on);
+    viewer.root.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+        if (!m || !("flatShading" in m)) continue;
+        m.flatShading = on;
+        m.needsUpdate = true;
+      }
+    });
+    viewer.invalidate?.();
   });
 
   el.frame.addEventListener("click", () => viewer.frameCurrent?.());
@@ -711,9 +707,7 @@ export function createRetopo({
       // Both files stay named, so the bake can be redone on its own without
       // touching the geometry again.
       lastRun = { high: input, low: dirs.output };
-      if (r.quads) {
-        await attachQuadWire(viewer.parts.at(-1)?.object, dirs.output);
-      }
+      await dressResult(viewer.parts.at(-1)?.object, dirs.output);
       reportOn(r);
 
       const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
