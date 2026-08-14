@@ -767,6 +767,45 @@ export function createRetopo({
    * end of the bar, so the button naming both is the only place the two are
    * visible at once.
    */
+  /** Drop the result currently in the scene, if there is one. */
+  function dropResult() {
+    const parts = viewer.parts || [];
+    if (parts.length < 2) return;
+    viewer.removePart(parts.at(-1));
+    cage?.dispose();
+    cage = null;
+  }
+
+  function paintHistory() {
+    el.undo.disabled = running || cursor < 0;
+    el.redo.disabled = running || cursor >= history.length - 1;
+    el.history.textContent = history.length ? `${cursor + 1} / ${history.length}` : "";
+  }
+
+  /** Walk the history by one, in either direction. */
+  async function step(delta) {
+    if (running) return;
+    const next = cursor + delta;
+    if (next < -1 || next >= history.length) return;
+    dropResult();
+    cursor = next;
+    if (cursor >= 0) {
+      const entry = history[cursor];
+      await importPart(entry.path);
+      await dressResult(viewer.parts.at(-1)?.object, entry.path);
+      last = entry.report;
+      lastRun = { high: entry.high, low: entry.path };
+      reportOn(entry.report);
+    } else {
+      last = null;
+      lastRun = null;
+      el.report.textContent = "";
+      setAB(compareMode);
+    }
+    paintHistory();
+    refresh();
+  }
+
   const runLabel = () => {
     const verb = method === "isotropic" ? "Reconstruire" : "Décimer";
     return el.bake.checked ? `${verb} et projeter` : verb;
