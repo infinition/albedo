@@ -197,11 +197,19 @@ real one, built with `npx tauri build`, carries `dist/` inside it:
 | Shipped build | Bytes |
 | --- | ---: |
 | before, the executable found on disk | 4,428,800 |
-| **after** | **5,472,256** |
-| cost | +1,043,456 |
+| after the engine and the baker landed | 5,472,256 |
+| **after the whole viewer chantier** | **5,482,496** |
+| cost | +1,053,696 |
 
 The same one megabyte, which is the useful confirmation: the delta measured
 between two dev builds survives into the real ones.
+
+The last row is worth its own sentence. The shader wireframe, the cage, the
+comparison curtain, the ghost, undo and redo, two engine parameters, the borrowed
+materials list and the scope control together cost **10,240 bytes**. Almost all
+of that work is JavaScript and GLSL strings living in a chunk that was already
+being shipped, which is the argument for putting the viewer's intelligence in the
+front end rather than in Rust, restated as a number.
 
 An earlier draft of this document called that 4,428,800 byte executable stale and
 said the fresh 3,947,008 baseline showed the README's "3.7 MB" claim was
