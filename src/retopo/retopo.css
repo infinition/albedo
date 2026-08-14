@@ -18,6 +18,34 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.16s ease;
+
+  /*
+   * Its own container, so every rule below asks *this box* how wide it is rather
+   * than asking the window.
+   *
+   * The two stopped being the same thing the moment the library learned to take
+   * half the screen: a window query would lay out the full toolbar in a 640
+   * pixel strip because the window is still 1280. One mechanism covers both the
+   * narrow window and the shared one, which is why there are no `@media` rules
+   * in this file.
+   */
+  container-type: inline-size;
+  container-name: retopo;
+
+  /* The surfaces are all the same material. Said once. */
+  --rt-skin: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
+  --rt-blur: blur(8px);
+
+  /*
+   * How wide the panel is, declared once.
+   *
+   * The column above the model has to stop where the panel starts, so the number
+   * appeared in two places and promptly disagreed with itself: the panel shrank
+   * to 320 under a container query and the column went on reserving 360, then
+   * the whole toolbar slid under the panel. One variable, two readers.
+   */
+  --rt-panel-w: 360px;
+  --rt-edge: 12px;
 }
 #retopo.open { opacity: 1; }
 /*
@@ -46,17 +74,33 @@
  * the same model as the second.
  */
 body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
-body.peeking #retopo .rt-panel { width: auto; left: 12px; }
-body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
+
+/*
+ * With the library open, Retopo takes half the window rather than the preview
+ * strip.
+ *
+ * 460 pixels is the right size for *previewing* a model you are about to pick.
+ * It is the wrong size for judging a retopology, which is the one thing this
+ * mode exists to let you do: at that width the panel alone is most of the
+ * viewport and the model is a thumbnail. Opening the mode is a statement that
+ * the model is what you came to look at, so the split follows.
+ *
+ * The rule lives here rather than in the library's stylesheet because it is
+ * Retopo's requirement, and the library should not have to know which modes are
+ * demanding.
+ */
+body.peeking.retopo-open { --peek: 50%; }
+
 
 /* --- the panel ----------------------------------------------------------- */
 
 .rt-panel {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  bottom: 68px;
-  width: 360px;
+  top: var(--rt-edge);
+  right: var(--rt-edge);
+  /* The bar measures itself and publishes the number; see index.js. */
+  bottom: calc(var(--gap, 14px) + var(--rt-bar-h, 54px) + 10px);
+  width: var(--rt-panel-w);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -64,8 +108,8 @@ body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
   overflow-y: auto;
   overflow-x: hidden;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--rt-skin);
+  backdrop-filter: var(--rt-blur);
   border: 1px solid var(--line, #2a2e35);
 }
 /*
@@ -174,8 +218,8 @@ body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
   gap: 8px;
   padding: 8px 8px 11px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--rt-skin);
+  backdrop-filter: var(--rt-blur);
   border: 1px solid var(--line, #2a2e35);
   max-width: calc(100vw - 2 * var(--gap, 14px));
 }
@@ -257,10 +301,19 @@ body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
  * pixels are for and the only offset left.
  */
 .rt-stack {
+  /*
+   * A container in its own right, because the toolbar's room is not the mode's
+   * room: the panel takes 360 pixels off the right before the toolbar sees any
+   * of it. Asking the host gives 1280 where the truth is 878, and the toolbar
+   * lays out a row it cannot fit and wraps into a two storey wall across the
+   * model.
+   */
+  container-type: inline-size;
+  container-name: rtstack;
   position: absolute;
   top: calc(var(--gap, 14px) + 48px);
   left: var(--gap, 14px);
-  right: calc(360px + 2 * var(--gap, 14px));
+  right: calc(var(--rt-panel-w) + var(--gap, 14px) + var(--rt-edge));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -310,8 +363,8 @@ body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
   gap: 8px;
   padding: 7px 10px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--panel, #16181c) 90%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--rt-skin);
+  backdrop-filter: var(--rt-blur);
   border: 1px solid var(--line, #2a2e35);
   /* It is a strip of controls, not a wall: it takes the width it needs and no
      more, so the model behind it stays visible. */
@@ -334,7 +387,6 @@ body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
   flex: none;
 }
 /* With the library peeking there is no room for a second strip of controls. */
-body.peeking #retopo .rt-top { display: none; }
 
 /* --- progress ------------------------------------------------------------ */
 
@@ -422,3 +474,90 @@ body.peeking #retopo .rt-top { display: none; }
   box-shadow: 0 1px 5px rgb(0 0 0 / 0.5);
 }
 #retopo.open .rt-split { pointer-events: auto; }
+
+/* --- narrow ---------------------------------------------------------------
+ *
+ * Container queries, not media queries. The box this mode lives in is half the
+ * window when the library is open and the whole window otherwise, so asking the
+ * window would get the wrong answer exactly when it matters.
+ *
+ * The order is deliberate: labels go before controls, controls shrink before
+ * they wrap, and the panel gives up its column last. What survives longest is
+ * the model, because that is the thing you opened the mode to look at.
+ */
+
+/* Group labels are a luxury. The tooltips still say what everything does. */
+@container rtstack (max-width: 940px) {
+  .rt-tlabel { display: none; }
+  .rt-top { padding: 6px 8px; gap: 6px; }
+  .rt-top .seg { padding: 4px 7px; font-size: 10px; }
+  .rt-tsep { margin: 2px 1px; }
+}
+
+/*
+ * Under 760 the toolbar stops wrapping into a wall and scrolls sideways
+ * instead. A strip three rows tall covers the model, which defeats the purpose
+ * of a mode that is chrome around the viewport.
+ */
+@container rtstack (max-width: 700px) {
+  /* The groups stop wrapping, and so do the buttons inside them. Without the
+     second rule the strip is one row of five groups whose segments each fold
+     internally, which is four storeys tall and reads as a wall. */
+  .rt-top .segment { flex-wrap: nowrap; }
+  .rt-top {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    max-width: 100%;
+    width: auto;
+  }
+  .rt-hud { font-size: 10px; }
+}
+
+/*
+ * Set on the two readers and not on `#retopo`, because a container query only
+ * ever matches *descendants* of its container: an element is not its own
+ * descendant, so a rule on `#retopo` inside `@container retopo` never fires. It
+ * silently does nothing, which is the worst way for a layout rule to be wrong.
+ */
+@container retopo (max-width: 760px) {
+  .rt-panel, .rt-stack { --rt-panel-w: 320px; }
+}
+
+/*
+ * Under 560 there is no arrangement that shows the panel and the model at once,
+ * so the panel takes the width and the model shows between uses of it. Better an
+ * honest full width column than a 200 pixel one with every label clipped.
+ */
+@container retopo (max-width: 560px) {
+  /*
+   * The panel becomes a drawer along the bottom instead of a column down the
+   * side.
+   *
+   * Full width down the side was the first attempt and it covered the toolbar
+   * and the model both, which turns the mode into the screen in front of the
+   * viewport that its own header promises it will never be. Bottom drawer keeps
+   * the arrangement honest: controls at the top, model in the middle, settings
+   * at the bottom, all three visible at once.
+   */
+  .rt-panel, .rt-stack { --rt-panel-w: 0px; }
+  .rt-panel {
+    top: auto;
+    left: var(--rt-edge);
+    right: var(--rt-edge);
+    bottom: calc(var(--gap, 14px) + var(--rt-bar-h, 54px) + 10px);
+    width: auto;
+    max-height: 46%;
+  }
+  .rt-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+    max-width: calc(100% - 2 * var(--rt-edge));
+  }
+  .rt-bar button { flex: 1 1 auto; padding: 0 12px; }
+  /* The note is the first thing to go: it is a nicety, and the errors it would
+     carry have their own line inside the panel. */
+  .rt-note { display: none; }
+  .rt-hud { gap: 10px; }
+}

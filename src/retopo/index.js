@@ -495,6 +495,29 @@ export function createRetopo({
    * size: on a high density display the two differ by the pixel ratio, and using
    * the wrong one puts the curtain at half the position asked for.
    */
+  /*
+   * The action bar's real height, published to the stylesheet.
+   *
+   * The panel used to reserve a fixed number of pixels above it, which was right
+   * until the bar wrapped onto three rows in a narrow window and the panel sat
+   * on top of its own buttons. Reserving a guess is how that happens; measuring
+   * cannot drift.
+   *
+   * Measured on the events that change it *and* watched by an observer. The
+   * observer alone would be neater, but it only delivers while the page is being
+   * rendered, so the first layout can land before it has said anything. The
+   * explicit calls are what make the very first paint right.
+   */
+  function measureBar() {
+    const h = Math.ceil(el.bar.getBoundingClientRect().height);
+    if (h > 0) host.style.setProperty("--rt-bar-h", `${h}px`);
+  }
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(measureBar).observe(el.bar);
+  }
+  window.addEventListener("resize", measureBar);
+
+
   function syncViewport() {
     const c = viewer.renderer?.domElement;
     if (c) wireU.uViewport.value.set(c.width, c.height);
@@ -902,12 +925,20 @@ export function createRetopo({
     show() {
       open = true;
       host.classList.add("open");
+      // The layout outside this module has to know, because the library sizes
+      // the viewport and a retopology cannot be judged in a preview strip.
+      document.body.classList.add("retopo-open");
       onOpenChange?.(true);
+      syncViewport();
       refresh();
+      // After refresh, because the label on the run button changes its width and
+      // therefore whether the bar wraps at all.
+      requestAnimationFrame(measureBar);
     },
     hide() {
       open = false;
       host.classList.remove("open");
+      document.body.classList.remove("retopo-open");
       onOpenChange?.(false);
     },
     toggle() {
