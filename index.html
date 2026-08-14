@@ -103,6 +103,7 @@
           it rather than replacing it.
         -->
         <button class="ov ov-handle" id="viewbar-handle" type="button"
+                data-i18n-title="bar.handle"
                 title="Afficher les outils de vue" aria-expanded="true">
           <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
         </button>
@@ -131,7 +132,7 @@
         -->
         <div class="ov ov-view" id="viewbar">
           <div class="tb-group">
-            <span class="tb-label">Couleur</span>
+            <span class="tb-label" data-i18n="bar.couleur">Couleur</span>
             <!--
               One toggle and one plate. The toggle is the look (smooth or one flat
               colour per face), which is a property of the lit surface rather than
@@ -143,31 +144,38 @@
               to look like, so it says Peint once.
             -->
             <button class="tb-i tb-t" id="vb-flat" type="button" aria-pressed="false"
+                    data-i18n-title="bar.flat"
                     title="Ombrage simple : une teinte par face, pour lire la topologie">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.4 13.6 5.4 8 8.4 2.4 5.4z" fill="currentColor" opacity="0.45"/><path d="M8 8.4 13.6 5.4 13.6 11.4 8 14.4z" fill="currentColor" opacity="0.25"/><path d="M8 8.4 2.4 5.4 2.4 11.4 8 14.4z" fill="currentColor" opacity="0.7"/></svg>
             </button>
             <div class="tb-plate" id="vb-colour" role="radiogroup" aria-label="Canal de couleur">
               <button class="tb-i active" type="button" data-vb-ch="shaded"
+                      data-i18n-title="ch.shaded"
                       title="Rendu physique : la matière éclairée, telle qu'elle sortira">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 0 0 11.2" fill="currentColor" stroke="none" opacity="0.55"/></svg>
               </button>
               <button class="tb-i" type="button" data-vb-ch="unlit"
+                      data-i18n-title="ch.unlit"
                       title="Peint, sans éclairage : la texture telle qu'elle a été faite (U)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.6 2.6 13.4 4.4 7.6 10.2 5.8 8.4z" stroke="#ffb454"/><path d="M5.8 8.4 4 12.9l4.5-1.8" stroke="#ffb454"/></svg>
               </button>
               <button class="tb-i" type="button" data-vb-ch="albedo"
+                      data-i18n-title="ch.albedo"
                       title="Couleur de base seule, sans éclairage ni autres cartes">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.3" cy="6.6" r="3.6" stroke="#ff6b6b"/><circle cx="9.7" cy="9.4" r="3.6" stroke="#4dd0e1"/></svg>
               </button>
               <button class="tb-i" type="button" data-vb-ch="normalMap"
+                      data-i18n-title="ch.normalMap"
                       title="Carte de normales : le relief peint dans la texture">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1.4" fill="#8f9dff" stroke="#8f9dff" opacity="0.8"/><circle cx="8" cy="8" r="3" fill="#c9d1ff" stroke="none"/><circle cx="6.9" cy="6.9" r="1.1" fill="#f2f4ff" stroke="none"/></svg>
               </button>
               <button class="tb-i" type="button" data-vb-ch="normalGeom"
+                      data-i18n-title="ch.normalGeom"
                       title="Normales de géométrie : le relief du maillage lui-même">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8V2.6" stroke="#5ec269"/><path d="M8 8 3.2 10.8" stroke="#e05a5a"/><path d="M8 8l4.8 2.8" stroke="#5b8def"/><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none"/></svg>
               </button>
               <button class="tb-i" type="button" data-vb-ch="uv"
+                      data-i18n-title="ch.uv"
                       title="Damier d'UV : où la texture s'étire et où elle se répète">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1"/><rect x="2.6" y="2.6" width="5.4" height="5.4" fill="#7cc4ff" stroke="none" opacity="0.75"/><rect x="8" y="8" width="5.4" height="5.4" fill="#7cc4ff" stroke="none" opacity="0.75"/></svg>
               </button>
@@ -176,9 +184,10 @@
           </div>
 
           <div class="tb-group">
-            <span class="tb-label">Calques</span>
+            <span class="tb-label" data-i18n="bar.calques">Calques</span>
             <div class="tb-row" id="vb-layers">
               <button class="tb-i tb-t" id="vb-wire" type="button" aria-pressed="false"
+                      data-i18n-title="bar.wire"
                       title="Fil de fer par-dessus la surface (W)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1" fill="#23262c" stroke="#3a3f48"/><path d="M8 2.6v10.8M2.6 8h10.8" stroke="#ffffff"/></svg>
               </button>
@@ -187,10 +196,12 @@
                    this", which no amount of shading can. Its colour comes from
                    the material itself, so it follows whatever channel is on. -->
               <button class="tb-i tb-t" id="vb-wire-only" type="button" aria-pressed="false"
+                      data-i18n-title="bar.wireOnly"
                       title="Fil de fer seul, sans les faces : voir la structure au travers">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 14 5v6l-6 3.2L2 11V5z"/><path d="M8 1.8v12.4M2 5l6 3.2L14 5M2 11l6-3 6 3"/></svg>
               </button>
               <button class="tb-i tb-t tb-sub" id="vb-wire-dark" type="button" aria-pressed="false" hidden
+                      data-i18n-title="bar.wireDark"
                       title="Traits sombres plutôt que clairs, pour un modèle clair">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1" fill="#d7dbe2" stroke="#d7dbe2"/><path d="M8 2.6v10.8M2.6 8h10.8" stroke="#15171b"/></svg>
               </button>
@@ -207,17 +218,20 @@
             G, R, S keys call, and clicking the lit one puts the handles away.
           -->
           <div class="tb-group">
-            <span class="tb-label">Objet</span>
+            <span class="tb-label" data-i18n="bar.objet">Objet</span>
             <div class="tb-row" id="vb-object">
               <button class="tb-i tb-t" type="button" data-giz="translate" aria-pressed="false"
+                      data-i18n-title="giz.translate"
                       title="Déplacer l'objet (G) — recliquer pour ranger les poignées">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.8v10.4M2.8 8h10.4"/><path d="M6.5 4.3 8 2.8l1.5 1.5M6.5 11.7 8 13.2l1.5-1.5M4.3 6.5 2.8 8l1.5 1.5M11.7 6.5 13.2 8l-1.5 1.5"/></svg>
               </button>
               <button class="tb-i tb-t" type="button" data-giz="rotate" aria-pressed="false"
+                      data-i18n-title="giz.rotate"
                       title="Tourner l'objet (R) — recliquer pour ranger les poignées">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 8a5.4 5.4 0 1 1-1.7-3.9"/><path d="M13.4 2.9v2.9h-2.9"/><circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none"/></svg>
               </button>
               <button class="tb-i tb-t" type="button" data-giz="scale" aria-pressed="false"
+                      data-i18n-title="giz.scale"
                       title="Redimensionner l'objet (S) — recliquer pour ranger les poignées">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.4" width="6" height="6" rx="1" opacity="0.6"/><path d="M13.6 8.8v4.8H8.8"/><path d="M7.8 8.6 13.4 13.4"/></svg>
               </button>
@@ -225,23 +239,26 @@
           </div>
 
           <div class="tb-group">
-            <span class="tb-label">Caméra</span>
+            <span class="tb-label" data-i18n="bar.camera">Caméra</span>
             <div class="tb-row" id="vb-camera">
               <!-- One button, not two modes. Orbiting is what a viewer does; being
                    let off the leash is a thing you switch on, not another place to
                    be. (V, or Échap to come back) -->
               <button id="nav-free" class="tb-i tb-t" type="button" aria-pressed="false"
+                      data-i18n-title="cam.free"
                       title="Caméra libre : se détacher du centre, pivoter sur place, avancer (V)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.8" cy="9.2" r="4.2" stroke-dasharray="1.8 1.6"/><path d="M8.6 7.4 13.4 2.6"/><path d="M10.2 2.6h3.2v3.2"/></svg>
               </button>
-              <button id="btn-frame" class="tb-i" type="button" title="Recadrer sur le modèle (F)">
+              <button id="btn-frame" class="tb-i" type="button" data-i18n-title="cam.frame" title="Recadrer sur le modèle (F)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.6V2.6h3M10.4 2.6h3v3M13.4 10.4v3h-3M5.6 13.4h-3v-3"/><circle cx="8" cy="8" r="1.8" opacity="0.8"/></svg>
               </button>
               <button id="btn-turntable" class="tb-i tb-t" type="button" aria-pressed="false"
+                      data-i18n-title="cam.turntable"
                       title="Rotation continue : le modèle tourne sur un plateau (T)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 7.2a5.4 5.4 0 1 1-1.6-3.8"/><path d="M13.4 1.8v3.2h-3.2"/><ellipse cx="8" cy="11.8" rx="4.8" ry="1.7" opacity="0.5"/></svg>
               </button>
               <span id="devices" class="devices"></span>
+              <button id="btn-lang" class="tb-i" type="button" aria-label="Language">FR</button>
             </div>
           </div>
         </div>
@@ -251,12 +268,12 @@
         </div>
 
         <div id="timeline" class="ov" hidden>
-          <button id="anim-play" class="icon" type="button" title="Lecture / pause (Espace)">
+          <button id="anim-play" class="icon" type="button" data-i18n-title="tl.play" title="Lecture / pause (Espace)">
             <svg viewBox="0 0 24 24" id="icon-play"><path d="M8 5l11 7-11 7z" /></svg>
           </button>
-          <input type="range" id="anim-time" min="0" max="1" step="0.001" value="0" aria-label="Position" />
+          <input type="range" id="anim-time" min="0" max="1" step="0.001" value="0" data-i18n-aria="tl.position" aria-label="Position" />
           <span id="anim-clock" class="mono">0.00 / 0.00</span>
-          <select id="anim-select" class="quiet" aria-label="Animation" hidden></select>
+          <select id="anim-select" class="quiet" data-i18n-aria="tl.animation" aria-label="Animation" hidden></select>
         </div>
       </div>
 
@@ -634,44 +651,43 @@
         </section>
 
         <section id="shell-section" hidden>
-          <h2>Intégration Windows</h2>
-          <p class="hint">Les vignettes des fichiers 3D dans l'explorateur, rendues par cette
-            copie d'Albedo. Rien n'est écrit tant que tu ne le demandes pas.</p>
+          <h2 data-i18n="pan.shell">Intégration Windows</h2>
+          <p class="hint" data-i18n="pan.shellHint">Les vignettes des fichiers 3D dans l'explorateur, rendues par cette copie d'Albedo. Rien n'est écrit tant que tu ne le demandes pas.</p>
           <div class="row">
-            <button id="shell-on" class="seg" type="button">Activer</button>
-            <button id="shell-off" class="seg" type="button">Retirer</button>
+            <button id="shell-on" class="seg" type="button" data-i18n="pan.shellOn">Activer</button>
+            <button id="shell-off" class="seg" type="button" data-i18n="pan.shellOff">Retirer</button>
           </div>
           <p class="hint mono" id="shell-state">—</p>
         </section>
 
         <section>
-          <h2>Centre de rotation</h2>
-          <label class="check"><input type="checkbox" id="pivot-show" /><span>Montrer le centre</span></label>
+          <h2 data-i18n="pan.pivot">Centre de rotation</h2>
+          <label class="check"><input type="checkbox" id="pivot-show" /><span data-i18n="pan.pivotShow">Montrer le centre</span></label>
           <div class="row">
-            <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées">Déplacer</button>
-            <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets">Centre géométrique</button>
-            <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante">Restaurer</button>
+            <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées" data-i18n="pan.pivotMove">Déplacer</button>
+            <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets" data-i18n="pan.pivotCentre">Centre géométrique</button>
+            <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante" data-i18n="pan.pivotReset">Restaurer</button>
           </div>
           <div class="row">
-            <button id="save-transform" class="seg" type="button" title="Écrire le modèle redressé dans un nouveau fichier">Enregistrer sous</button>
-            <button id="save-over" class="seg" type="button" title="Remplacer le fichier ouvert">Écraser l'original</button>
+            <button id="save-transform" class="seg" type="button" title="Écrire le modèle redressé dans un nouveau fichier" data-i18n="pan.saveAs">Enregistrer sous</button>
+            <button id="save-over" class="seg" type="button" title="Remplacer le fichier ouvert" data-i18n="pan.saveOver">Écraser l'original</button>
           </div>
           <p class="hint" id="save-note"></p>
         </section>
 
         <section>
-          <h2>Orientation</h2>
+          <h2 data-i18n="pan.orient">Orientation</h2>
           <p class="hint" id="orient-value">Aucune rotation</p>
           <div class="grid axes" id="orient-buttons"></div>
           <div class="row">
-            <button id="orient-reset" class="seg" type="button" title="Revenir a l'orientation du fichier">Reinitialiser</button>
+            <button id="orient-reset" class="seg" type="button" title="Revenir a l'orientation du fichier" data-i18n="pan.orientReset">Reinitialiser</button>
           </div>
         </section>
 
         <section>
-          <h2>Périphériques</h2>
+          <h2 data-i18n="pan.devices">Périphériques</h2>
           <div class="row">
-            <button id="btn-spacemouse" class="wide" type="button">Connecter une SpaceMouse</button>
+            <button id="btn-spacemouse" class="wide" type="button" data-i18n="pan.spacemouse">Connecter une SpaceMouse</button>
           </div>
           <p id="dev-pad" class="hint">Manette : aucune détectée</p>
           <details id="dev-tuning">
@@ -692,13 +708,13 @@
         </section>
 
         <section>
-          <h2>Scène</h2>
+          <h2 data-i18n="pan.scene">Scène</h2>
           <p id="dimensions" class="hint mono">—</p>
           <div class="row">
-            <button id="btn-export" class="wide" type="button" disabled>Exporter en glTF</button>
+            <button id="btn-export" class="wide" type="button" disabled data-i18n="pan.export">Exporter en glTF</button>
           </div>
           <div class="row">
-            <button id="btn-snapshot" class="wide" type="button" disabled>Enregistrer une image</button>
+            <button id="btn-snapshot" class="wide" type="button" disabled data-i18n="pan.snapshot">Enregistrer une image</button>
           </div>
           <p id="export-note" class="hint"></p>
           <div id="tree" class="tree">—</div>

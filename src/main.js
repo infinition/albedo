@@ -18,8 +18,25 @@ import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 import { selection } from "./selection.js";
 import { createTabs } from "./ui/tabs.js";
+import { setLang, initLang, applyStatic, currentLang, t } from "./i18n/index.js";
 
 const $ = (id) => document.getElementById(id);
+
+// The language the browser says, or the one the last session chose, applied to
+// every static string before anything else paints.
+initLang();
+applyStatic();
+
+function paintLangButton() {
+  const b = $("btn-lang");
+  b.textContent = currentLang() === "fr" ? "EN" : "FR";
+  b.title = currentLang() === "fr" ? t("lang.toEn") : t("lang.toFr");
+}
+$("btn-lang").addEventListener("click", () => {
+  setLang(currentLang() === "fr" ? "en" : "fr");
+  paintLangButton();
+});
+paintLangButton();
 
 /**
  * The Retopo mode, declared here and wired at the bottom.
