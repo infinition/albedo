@@ -77,7 +77,26 @@ export function makeWireUniforms() {
     // surface, where a hair of light still says "line".
     uWireColor: { value: new THREE.Color(0.03, 0.03, 0.04) },
     uQuads: { value: 0 },
+    // The curtain. `uSplit` is where it sits across the viewport, 0 to 1.
+    uSplit: { value: 0.5 },
+    uViewport: { value: new THREE.Vector2(1, 1) },
   };
+}
+
+/**
+ * Which side of the curtain an object lives on: -1 left, 1 right, 0 everywhere.
+ *
+ * This one cannot be shared, because telling source and result apart is the
+ * entire point. Each material gets its own, recorded so it can be set later
+ * without recompiling anything.
+ */
+export function setSide(object, side) {
+  object.traverse((n) => {
+    if (!n.isMesh && !n.isSkinnedMesh) return;
+    for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+      if (m?.userData?.uSide) m.userData.uSide.value = side;
+    }
+  });
 }
 
 const VERT_HEAD = /* glsl */ `
@@ -91,8 +110,32 @@ const FRAG_HEAD = /* glsl */ `
 uniform float uWire;
 uniform vec3 uWireColor;
 uniform float uQuads;
+uniform float uSplit;
+uniform float uSide;
+uniform vec2 uViewport;
 varying vec3 vBary;
 varying float vEdges;
+`;
+
+/*
+ * The curtain.
+ *
+ * Comparing the same pixels beats comparing two numbers, and it beats two
+ * viewports side by side too: the eye is very good at spotting a silhouette
+ * shifting under a moving edge, and very bad at comparing two things it has to
+ * saccade between. Source on the left of the line, result on the right, one
+ * camera, one set of pixels.
+ *
+ * Screen space rather than a clipping plane, because the line has to stay
+ * vertical on screen while the model turns underneath it. A world space plane
+ * would tilt with the camera and stop meaning anything.
+ */
+const FRAG_SPLIT = /* glsl */ `
+  if (uSide != 0.0) {
+    float sx = gl_FragCoord.x / max(uViewport.x, 1.0);
+    if (uSide < 0.0 && sx > uSplit) discard;
+    if (uSide > 0.0 && sx < uSplit) discard;
+  }
 `;
 
 /*
@@ -127,14 +170,19 @@ export function patchWire(material, uniforms) {
   for (const m of Array.isArray(material) ? material : [material]) {
     if (!m || m.userData?.wirePatched) continue;
     m.userData.wirePatched = true;
+    m.userData.uSide = { value: 0 };
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
+      shader.uniforms.uSide = m.userData.uSide;
       shader.vertexShader = VERT_HEAD + shader.vertexShader.replace(
         "void main() {",
         "void main() {\n  vBary = aBary;\n  vEdges = aEdges;"
       );
-      shader.fragmentShader =
-        FRAG_HEAD + shader.fragmentShader.replace("#include <dithering_fragment>", FRAG_WIRE);
+      shader.fragmentShader = FRAG_HEAD + shader.fragmentShader
+        // The curtain discards before any lighting runs. Shading a fragment and
+        // then throwing it away is the same picture for more work.
+        .replace("void main() {", "void main() {" + FRAG_SPLIT)
+        .replace("#include <dithering_fragment>", FRAG_WIRE);
     };
     // Without this every patched material shares one compiled program with
     // every unpatched one, and the overlay appears on things that never asked

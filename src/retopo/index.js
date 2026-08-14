@@ -1,4 +1,4 @@
-import { applyWire, makeWireUniforms, setWireColor } from "./wire.js";
+import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
 import "./retopo.css";
 
 /**
@@ -69,6 +69,8 @@ const SHELL = `
       <button class="seg" type="button" data-ab="source" title="La source seule">Source</button>
       <button class="seg" type="button" data-ab="result" title="Le résultat seul">Résultat</button>
       <button class="seg active" type="button" data-ab="both" title="Les deux dans la scène">Les deux</button>
+      <button class="seg" type="button" data-ab="split" title="Rideau déplaçable : source à gauche, résultat à droite">Rideau</button>
+      <button class="seg" type="button" data-ab="ghost" title="Résultat plein, source en transparence par-dessus">Fantôme</button>
     </div>
   </div>
 
@@ -80,6 +82,8 @@ const SHELL = `
   </div>
 </div>
 </div>
+
+<div class="rt-split" data-el="splitLine" hidden><i></i></div>
 
 <div class="rt-panel" data-el="panel">
   <nav class="rt-tabs" role="tablist">
@@ -331,6 +335,13 @@ export function createRetopo({
     hasQuads = !!mask?.length;
     wireU.uQuads.value = hasQuads ? 1 : 0;
     applyWire(object, wireU, mask);
+    // The source gets the same treatment, with no mask: without it the curtain
+    // has nothing to cut on its own side and the left half stays empty.
+    const src = viewer.parts?.[0]?.object;
+    if (src && src !== object) applyWire(src, wireU, null);
+    syncViewport();
+    // A new result has to join whatever comparison was already on screen.
+    setAB(compareMode);
     viewer.invalidate?.();
   }
 
@@ -379,28 +390,117 @@ export function createRetopo({
   el.frame.addEventListener("click", () => viewer.frameCurrent?.());
 
   /**
-   * Source, result, or both.
+   * How the source and the result share the viewport.
    *
-   * Comparing the same pixels is far easier on the eye than reading two numbers,
-   * and the result lives in the scene beside its source rather than replacing
-   * it, which is what makes this possible at all.
+   * Five modes rather than three, because "is this good enough" is not one
+   * question. The curtain answers "did the silhouette move", the ghost answers
+   * "did the low poly sink inside the original surface", and neither is
+   * answerable by looking at the two meshes one after the other: the eye is very
+   * good at spotting a change under a moving edge and very bad at comparing two
+   * things it has to look back and forth between.
    */
-  function setAB(mode) {
-    const parts = viewer.parts || [];
-    const lastIsResult = parts.length > 1;
-    parts.forEach((p, i) => {
-      const isResult = lastIsResult && i === parts.length - 1;
-      p.object.visible =
-        mode === "both" || (mode === "result" ? isResult : !isResult);
+  let compareMode = "both";
+  /** Materials whose transparency the ghost borrowed, and what to give back. */
+  let ghosted = [];
+
+  function unghost() {
+    for (const { m, transparent, opacity, depthWrite } of ghosted) {
+      m.transparent = transparent;
+      m.opacity = opacity;
+      m.depthWrite = depthWrite;
+      m.needsUpdate = true;
+    }
+    ghosted = [];
+  }
+
+  function ghost(object) {
+    object.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+        if (!m) continue;
+        ghosted.push({ m, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
+        m.transparent = true;
+        m.opacity = 0.28;
+        // Without this the shell writes depth and hides the very thing it is
+        // drawn over, which makes the mode useless in the one case it exists
+        // for: the result poking out through the original surface.
+        m.depthWrite = false;
+        m.needsUpdate = true;
+      }
     });
+  }
+
+  function setAB(mode) {
+    compareMode = mode;
+    const parts = viewer.parts || [];
+    unghost();
+    for (const p of parts) {
+      p.object.visible = true;
+      setSide(p.object, 0);
+    }
+    el.splitLine.hidden = mode !== "split";
+
+    // With nothing to compare against, every mode is "both".
+    const src = parts[0]?.object;
+    const res = parts.length > 1 ? parts.at(-1).object : null;
+    if (src && res) {
+      if (mode === "source") res.visible = false;
+      else if (mode === "result") src.visible = false;
+      else if (mode === "split") {
+        setSide(src, -1);
+        setSide(res, 1);
+      } else if (mode === "ghost") ghost(src);
+    }
     viewer.invalidate?.();
   }
+
   for (const b of host.querySelectorAll("[data-ab]")) {
     b.addEventListener("click", () => {
       for (const o of host.querySelectorAll("[data-ab]")) o.classList.toggle("active", o === b);
       setAB(b.dataset.ab);
     });
   }
+
+  /*
+   * Dragging the curtain.
+   *
+   * Pointer events rather than mouse events, so a stylus and a touch screen work
+   * without a second code path, and capture so the drag survives the pointer
+   * leaving the thin line it started on.
+   */
+  {
+    let dragging = false;
+    const place = (clientX) => {
+      const r = (viewer.renderer?.domElement || host).getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, (clientX - r.left) / Math.max(r.width, 1)));
+      wireU.uSplit.value = t;
+      el.splitLine.style.left = `${t * 100}%`;
+      viewer.invalidate?.();
+    };
+    el.splitLine.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      el.splitLine.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    el.splitLine.addEventListener("pointermove", (e) => dragging && place(e.clientX));
+    el.splitLine.addEventListener("pointerup", (e) => {
+      dragging = false;
+      el.splitLine.releasePointerCapture(e.pointerId);
+    });
+  }
+
+  /*
+   * The shader needs the viewport in pixels to turn gl_FragCoord into a
+   * fraction, and it is the drawing buffer size that matters rather than the CSS
+   * size: on a high density display the two differ by the pixel ratio, and using
+   * the wrong one puts the curtain at half the position asked for.
+   */
+  function syncViewport() {
+    const c = viewer.renderer?.domElement;
+    if (c) wireU.uViewport.value.set(c.width, c.height);
+  }
+  syncViewport();
+  window.addEventListener("resize", syncViewport);
 
   // --- painting -----------------------------------------------------------
 

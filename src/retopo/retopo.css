@@ -381,3 +381,44 @@ body.peeking #retopo .rt-top { display: none; }
   }
   .rt-hud { font-size: 10px; }
 }
+
+/* --- the curtain --------------------------------------------------------- */
+
+/*
+ * The handle for the screen space split. The shader does the cutting; this is
+ * only the thing you grab.
+ *
+ * `<i>` is a wider invisible target around a one pixel line, because a one pixel
+ * hit area is a one pixel hit area and nobody can hit it.
+ */
+.rt-split {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  z-index: 3;
+  background: color-mix(in srgb, var(--accent, #7cc4ff) 85%, white);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.45);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.rt-split > i {
+  position: absolute;
+  inset: 0 -9px;
+  display: block;
+}
+/* A grip in the middle, so the line reads as draggable rather than as a seam. */
+.rt-split::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent, #7cc4ff) 85%, white);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.5);
+}
+#retopo.open .rt-split { pointer-events: auto; }
