@@ -103,6 +103,12 @@ export const ICONS = {
      <path d="M8 2.2v12.2M2.4 6l5.6 2.6L13.6 6" opacity="0.7"/>`
   ),
 
+  /** Opaque: a filled solid, the opposite of the x-ray beside it. */
+  opaque: wrap(
+    `<path d="M8 2.2 13.6 6v6.2L8 14.4 2.4 12.2V6z" fill="#9db8ff" stroke="#9db8ff" opacity="0.85"/>
+     <path d="M8 8.6 13.6 6M8 8.6 2.4 6M8 8.6v5.8" stroke="#15171b"/>`
+  ),
+
   /** X-ray: see the far side through the near one. */
   xray: wrap(
     `<path d="M8 2.2 13.6 6v6.2L8 14.4 2.4 12.2V6z" opacity="0.5"/>

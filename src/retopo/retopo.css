@@ -328,8 +328,8 @@ body.peeking.retopo-open { --peek: 50%; }
 
 .rt-top {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  align-items: flex-end;
+  gap: 10px;
   padding: 6px 9px;
   border-radius: 11px;
   background: var(--rt-skin);
@@ -341,7 +341,54 @@ body.peeking.retopo-open { --peek: 50%; }
   max-width: 100%;
 }
 
-.rt-tgroup { display: flex; align-items: center; gap: 2px; }
+/*
+ * Three axes, and the bar has to *look* like three axes.
+ *
+ * They were one flat row of seventeen identical squares in which some buttons
+ * replaced each other and others stacked, with nothing on screen saying which
+ * did what. That is the whole reason the row read as chaos rather than as a
+ * toolbar. The shapes carry the grammar now:
+ *
+ *   a **plate** is a choice, exactly one of its buttons is lit;
+ *   a **loose button** is a layer, any number can be on at once.
+ *
+ * Labels are back above each group. They cost nine pixels of height and they are
+ * what turns a wall of glyphs into three short sentences.
+ */
+.rt-tgroup { display: flex; flex-direction: column; gap: 3px; }
+.rt-tlabel {
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim, #8b929c);
+  padding-left: 2px;
+}
+
+/* One choice among several: recessed, joined, exactly one lit. */
+.rt-plate {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--line, #2a2e35) 42%, transparent);
+}
+
+/* Independent switches: no plate under them, so they read as separate things. */
+.rt-toggles { display: flex; align-items: center; gap: 3px; }
+
+/*
+ * A layer that is on gets an outline rather than the plate's fill, so at a glance
+ * "one of these" and "any of these" never look the same even when both are lit.
+ */
+.rt-t.active {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent, #7cc4ff);
+}
+
+/* The wire colour flip is a detail of the wire button, not a peer of it. */
+.rt-sub-i { width: 22px; height: 22px; border-radius: 6px; }
+.rt-sub-i svg { width: 12px; height: 12px; }
 
 .rt-tsep {
   width: 1px;
@@ -531,4 +578,44 @@ body.peeking.retopo-open { --peek: 50%; }
   /* The note is the first thing to go: it is a nicety, and the errors it would
      carry have their own line inside the panel. */
   .rt-note { display: none; }
+}
+
+/* --- the report ----------------------------------------------------------
+ *
+ * It was one grey paragraph holding eleven numbers, which is the same as holding
+ * none: nothing to compare, nothing to find, nothing that stands out when it goes
+ * wrong. One row per figure, the label dim and the value bright, and the two
+ * numbers that mean "this went badly" allowed to say so in colour.
+ */
+.rt-stats { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px; }
+.rt-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+/* Zebra, because a column of eleven rows is read across and the eye needs a rail
+   to come back to. */
+.rt-stat:nth-child(odd) { background: color-mix(in srgb, var(--line, #2a2e35) 26%, transparent); }
+.rt-stat b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg, #e6e9ef);
+  white-space: nowrap;
+}
+.rt-stat span { color: var(--dim, #8b929c); }
+.rt-stat.good b { color: #9ede4f; }
+.rt-stat.warn b { color: #ffb454; }
+.rt-stat.bad b { color: var(--bad, #ff8b7a); }
+
+/* A heading between groups of figures: the run, then the atlas. */
+.rt-stats-head {
+  margin: 8px 0 2px;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim, #8b929c);
 }

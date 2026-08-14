@@ -273,7 +273,19 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
 #inspector.open { transform: none; opacity: 1; }
 
 /* Give the top-right buttons room when the panel is out */
-body.inspector .ov-tr { right: calc(324px + var(--gap) * 2); }
+/*
+ * The mode buttons never move.
+ *
+ * They used to slide left when the inspector opened, and Retopo, whose panel
+ * starts below them instead, left them where they were. So the one control that
+ * switches between viewer, library and Retopo sat in a different place depending
+ * on which mode you were already in — which is the worst possible behaviour for
+ * a control whose entire job is leaving the mode you are in.
+ *
+ * The panels pass under them now. That is one rule for every mode instead of one
+ * rule per mode, and the buttons are where the muscle memory left them.
+ */
+body.inspector #inspector { top: calc(var(--gap) + 48px); }
 body.inspector .ov-br { opacity: 0; }
 .ov-tr, .ov-br { transition: right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s; }
 

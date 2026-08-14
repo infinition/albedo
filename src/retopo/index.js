@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { buildCage } from "./cage.js";
 import { ICONS } from "./icons.js";
 import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
@@ -34,41 +35,47 @@ const SHELL = `
     <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
   </dl>
 
-  <span class="rt-tsep"></span>
-
-  <div class="rt-tgroup" role="group" aria-label="Affichage">
-    <button class="rt-i active" type="button" data-ch="shaded" data-icon="shaded" title="Rendu physique"></button>
-    <button class="rt-i" type="button" data-ch="unlit" data-icon="unlit" title="Peint : la texture telle qu'elle a été faite, sans éclairage"></button>
-    <button class="rt-i" type="button" data-ch="albedo" data-icon="albedo" title="Couleur de base seule"></button>
-    <button class="rt-i" type="button" data-ch="normalGeom" data-icon="normalGeom" title="Normales de géométrie"></button>
-    <button class="rt-i" type="button" data-ch="uv" data-icon="uv" title="Damier d'UV"></button>
-    <button class="rt-i" type="button" data-view="charts" data-icon="charts" data-el="btnCharts" title="Îlots de l'atlas, une couleur par îlot" disabled></button>
-    <button class="rt-i" type="button" data-view="deviation" data-icon="deviation" data-el="btnDeviation" title="Écart au modèle d'origine" disabled></button>
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Couleur</span>
+    <div class="rt-plate" role="radiogroup" aria-label="Couleur de la surface">
+      <button class="rt-i active" type="button" data-colour="shaded" data-icon="shaded" title="Rendu physique"></button>
+      <button class="rt-i" type="button" data-colour="unlit" data-icon="unlit" title="Peint : la texture telle qu'elle a été faite, sans éclairage"></button>
+      <button class="rt-i" type="button" data-colour="albedo" data-icon="albedo" title="Couleur de base seule"></button>
+      <button class="rt-i" type="button" data-colour="normalGeom" data-icon="normalGeom" title="Normales de géométrie"></button>
+      <button class="rt-i" type="button" data-colour="uv" data-icon="uv" title="Damier d'UV"></button>
+      <button class="rt-i" type="button" data-colour="charts" data-icon="charts" data-el="btnCharts" title="Îlots de l'atlas, une couleur par îlot" disabled></button>
+      <button class="rt-i" type="button" data-colour="deviation" data-icon="deviation" data-el="btnDeviation" title="Écart au modèle d'origine" disabled></button>
+    </div>
   </div>
 
-  <span class="rt-tsep"></span>
-
-  <div class="rt-tgroup" role="group" aria-label="Arêtes">
-    <button class="rt-i active" type="button" data-wire="off" data-icon="wireOff" title="Aucune arête"></button>
-    <button class="rt-i" type="button" data-wire="dark" data-icon="wireDark" title="Arêtes sombres, pour un modèle clair"></button>
-    <button class="rt-i" type="button" data-wire="light" data-icon="wireLight" title="Arêtes claires, pour un modèle sombre"></button>
-    <button class="rt-i" type="button" data-el="flat" data-icon="flat" aria-pressed="false" title="Ombrage plat : chaque triangle sa normale"></button>
-    <button class="rt-i" type="button" data-el="xray" data-icon="xray" aria-pressed="false" title="Rayons X : voir à travers la surface"></button>
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Calques</span>
+    <div class="rt-toggles">
+      <button class="rt-i rt-t" type="button" data-el="wire" data-icon="wireLight" aria-pressed="false" title="Fil de fer par-dessus la surface"></button>
+      <button class="rt-i rt-t rt-sub-i" type="button" data-el="wireFlip" data-icon="wireDark" aria-pressed="false" title="Traits sombres plutôt que clairs" hidden></button>
+      <button class="rt-i rt-t" type="button" data-el="flat" data-icon="flat" aria-pressed="false" title="Ombrage plat : chaque triangle sa normale"></button>
+      <button class="rt-i rt-t" type="button" data-el="opaque" data-icon="opaque" aria-pressed="false" title="Opaque : forcer la surface pleine, pour que le fil de fer ne traverse plus"></button>
+      <button class="rt-i rt-t" type="button" data-el="xray" data-icon="xray" aria-pressed="false" title="Rayons X : voir à travers la surface"></button>
+    </div>
   </div>
 
-  <span class="rt-tsep"></span>
-
-  <div class="rt-tgroup" role="group" aria-label="Comparer">
-    <button class="rt-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
-    <button class="rt-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
-    <button class="rt-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
-    <button class="rt-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
-    <button class="rt-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Scène</span>
+    <div class="rt-plate" role="radiogroup" aria-label="Ce qui est dans la scène">
+      <button class="rt-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
+      <button class="rt-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
+      <button class="rt-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
+      <button class="rt-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
+      <button class="rt-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
+    </div>
   </div>
 
-  <span class="rt-tsep"></span>
-
-  <button class="rt-i" type="button" data-el="frame" data-icon="frame" title="Recadrer"></button>
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Caméra</span>
+    <div class="rt-toggles">
+      <button class="rt-i rt-t" type="button" data-el="frame" data-icon="frame" title="Recadrer"></button>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -528,31 +535,158 @@ export function createRetopo({
 
   // --- the top bar --------------------------------------------------------
 
-  for (const b of host.querySelectorAll("[data-ch]")) {
-    b.addEventListener("click", () => {
-      for (const o of host.querySelectorAll("[data-ch]")) o.classList.toggle("active", o === b);
-      for (const o of host.querySelectorAll("[data-view]")) o.classList.remove("active");
-      // Picking one of Albedo's channels means leaving the data views, which are
-      // overrides drawn on top of whatever channel is underneath.
-      wireU.uView.value = 0;
-      applyChannel?.(b.dataset.ch);
-      viewer.invalidate?.();
-    });
+  /*
+   * One choice of surface colour, seven options, one mechanism.
+   *
+   * Five of them are Albedo's own channels and two are overrides this module
+   * draws in the shader, and *that difference is not the user's problem*. They
+   * were two groups with two behaviours that looked identical in the bar, which
+   * is what made the row unreadable: some buttons stayed lit together and some
+   * replaced each other, with nothing on screen saying which was which. One
+   * radio group, exactly one active, whatever it takes underneath.
+   */
+  const COLOUR_VIEWS = { charts: 1, deviation: 2 };
+
+  /**
+   * Say what just happened, in the words the buttons use.
+   *
+   * Every control in this mode changes something you have to *look* at the model
+   * to notice, and several of them do nothing visible at all on a model that has
+   * not been decimated yet. Without a line of text the honest reading of a click
+   * is "nothing happened", which is how a working tool gets reported as broken.
+   *
+   * Never with an empty string: the toast element prints whatever it is handed,
+   * so a null would flash a blank bubble, which says less than silence.
+   */
+  const say2 = (text) => text && toast?.(text);
+
+  const LABELS = {
+    shaded: "Rendu physique",
+    unlit: "Peint, sans éclairage",
+    albedo: "Couleur de base",
+    normalGeom: "Normales de géométrie",
+    uv: "Damier d'UV",
+    charts: "Îlots de l'atlas",
+    deviation: "Écart au modèle d'origine",
+  };
+
+  const AB_LABELS = {
+    source: "Source seule",
+    result: "Résultat seul",
+    both: "Source et résultat",
+    split: "Rideau : glisse la ligne",
+    ghost: "Fantôme : source en transparence",
+  };
+
+  function setColour(name) {
+    for (const o of host.querySelectorAll("[data-colour]")) {
+      o.classList.toggle("active", o.dataset.colour === name);
+    }
+    const view = COLOUR_VIEWS[name] || 0;
+    wireU.uView.value = view;
+    // A data view is painted over whatever channel is underneath, so the
+    // underlying one stays on the plain shaded render rather than on a UV
+    // checker that would show through nothing.
+    applyChannel?.(view ? "shaded" : name);
+    viewer.invalidate?.();
+    say2(LABELS[name] || name);
   }
 
-  for (const b of host.querySelectorAll("[data-view]")) {
-    b.addEventListener("click", () => {
-      const on = !b.classList.contains("active");
-      for (const o of host.querySelectorAll("[data-view]")) o.classList.toggle("active", on && o === b);
-      wireU.uView.value = on ? (b.dataset.view === "charts" ? 1 : 2) : 0;
-      viewer.invalidate?.();
-    });
+  for (const b of host.querySelectorAll("[data-colour]")) {
+    b.addEventListener("click", () => setColour(b.dataset.colour));
   }
+
+  /*
+   * Layers are toggles, and they look like toggles.
+   *
+   * The colour above is a choice; these are things you add on top of it, and any
+   * number of them can be on at once. Giving them a different shape in the bar
+   * is the only thing that says so without a manual.
+   */
+  const toggle = (node, on) => {
+    node.setAttribute("aria-pressed", String(on));
+    node.classList.toggle("active", on);
+  };
+
+  el.wire.addEventListener("click", () => {
+    const on = el.wire.getAttribute("aria-pressed") !== "true";
+    toggle(el.wire, on);
+    wireU.uWire.value = on ? 1 : 0;
+    // The light-or-dark choice only exists while there are lines to colour, so
+    // it appears with them instead of sitting there inert two thirds of the time.
+    el.wireFlip.hidden = !on;
+    viewer.invalidate?.();
+    say2(on ? (hasQuads ? "Fil de fer, quads compris" : "Fil de fer") : "Fil de fer coupé");
+  });
+
+  el.wireFlip.addEventListener("click", () => {
+    const dark = el.wireFlip.getAttribute("aria-pressed") !== "true";
+    toggle(el.wireFlip, dark);
+    setWireColor(wireU, !dark);
+    viewer.invalidate?.();
+  });
+
+  el.flat.addEventListener("click", () => {
+    const on = el.flat.getAttribute("aria-pressed") !== "true";
+    toggle(el.flat, on);
+    viewer.root.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+        if (!m || !("flatShading" in m)) continue;
+        m.flatShading = on;
+        m.needsUpdate = true;
+      }
+    });
+    viewer.invalidate?.();
+    say2(on ? "Ombrage plat" : "Ombrage lisse");
+  });
+
+  /*
+   * Force the surface solid.
+   *
+   * A model whose materials are alpha blended draws its own far side through its
+   * near one, and a wireframe over that is every edge of the whole mesh at once:
+   * unreadable, and the exact opposite of what a wireframe is for. Nothing is
+   * wrong with the model — leaves and glass are supposed to be transparent — but
+   * judging topology is not the moment for it.
+   *
+   * The originals are kept and handed back, because this is a way of looking at
+   * the model and not an edit to it.
+   */
+  el.opaque.addEventListener("click", () => {
+    const on = el.opaque.getAttribute("aria-pressed") !== "true";
+    toggle(el.opaque, on);
+    viewer.root.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+        if (!m) continue;
+        if (on) {
+          m.userData.solidWas ??= {
+            transparent: m.transparent,
+            opacity: m.opacity,
+            depthWrite: m.depthWrite,
+            side: m.side,
+          };
+          m.transparent = false;
+          m.opacity = 1;
+          m.depthWrite = true;
+          // Front faces only: a double sided leaf drawn solid still shows its own
+          // underside through itself wherever it folds.
+          m.side = THREE.FrontSide;
+        } else if (m.userData.solidWas) {
+          Object.assign(m, m.userData.solidWas);
+          delete m.userData.solidWas;
+        }
+        m.needsUpdate = true;
+      }
+    });
+    viewer.invalidate?.();
+    say2(on ? "Surface forcée opaque" : "Transparence du modèle rendue");
+  });
 
   el.xray.addEventListener("click", () => {
     const on = el.xray.getAttribute("aria-pressed") !== "true";
-    el.xray.setAttribute("aria-pressed", String(on));
-    el.xray.classList.toggle("active", on);
+    toggle(el.xray, on);
     wireU.uXray.value = on ? 1 : 0;
     // Transparency has to be turned on at the material for the alpha the shader
     // writes to mean anything at all.
@@ -608,7 +742,10 @@ export function createRetopo({
     viewer.invalidate?.();
   });
 
-  el.frame.addEventListener("click", () => viewer.frameCurrent?.());
+  el.frame.addEventListener("click", () => {
+    viewer.frameCurrent?.();
+    say2("Recadré");
+  });
 
   /**
    * How the source and the result share the viewport.
@@ -679,6 +816,13 @@ export function createRetopo({
     b.addEventListener("click", () => {
       for (const o of host.querySelectorAll("[data-ab]")) o.classList.toggle("active", o === b);
       setAB(b.dataset.ab);
+      const parts = viewer.parts || [];
+      // On a model with no result yet, four of the five modes are the same
+      // picture. Saying so beats letting someone click all five and conclude the
+      // buttons are dead.
+      say2(parts.length > 1
+        ? AB_LABELS[b.dataset.ab]
+        : "Rien à comparer tant qu'il n'y a pas de résultat");
     });
   }
 
@@ -937,52 +1081,74 @@ export function createRetopo({
    * collapse unless the numbers are on screen.
    */
   function reportOn(r, bakeOnly = false) {
-    const lines = [];
+    /*
+     * Rows, not a paragraph.
+     *
+     * It was one grey block holding eleven numbers, which is the same as holding
+     * none: nothing to compare against, nothing to scan for, and nothing that
+     * stands out when it goes wrong. A label and a value per line, and the two
+     * figures that mean "this went badly" are allowed to say so in colour.
+     */
+    const rows = [];
+    const add = (label, value, tone = "") => rows.push({ label, value, tone });
+
     if (!bakeOnly) {
-      lines.push(
-        `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)} triangles en ` +
-          `${(r.millis / 1000).toFixed(2)} s, déviation maximum ` +
-          `${r.deviationMax.toPrecision(3)} unité.`
-      );
+      add("Triangles", `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)}`);
+      add("Réduction", `${(100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(1)} %`, "good");
+      add("Durée", `${(r.millis / 1000).toFixed(2)} s`);
+      add("Déviation max", `${r.deviationMax.toPrecision(3)} unité`);
       if (r.holesFilled || r.holesLeft) {
-        lines.push(`Trous : ${fr(r.holesFilled)} comblés, ${fr(r.holesLeft)} laissés ouverts.`);
+        add("Trous comblés", fr(r.holesFilled));
+        // A hole left open is one the bake will project straight through.
+        if (r.holesLeft) add("Trous laissés", fr(r.holesLeft), "warn");
       }
-      if (r.rejectedTopology || r.rejectedFlip) {
-        lines.push(
-          `${fr(r.collapses)} fusions, refus : ${fr(r.rejectedTopology)} topologie, ` +
-            `${fr(r.rejectedFlip)} retournement.`
-        );
-      }
-      // The mean, never the worst. The worst triangle sits on a crease, which
+      if (r.collapses) add("Fusions", fr(r.collapses));
+      // A large refusal count next to a barely moved triangle count is a guard
+      // firing on every candidate, and it looks exactly like a mesh that had
+      // nothing left to collapse unless the numbers are side by side.
+      if (r.rejectedTopology) add("Refus topologie", fr(r.rejectedTopology), r.rejectedTopology > r.collapses ? "warn" : "");
+      if (r.rejectedFlip) add("Refus retournement", fr(r.rejectedFlip), r.rejectedFlip > r.collapses ? "warn" : "");
+      // The mean, never the worst: the worst triangle sits on a crease, which
       // relaxation pins on purpose, so it barely moves even when the mesh
-      // improved throughout.
+      // improved everywhere else.
       if (r.aspectAfter > 0) {
-        lines.push(
-          `Rapport d'aspect moyen : ${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}.`
-        );
+        add("Rapport d'aspect moyen", `${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}`,
+            r.aspectAfter < r.aspectBefore ? "good" : "");
       }
-      if (r.quads) {
-        lines.push(`${fr(r.quads)} quads, ${(r.quadFraction * 100).toFixed(0)} % de la surface.`);
-      }
+      if (r.quads) add("Quads", `${fr(r.quads)} · ${(r.quadFraction * 100).toFixed(0)} %`, "good");
     } else {
-      lines.push(`Cartes refaites en ${(r.millis / 1000).toFixed(2)} s, géométrie inchangée.`);
+      add("Cuisson", `${(r.millis / 1000).toFixed(2)} s`);
+      add("Géométrie", "inchangée");
     }
+
+    let atlas = [];
     if (r.charts) {
       const total = r.hits + r.misses;
       const miss = total ? (r.misses / total) * 100 : 0;
-      lines.push(
-        `Atlas : ${fr(r.charts)} îlots, ${(r.utilisation * 100).toFixed(0)} % occupé, ` +
-          `${miss.toFixed(1)} % de rayons manqués.`
-      );
-      lines.push(`Cartes : ${r.maps.join(", ")}.`);
-      // A miss is a ray that fell back to the nearest surface point rather than
-      // finding the high poly. A few are normal; a lot means the cage is too
-      // tight for this pair of meshes, or a chart wrapped around something thin.
-      if (miss > 15) lines.push("Beaucoup de manques : essaie une cage plus longue.");
+      atlas = [
+        { label: "Îlots", value: fr(r.charts), tone: "" },
+        { label: "Occupation", value: `${(r.utilisation * 100).toFixed(0)} %`,
+          tone: r.utilisation > 0.6 ? "good" : "warn" },
+        // A miss is a ray that fell back to the nearest surface point instead of
+        // finding the high poly. A few are normal; a lot means the cage is too
+        // tight for this pair of meshes.
+        { label: "Rayons manqués", value: `${miss.toFixed(1)} %`,
+          tone: miss > 15 ? "bad" : miss > 6 ? "warn" : "good" },
+        { label: "Cartes", value: r.maps.join(", "), tone: "" },
+      ];
     }
-    el.report.textContent = lines.join(" ");
+
+    const paint = (list) => list.map((x) =>
+      `<div class="rt-stat ${x.tone}"><span>${x.label}</span><b>${x.value}</b></div>`).join("");
+
+    el.report.innerHTML =
+      `<div class="rt-stats">${paint(rows)}</div>` +
+      (atlas.length
+        ? `<p class="rt-stats-head">Atlas</p><div class="rt-stats">${paint(atlas)}</div>`
+        : "");
     showTab("result");
   }
+
 
   /** The bar, the fill and the note, in one place so they cannot disagree. */
   function say(text, fraction) {
@@ -1237,14 +1403,31 @@ export function createRetopo({
     b.addEventListener("click", () => {
       for (const o of host.querySelectorAll("[data-scope]")) o.classList.toggle("active", o === b);
       scope = b.dataset.scope;
+      const hidden = (channels?.materials?.() || []).filter((m) => m.hidden).length;
+      say2(scope === "visible"
+        ? hidden
+          ? `${hidden} matière${hidden > 1 ? "s" : ""} laissée${hidden > 1 ? "s" : ""} tranquille${hidden > 1 ? "s" : ""}`
+          : "Aucune matière masquée : la portée ne change rien"
+        : "Tout le modèle");
     });
   }
 
-  el.undo.addEventListener("click", () => step(-1));
-  el.redo.addEventListener("click", () => step(1));
+  el.undo.addEventListener("click", async () => {
+    await step(-1);
+    say2(cursor < 0 ? "Retour au modèle d'origine" : `Résultat ${cursor + 1} sur ${history.length}`);
+  });
+  el.redo.addEventListener("click", async () => {
+    await step(1);
+    say2(`Résultat ${cursor + 1} sur ${history.length}`);
+  });
 
   el.devScale.addEventListener("input", syncDevScale);
-  el.showCage.addEventListener("change", syncCage);
+  el.showCage.addEventListener("change", () => {
+    syncCage();
+    say2(el.showCage.checked
+      ? cage ? "Cage affichée" : "La cage a besoin d'un résultat"
+      : "Cage masquée");
+  });
   el.cageOut.addEventListener("input", syncCage);
 
   el.run.addEventListener("click", () => {
