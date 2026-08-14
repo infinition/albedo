@@ -654,6 +654,20 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     ignoreDeadVertexColors(object);
     ensureAoUv(object);
     const stats = viewer.setModel(object, animations, label || "");
+    /*
+     * The veil comes down here, the instant there is something behind it.
+     *
+     * It used to be lifted further along, after the channels, the wireframe and
+     * the transparency pass. Anything throwing in between left the model on
+     * screen with "Dépose un modèle" floating over it, swallowing every click:
+     * visible and untouchable. That has now happened twice from two unrelated
+     * causes, which is the definition of a bad place to put it.
+     *
+     * A model in the scene is the whole condition for hiding it. Whatever else
+     * goes wrong afterwards is a problem with a message, not a reason to keep
+     * the door shut.
+     */
+    $("empty").classList.add("hidden");
     nav.calibrate(viewer.boxHelper.box);
     channels.reset();
     selection.clear();

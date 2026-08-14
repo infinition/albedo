@@ -447,8 +447,22 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
  * The panels pass under them now. That is one rule for every mode instead of one
  * rule per mode, and the buttons are where the muscle memory left them.
  */
-body.inspector #inspector { top: calc(var(--gap) + 48px); }
+/*
+ * The panel runs the full height again.
+ *
+ * It was pushed down to pass under the mode buttons, which floated over the top
+ * right corner. Those buttons live at the start of the left cluster now, so
+ * there is nothing above the right edge to make room for, and a sidebar that
+ * gives up its first forty eight pixels for nothing is a sidebar that has been
+ * made smaller for a reason that no longer exists.
+ */
+body.inspector #inspector { top: var(--gap); }
 body.inspector .ov-br { opacity: 0; }
+
+/* The top right corner holds nothing now. Every button that lived there is in
+   the left cluster, which is what lets a panel own the right edge outright
+   instead of starting forty eight pixels down to dodge them. */
+.ov-tr:empty { display: none; }
 .ov-tr, .ov-br { transition: right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s; }
 
 #inspector::-webkit-scrollbar { width: 8px; }

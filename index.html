@@ -35,6 +35,24 @@
       <!-- Overlay chrome ---------------------------------------------------->
       <div id="chrome">
         <div class="ov ov-tl" id="title-slot">
+          <!--
+            The three modes, at the very start of the left cluster.
+            They used to sit top right, which cost the panel below them the top
+            of its column: a sidebar cannot run the full height of a window while
+            something floats over its first forty pixels. Here they sit before
+            the opener, in the order you reach for them, and the right edge is
+            free from top to bottom.
+          -->
+          <button id="btn-library" class="icon" type="button" title="Bibliothèque (B)">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          </button>
+          <button id="btn-inspector" class="icon" type="button" title="Visionneuse (Tab)" aria-pressed="false">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10" /></svg>
+          </button>
+          <button id="btn-retopo" class="icon" type="button" title="Retopo (R)" aria-pressed="false">
+            <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
+          </button>
+          <span class="ov-sep"></span>
           <button id="btn-open-file" class="icon" type="button" title="Ouvrir un fichier (Ctrl+O)">
             <svg viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v1"/><path d="M3.4 18.6l2.2-7.2h16l-2.2 7.2a1 1 0 0 1-1 .7H4.4a1 1 0 0 1-1-.7z"/></svg>
           </button>
@@ -44,6 +62,9 @@
           -->
           <div id="tabs-strip"></div>
           <span id="file-kind" class="badge" hidden></span>
+          <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
+            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+          </button>
           <span class="ov-sep"></span>
           <div class="segment" role="group" aria-label="Mode de rendu">
             <button id="mode-pbr" class="seg active" type="button" title="Rendu PBR, éclairé par l'environnement (U)">PBR</button>
@@ -52,18 +73,6 @@
         </div>
 
         <div class="ov ov-tr">
-          <button id="btn-library" class="icon" type="button" title="Bibliothèque (B)">
-            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          </button>
-          <button id="btn-retopo" class="icon" type="button" title="Retopo (R)" aria-pressed="false">
-            <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
-          </button>
-          <button id="btn-inspector" class="icon" type="button" title="Inspecteur (Tab)" aria-pressed="false">
-            <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10" /></svg>
-          </button>
-          <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
-            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
-          </button>
         </div>
 
         <div class="ov ov-bl">
