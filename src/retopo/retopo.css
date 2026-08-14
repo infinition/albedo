@@ -154,7 +154,7 @@ body.retopo-open #timeline {
  * Options gated by a switch stay on screen, dimmed and inert.
  *
  * Hiding them made the tool look like it could not do the thing at all, which
- * is worse than a little visual noise. Learned in plancton, kept here.
+ * is worse than a little visual noise. Learned the hard way, kept here.
  */
 [data-el="bakeTools"],
 [data-el="atlasTools"],
@@ -172,8 +172,8 @@ body.retopo-open #timeline {
 
 /*
  * Always visible, whatever the panel is scrolled to. These are the things you
- * actually do, and in plancton they used to sit inside panels, so which one you
- * could reach depended on which section was open.
+ * actually do, and they used to sit inside panels, so which one you could
+ * reach depended on which section was open.
  */
 .rt-bar {
   position: absolute;

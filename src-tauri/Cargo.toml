@@ -19,13 +19,12 @@ serde_json = "1"
 # The retopology and baking engine. Pure Rust: no CUDA, no Python, no C++, and
 # nothing to install on a build machine.
 #
-# These are path dependencies and they must not ship as such. The clean answer
-# is a git dependency on the plancton repository, but that repository has never
-# been pushed, so a git dependency cannot resolve. The path is five levels deep
-# and works on exactly one machine. See docs/RETOPO.md.
-plancton-core = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-core" }
-plancton-remesh = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-remesh" }
-plancton-bake = { path = "../../../../../Users/infinition/Desktop/plancton/crates/plancton-bake" }
+# Vendored into `crates/` in this repository, so the build is self-contained:
+# no external checkout has to exist at a fixed path any more. The crates keep
+# their MIT license.
+retopo-core = { path = "crates/retopo-core" }
+retopo-remesh = { path = "crates/retopo-remesh" }
+retopo-bake = { path = "crates/retopo-bake" }
 
 # Attaching the shell provider from inside the application, so a portable copy
 # can offer it without an installer.
@@ -50,18 +49,18 @@ strip = true
 # Retopology is compute bound and would otherwise inherit `opt-level = "s"`,
 # which is right for a viewer and wrong for a decimator running quadric error
 # metrics over a million triangles.
-[profile.release.package.plancton-core]
+[profile.release.package.retopo-core]
 opt-level = 3
-[profile.release.package.plancton-remesh]
+[profile.release.package.retopo-remesh]
 opt-level = 3
-[profile.release.package.plancton-bake]
+[profile.release.package.retopo-bake]
 opt-level = 3
 
 # The BVH and the decimator are unusable at `opt-level = 0` on a real mesh, so a
 # debug build still optimises them while keeping fast recompiles of our own code.
-[profile.dev.package.plancton-core]
+[profile.dev.package.retopo-core]
 opt-level = 3
-[profile.dev.package.plancton-remesh]
+[profile.dev.package.retopo-remesh]
 opt-level = 3
-[profile.dev.package.plancton-bake]
+[profile.dev.package.retopo-bake]
 opt-level = 3

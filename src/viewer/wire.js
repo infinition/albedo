@@ -20,9 +20,10 @@ import * as THREE from "three";
  *
  * 1. **The geometry has to be non-indexed.** A shared vertex cannot hold three
  *    different barycentric coordinates at once. Un-indexing a decimated mesh is
- *    cheap, and it is exactly what plancton does for the same reason.
- * 2. **The quad mask rides along as a vertex attribute.** plancton puts it in a
- *    texture indexed by triangle id, which is the right call at its scale; here
+ *    cheap, and it is exactly what the retopology engine does for the same
+ *    reason.
+ * 2. **The quad mask rides along as a vertex attribute.** The engine puts it in
+ *    a texture indexed by triangle id, which is the right call at its scale; here
  *    the mesh is already un-indexed, so one float per vertex is simpler and
  *    needs no texture unit.
  */

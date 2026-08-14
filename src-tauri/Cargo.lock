@@ -21,9 +21,9 @@ dependencies = [
 name = "albedo"
 version = "0.1.0"
 dependencies = [
- "plancton-bake",
- "plancton-core",
- "plancton-remesh",
+ "retopo-bake",
+ "retopo-core",
+ "retopo-remesh",
  "serde",
  "serde_json",
  "tauri",
@@ -2296,45 +2296,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
-name = "plancton-bake"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "glam",
- "plancton-core",
- "rayon",
- "serde",
- "tracing",
-]
-
-[[package]]
-name = "plancton-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "glam",
- "gltf",
- "image",
- "rayon",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
- "tracing",
-]
-
-[[package]]
-name = "plancton-remesh"
-version = "0.1.0"
-dependencies = [
- "glam",
- "plancton-core",
- "rayon",
- "serde",
- "tracing",
-]
-
-[[package]]
 name = "plist"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2619,6 +2580,45 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+]
+
+[[package]]
+name = "retopo-bake"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glam",
+ "rayon",
+ "retopo-core",
+ "serde",
+ "tracing",
+]
+
+[[package]]
+name = "retopo-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "glam",
+ "gltf",
+ "image",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tracing",
+]
+
+[[package]]
+name = "retopo-remesh"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "rayon",
+ "retopo-core",
+ "serde",
+ "tracing",
 ]
 
 [[package]]

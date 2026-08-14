@@ -1,7 +1,8 @@
 //! Retopology and baking, the Rust half.
 //!
-//! The engine comes from the plancton crates: quadric error decimation with the
-//! link condition, flip test and crease constraints. None of it knows about
+//! The engine lives in this repository, in the retopo crates under
+//! `src-tauri/crates/`: quadric error decimation with the link condition, flip
+//! test and crease constraints. None of it knows about
 //! Tauri or about this application, which is the point: the same functions serve
 //! the Retopo tab, the `remesh` command line and, later, the optional HTTP API.
 //!
@@ -71,7 +72,7 @@ pub struct RemeshRequest {
     ///
     /// Passes and strength are not the same knob wearing two hats: many gentle
     /// passes converge on an even mesh, while a few strong ones overshoot and
-    /// wobble. Exposing only the count is why plancton's relax felt blunt.
+    /// wobble. Exposing only the count is why the engine's relax felt blunt.
     pub relax_strength: f32,
     /// The crease angle **relaxation** uses, which is deliberately not the one
     /// decimation uses.
@@ -126,7 +127,7 @@ pub struct RemeshRequest {
 
 impl Default for RemeshRequest {
     fn default() -> Self {
-        // Mirrors plancton's own defaults rather than inventing a second set,
+        // Mirrors the engine's own defaults rather than inventing a second set,
         // so a result obtained here and one obtained from its CLI agree.
         Self {
             method: "decimate".into(),
@@ -148,10 +149,10 @@ impl Default for RemeshRequest {
             bleed: 8,
             // 50, taken from `AtlasOptions::default()` rather than picked
             // because it felt right. It was 66 here first, which is how the same
-            // model came out with 85 charts where plancton gives 103. Every
+            // model came out with 85 charts where the engine gives 103. Every
             // default in this struct is worth checking against the engine's own
             // instead of guessed, which is the only way a result obtained here
-            // and one obtained from plancton's CLI can be compared at all.
+            // and one obtained from the engine's CLI can be compared at all.
             island_angle_deg: 50.0,
             bake_normal: true,
             bake_metallic_roughness: true,
@@ -208,7 +209,7 @@ pub struct RemeshReport {
 /// Run the whole pipeline on one GLB and write another. No Tauri in it.
 ///
 /// Shared by the `remesh` subcommand and, later, the HTTP handler, so the doors
-/// cannot drift apart. The order is the one plancton settled on: close holes on
+/// cannot drift apart. The order is the one the engine settled on: close holes on
 /// the source first, because a boundary the decimator has to respect is a
 /// boundary the bake later projects through; then reduce; then relax, which only
 /// makes sense once the triangles it is smoothing exist; then pair.
@@ -231,7 +232,7 @@ pub fn remesh_file(
     let mut report = RemeshReport::default();
 
     let bytes = std::fs::read(input).map_err(|e| format!("lecture impossible: {e}"))?;
-    let mut mesh = plancton_core::glb::load_bytes(&bytes).map_err(|e| format!("{e:#}"))?;
+    let mut mesh = retopo_core::glb::load_bytes(&bytes).map_err(|e| format!("{e:#}"))?;
 
     let source_count = mesh.triangle_count();
     report.input_triangles = source_count;
@@ -247,7 +248,7 @@ pub fn remesh_file(
 
     // Stage 1: holes. Cheap, so it gets the first five percent of the bar.
     if req.fill_holes {
-        let fill = plancton_remesh::fill_holes(&mut mesh, &plancton_remesh::FillOptions { max_loop_edges: 5_000 });
+        let fill = retopo_remesh::fill_holes(&mut mesh, &retopo_remesh::FillOptions { max_loop_edges: 5_000 });
         report.holes_filled = fill.loops_filled;
         report.holes_left = fill.loops_found.saturating_sub(fill.loops_filled);
     }
@@ -264,22 +265,22 @@ pub fn remesh_file(
 
     // The source, as it will be measured against afterwards. Built before the
     // reduction so relaxation and the deviation both compare to what came in.
-    let source_bvh = plancton_core::Bvh::build(&mesh);
+    let source_bvh = retopo_core::Bvh::build(&mesh);
 
     // Stage 2: reduce.
     let mut result = match req.method.as_str() {
         "isotropic" => {
-            let opts = plancton_remesh::IsotropicOptions {
+            let opts = retopo_remesh::IsotropicOptions {
                 target_triangles: req.target_triangles,
                 sharp_angle_deg: req.sharp_angle_deg,
                 ..Default::default()
             };
-            let (m, s) = plancton_remesh::isotropic(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
+            let (m, s) = retopo_remesh::isotropic(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
             report.collapses = s.collapses;
             m
         }
         _ => {
-            let opts = plancton_remesh::DecimateOptions {
+            let opts = retopo_remesh::DecimateOptions {
                 target_triangles: req.target_triangles,
                 max_error: req.max_error,
                 preserve_boundary: req.preserve_boundary,
@@ -287,7 +288,7 @@ pub fn remesh_file(
                 seam_penalty: req.seam_penalty,
                 ..Default::default()
             };
-            let (m, s) = plancton_remesh::decimate(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
+            let (m, s) = retopo_remesh::decimate(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
             report.collapses = s.collapses;
             report.rejected_topology = s.rejected_topology;
             report.rejected_flip = s.rejected_flip;
@@ -300,14 +301,14 @@ pub fn remesh_file(
     // Stage 3: relax, always reprojected. The tangential projection is what
     // stops a sphere deflating a little on every pass.
     if req.relax_iterations > 0 {
-        let opts = plancton_remesh::RelaxOptions {
+        let opts = retopo_remesh::RelaxOptions {
             iterations: req.relax_iterations,
             strength: req.relax_strength,
             preserve_features: true,
             sharp_angle_deg: req.relax_angle_deg,
             ..Default::default()
         };
-        let s = plancton_remesh::relax(&mut result, Some(&source_bvh), &opts, &mut |f| {
+        let s = retopo_remesh::relax(&mut result, Some(&source_bvh), &opts, &mut |f| {
             progress(x0 + f * (x1 - x0))
         });
         // The mean, not the worst. See the field's own comment.
@@ -320,8 +321,8 @@ pub fn remesh_file(
 
     // Stage 4: pair into quads, and carry the mask out beside the file.
     if req.pair_quads {
-        let opts = plancton_remesh::QuadOptions::default();
-        let pairing = plancton_remesh::pair_into_quads(&result, &opts);
+        let opts = retopo_remesh::QuadOptions::default();
+        let pairing = retopo_remesh::pair_into_quads(&result, &opts);
         report.quads = pairing.stats.quads;
         report.quad_fraction = pairing.stats.quad_fraction;
 
@@ -354,7 +355,7 @@ pub fn remesh_file(
     }
 
     // How far the result actually moved, per vertex, for the heatmap.
-    let dev = plancton_core::wire::deviation_against(&result, &source_bvh);
+    let dev = retopo_core::wire::deviation_against(&result, &source_bvh);
     report.deviation_max = dev.iter().copied().fold(0.0f32, f32::max);
     let mut raw = Vec::with_capacity(dev.len() * 4);
     for d in &dev {
@@ -362,7 +363,7 @@ pub fn remesh_file(
     }
     let _ = std::fs::write(sidecar(output, "dev"), &raw);
 
-    let out = plancton_core::glb::to_bytes(&result).map_err(|e| format!("{e:#}"))?;
+    let out = retopo_core::glb::to_bytes(&result).map_err(|e| format!("{e:#}"))?;
     std::fs::write(output, &out).map_err(|e| format!("écriture impossible: {e}"))?;
     progress(1.0);
 
@@ -377,15 +378,15 @@ pub fn remesh_file(
 /// changing a map size or a cage distance cost a bake rather than a whole
 /// decimation. The Retopo mode calls it both ways.
 fn run_bake(
-    low: &plancton_core::Mesh,
-    high: &plancton_core::Mesh,
+    low: &retopo_core::Mesh,
+    high: &retopo_core::Mesh,
     req: &RemeshRequest,
     report: &mut RemeshReport,
     chart_bytes: &mut Option<Vec<u8>>,
     progress: &mut dyn FnMut(f32),
-) -> Result<plancton_core::Mesh, String> {
-    let opts = plancton_bake::BakeOptions {
-        atlas: plancton_bake::AtlasOptions {
+) -> Result<retopo_core::Mesh, String> {
+    let opts = retopo_bake::BakeOptions {
+        atlas: retopo_bake::AtlasOptions {
             resolution: req.map_size,
             // The gutter and the bleed are two different things and both matter.
             // This is the empty space between islands, so a mip level cannot mix
@@ -407,12 +408,12 @@ fn run_bake(
         dilate: req.bleed,
     };
     let baked =
-        plancton_bake::bake(low, high, &opts, progress).map_err(|e| format!("bake: {e:#}"))?;
+        retopo_bake::bake(low, high, &opts, progress).map_err(|e| format!("bake: {e:#}"))?;
 
     // The chart each triangle landed in, so the viewer can colour the atlas.
     //
     // `BakeResult` does not carry the atlas, and unwrapping a second time is the
-    // honest way to get it: the alternative is widening plancton's public API
+    // honest way to get it: the alternative is widening the engine's public API
     // from here, which is the wrong direction for a dependency. The unwrap is a
     // fraction of the bake's own cost, since the expensive part is firing rays
     // and not growing charts.
@@ -421,7 +422,7 @@ fn run_bake(
     // atlas, so if it ever splits or reorders triangles the mask would line up
     // with nothing and paint noise that looks like a real chart layout. Counts
     // disagreeing means no file, and the viewer keeps the mode switched off.
-    let charts = plancton_bake::unwrap(low, &opts.atlas);
+    let charts = retopo_bake::unwrap(low, &opts.atlas);
     if charts.chart_of_tri.len() != baked.mesh.triangle_count() {
         eprintln!(
             "ilots ignores : {} ids pour {} triangles cuits ({} triangles dans l'atlas)",
@@ -477,8 +478,8 @@ pub fn bake_file(
 
     let hb = std::fs::read(high).map_err(|e| format!("lecture de la source impossible: {e}"))?;
     let lb = std::fs::read(low).map_err(|e| format!("lecture du résultat impossible: {e}"))?;
-    let high = plancton_core::glb::load_bytes(&hb).map_err(|e| format!("{e:#}"))?;
-    let low = plancton_core::glb::load_bytes(&lb).map_err(|e| format!("{e:#}"))?;
+    let high = retopo_core::glb::load_bytes(&hb).map_err(|e| format!("{e:#}"))?;
+    let low = retopo_core::glb::load_bytes(&lb).map_err(|e| format!("{e:#}"))?;
 
     report.input_triangles = high.triangle_count();
     report.output_triangles = low.triangle_count();
@@ -489,7 +490,7 @@ pub fn bake_file(
         let _ = std::fs::write(sidecar(output, "charts"), raw);
     }
 
-    let out = plancton_core::glb::to_bytes(&baked).map_err(|e| format!("{e:#}"))?;
+    let out = retopo_core::glb::to_bytes(&baked).map_err(|e| format!("{e:#}"))?;
     std::fs::write(output, &out).map_err(|e| format!("écriture impossible: {e}"))?;
 
     report.millis = started.elapsed().as_millis();

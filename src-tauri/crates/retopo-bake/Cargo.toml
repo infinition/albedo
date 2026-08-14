@@ -1,0 +1,15 @@
+[package]
+name = "retopo-bake"
+version = "0.1.0"
+edition = "2021"
+authors = ["Fabien Polly"]
+license = "MIT"
+description = "UV atlas generation and high to low poly texture baking for Albedo's retopology engine"
+
+[dependencies]
+retopo-core = { path = "../retopo-core" }
+glam = { version = "0.29", features = ["bytemuck"] }
+rayon = "1.10"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+anyhow = "1"

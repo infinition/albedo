@@ -1,0 +1,14 @@
+[package]
+name = "retopo-remesh"
+version = "0.1.0"
+edition = "2021"
+authors = ["Fabien Polly"]
+license = "MIT"
+description = "Decimation and remeshing for Albedo's retopology engine"
+
+[dependencies]
+retopo-core = { path = "../retopo-core" }
+glam = { version = "0.29", features = ["bytemuck"] }
+rayon = "1.10"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
