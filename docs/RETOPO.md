@@ -712,6 +712,8 @@ repository; this is what these items mean once the engine lives in Albedo.
 | [P3-SAM / Hunyuan3D-Part](https://github.com/Tencent-Hunyuan/Hunyuan3D-Part) | Its licence excludes the European Union outright. |
 | [PartField](https://github.com/nv-tlabs/PartField) | The PartNet trained weights cannot be redistributed, and it needs Python and CUDA. |
 | [quadwild-bimdf](https://github.com/cgg-bern/quadwild-bimdf) | GPL-3.0. Reachable only as a separate process, never linked. |
+| A keyboard shortcut for Retopo's undo | `Ctrl+Z` is already Albedo's own history, and `W`, `F`, `Z`, `Space`, `Escape` and the digits are all bound too. Making one of them mean something different *only while a panel is open* is the modal surprise that makes a tool feel unpredictable. The undo and redo buttons are explicit and sit next to the button whose work they take back. |
+| A second selection for per material scope | The hiding that already exists says the same thing. Two mechanisms for one idea drift apart, and the one you are not looking at is always the one that is stale. |
 | xatlas through `xatlas-rs-v2` | Needs bindgen, which needs libclang, on every machine and every CI runner. Vendoring the C++ with a hand written FFI stays open. |
 | `mikktspace` crate | Drags in nalgebra 0.26 for a few hundred lines of tangent maths. |
 | Merging the plancton repository into this one | The CLI and the HTTP server have users this application will never have, and the Blender bridge needs the port Albedo refuses to open. Libraries in, everything else stays where it works. |
