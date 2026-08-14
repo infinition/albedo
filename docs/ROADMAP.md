@@ -112,7 +112,7 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | --- | :---: |
 | USD animation and skinning | [ ] the rig decodes, the pose does not compose |
 | NIF skinning applied at load | [ ] not started |
-| The whole interface batch, in the compiled application | [ ] verified in the browser preview only; needs `npx tauri build --no-bundle` and a pass by hand |
+| The whole interface batch, in the compiled application | [ ] `npx tauri build --no-bundle` green, `albedo.exe` built and started; the walk of the four groups, both modes, the library split and full screen is in progress |
 | Shell initialisation behind a top level `await` | [ ] `src/main.js` awaits two shell round trips at module scope. Nothing below them attaches until both resolve, so a rejection or a hang would leave the window inert. Not the cause of the outage below, but the same shape |
 
 ### Faults Found and Fixed This Round
@@ -182,9 +182,9 @@ invisible is the reusable part.
 ### Next / Upcoming Features
 
 - [ ] **Exercise the interface batch in the compiled application.** Everything
-      since the toolbar merge was verified against the dev server. Build with
-      `npx tauri build --no-bundle`, close Albedo first, and walk the four
-      groups, both modes, the library split and full screen.
+      since the toolbar merge was verified against the dev server. `npx tauri
+      build --no-bundle` is green and `albedo.exe` starts; the walk of the four
+      groups, both modes, the library split and full screen is the last step.
 - [ ] **Take the shell initialisation off the critical path.** Wrap the
       `if (tauri)` block of `src/main.js` in a floating async call, or move it
       below the listener registrations, so a failed or slow shell call can no
