@@ -112,6 +112,8 @@ const BAR_SCENE = `
     <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
     <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
   </div>
+  <button class="tb-i tb-t" type="button" data-el="peek" data-icon="peek" aria-pressed="false"
+          title="Maintenir pour voir la source, relâcher pour le résultat (X)"></button>
 </div>
 `;
 
@@ -801,6 +803,23 @@ export function createRetopo({
     });
   }
 
+  /**
+   * Put the curtain line exactly over the cut the shader draws.
+   *
+   * The cut is a fraction across the canvas, while the line is positioned in
+   * its own box, `#retopo`, which spans the whole app. The two diverge the
+   * moment the library takes half the screen and the canvas stops at it, so the
+   * line is placed in pixels, translated from the canvas box into its own.
+   */
+  function paintSplit() {
+    const c = viewer.renderer?.domElement;
+    const box = el.splitLine.offsetParent?.getBoundingClientRect();
+    if (!c || !box) return;
+    const r = c.getBoundingClientRect();
+    const t = wireU.uSplit.value;
+    el.splitLine.style.left = `${r.left - box.left + t * r.width}px`;
+  }
+
   function setAB(mode) {
     compareMode = mode;
     const parts = viewer.parts || [];
@@ -810,6 +829,7 @@ export function createRetopo({
       setSide(p.object, 0);
     }
     el.splitLine.hidden = mode !== "split";
+    if (mode === "split") paintSplit();
 
     // With nothing to compare against, every mode is "both".
     const src = parts[0]?.object;
@@ -854,10 +874,10 @@ export function createRetopo({
   {
     let dragging = false;
     const place = (clientX) => {
-      const r = (viewer.renderer?.domElement || host).getBoundingClientRect();
+      const r = viewer.renderer?.domElement.getBoundingClientRect();
       const t = Math.max(0, Math.min(1, (clientX - r.left) / Math.max(r.width, 1)));
       wireU.uSplit.value = t;
-      el.splitLine.style.left = `${t * 100}%`;
+      paintSplit();
       viewer.invalidate?.();
     };
     el.splitLine.addEventListener("pointerdown", (e) => {
@@ -871,6 +891,42 @@ export function createRetopo({
       el.splitLine.releasePointerCapture(e.pointerId);
     });
   }
+
+  /*
+   * Peek at the source: hold to see before, release to see the result.
+   *
+   * The gesture every retopology tool has, on a button and on a key (X): no
+   * planning, hold, judge, release. It only means something when there is a
+   * result to compare, and it hands the mode back exactly what it found.
+   */
+  let peekPrev = null;
+  function peekAb() {
+    const parts = viewer.parts || [];
+    if (peekPrev !== null || parts.length < 2) return;
+    peekPrev = compareMode;
+    setAB("source");
+    el.peek.setAttribute("aria-pressed", "true");
+    el.peek.classList.add("active");
+  }
+  function unpeekAb() {
+    if (peekPrev === null) return;
+    setAB(peekPrev);
+    peekPrev = null;
+    el.peek.setAttribute("aria-pressed", "false");
+    el.peek.classList.remove("active");
+  }
+  el.peek.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    peekAb();
+  });
+  window.addEventListener("pointerup", unpeekAb);
+  window.addEventListener("pointercancel", unpeekAb);
+  window.addEventListener("keydown", (e) => {
+    if (open && e.code === "KeyX" && !e.repeat) peekAb();
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "KeyX") unpeekAb();
+  });
 
   /*
    * The shader needs the viewport in pixels to turn gl_FragCoord into a
@@ -909,7 +965,10 @@ export function createRetopo({
     if (c) wireU.uViewport.value.set(c.width, c.height);
   }
   syncViewport();
-  window.addEventListener("resize", syncViewport);
+  window.addEventListener("resize", () => {
+    syncViewport();
+    paintSplit();
+  });
 
   // --- painting -----------------------------------------------------------
 

@@ -119,6 +119,11 @@ export const ICONS = {
 
   /** Source alone. */
   cmpSource: wrap(`<circle cx="8" cy="8" r="5" stroke="#8b929c"/>`),
+  /** Peek at the source: hold to see before. An eye, because that is the gesture. */
+  peek: wrap(
+    `<path d="M8 3.4c3 0 5.4 2 6.5 4.6-1.1 2.6-3.5 4.6-6.5 4.6S2.6 10.6 1.5 8C2.6 5.4 5 3.4 8 3.4z"/>
+     <circle cx="8" cy="8" r="2"/>`
+  ),
   /** Result alone. */
   cmpResult: wrap(`<circle cx="8" cy="8" r="5" stroke="#9ede4f"/>`),
   /** Both in the scene. */
