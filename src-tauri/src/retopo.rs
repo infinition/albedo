@@ -422,6 +422,14 @@ fn run_bake(
     // with nothing and paint noise that looks like a real chart layout. Counts
     // disagreeing means no file, and the viewer keeps the mode switched off.
     let charts = plancton_bake::unwrap(low, &opts.atlas);
+    if charts.chart_of_tri.len() != baked.mesh.triangle_count() {
+        eprintln!(
+            "ilots ignores : {} ids pour {} triangles cuits ({} triangles dans l'atlas)",
+            charts.chart_of_tri.len(),
+            baked.mesh.triangle_count(),
+            charts.triangles.len()
+        );
+    }
     if charts.chart_of_tri.len() == baked.mesh.triangle_count() {
         let mut raw = Vec::with_capacity(charts.chart_of_tri.len() * 4);
         for c in &charts.chart_of_tri {

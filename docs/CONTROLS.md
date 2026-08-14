@@ -36,6 +36,56 @@ Albedo shares one camera between two distinct navigation modes:
 
 ---
 
+## Retopo Mode
+
+Retopo is a third mode beside the inspector and the library, opened from the same
+cluster of buttons at the top right. It is chrome *around* the viewport rather
+than a screen in front of it: the model stays visible and interactive throughout,
+because you cannot judge a retopology without looking at it.
+
+**No new keyboard shortcuts.** `Ctrl+Z`, `W`, `F`, `Space`, `Escape` and the
+digits already mean something everywhere else in the application, and making one
+of them mean a second thing while a panel happens to be open is the modal
+surprise that makes a tool feel unpredictable. Everything below is a button, and
+every button has a tooltip.
+
+### The bar
+
+One strip, under the top left cluster, in four groups.
+
+| Group | What it does |
+| --- | --- |
+| Counters | Source, result, reduction and quad share of the last run |
+| Display | Shaded, painted, base colour, normals, UV checker, **atlas charts**, **deviation** |
+| Edges | None, dark, light; plus flat shading and x-ray |
+| Compare | Source, result, both, **curtain**, **ghost** |
+| Camera | Frame |
+
+The two data views are *overrides* drawn over whatever channel is underneath, not
+a twelfth renderer, and each switches its icon off when the run it needs data
+from has not happened. Charts need a bake; deviation comes with every run.
+
+**Curtain** puts the source left of a draggable line and the result right of it,
+in one camera and one set of pixels. **Ghost** draws the result solid with the
+source translucent over it, which is the view that answers "did the low poly sink
+inside the original surface".
+
+### The panel
+
+Six tabs. Méthode carries the triangle budget and the deviation ceiling, Nettoyage
+the creases and the smoothing, Cartes and Atlas the bake, Matières the material
+list borrowed from the inspector, and Bilan the report and the deviation scale.
+
+### The action bar
+
+Undo and redo walk the history of results. The **Projeter** switch decides whether
+a run bakes, and it sits next to the button whose cost it changes. **Cuire** bakes
+again without touching the geometry, which is what makes iterating on a bad map
+cost seconds instead of a minute. While a run is going, the run button *is* the
+cancel button.
+
+---
+
 ## Device Controls
 
 ### Xbox Controller (XInput)

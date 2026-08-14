@@ -415,6 +415,24 @@ export function createRetopo({
   let cage = null;
 
   /**
+   * Teach whatever is already in the scene to draw its own edges.
+   *
+   * Without this the wireframe, the flat toggle and the x-ray do nothing until
+   * the first run, because only a *patched* material can draw them and nothing
+   * has been patched yet. Opening the mode on a model you have not decimated is
+   * the normal way to start — you look at it first — so the controls have to
+   * work from the moment the bar appears.
+   *
+   * Idempotent: `patchWire` skips a material it has already seen, so calling
+   * this every time the mode opens costs a traverse and nothing else.
+   */
+  function dressScene() {
+    for (const part of viewer.parts || []) applyWire(part.object, wireU, null);
+    syncViewport();
+    viewer.invalidate?.();
+  }
+
+  /**
    * Point the shell at the current result and the current slider.
    *
    * Called after a run and whenever the distance changes, which is the whole
@@ -1248,6 +1266,7 @@ export function createRetopo({
       // the viewport and a retopology cannot be judged in a preview strip.
       document.body.classList.add("retopo-open");
       borrowMatter();
+      dressScene();
       onOpenChange?.(true);
       syncViewport();
       refresh();

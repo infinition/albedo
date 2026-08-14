@@ -34,6 +34,32 @@ Formats that are deliberately refused report why: `.blend` is an internal Blende
 
 ---
 
+## Files that travel beside a result
+
+A retopology result is a GLB, and glTF has nowhere to put three things the viewer
+needs. Rather than invent a container, each one is written as a plain little file
+next to the model, named `<result>.<kind>`, little endian throughout.
+
+| File | One per | Type | Meaning |
+| --- | --- | --- | --- |
+| `.quads` | triangle | `u32` | Bit `k` set means the edge from corner `k` to `k+1` is real. The cleared bit on a paired triangle is the quad's diagonal. |
+| `.charts` | triangle | `u32` | Which atlas chart the triangle landed in. Written only when a bake ran and the mapping could be vouched for. |
+| `.dev` | **vertex** | `f32` | How far the result moved from the source, in model units. |
+
+Two things worth knowing about them. `.dev` is indexed by *vertex* where the other
+two are indexed by *triangle*, so a reader that un-indexes the geometry has to
+capture the index buffer before discarding it or the heatmap comes out plausible
+and wrong. And `.charts` is deliberately absent rather than approximate when the
+triangle counts do not line up: a shifted chart mask paints a perfectly
+believable atlas layout that is false everywhere.
+
+They are read back through a single command, `retopo_sidecar`, which returns all
+three as `f32`. That is safe rather than sloppy: a quad mask is `0..7` and a chart
+id counts islands, both far below the 2^24 where `f32` stops representing
+integers exactly.
+
+---
+
 ## Custom Format Readers
 
 ### NIF Reader (NetImmerse / Gamebryo)
