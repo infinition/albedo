@@ -33,7 +33,48 @@ body {
   user-select: none;
 }
 
-#app { position: relative; }
+/*
+ * The tab bar owns the top of the window, and takes real space rather than
+ * floating over it.
+ *
+ * Everything else is measured from underneath it through `--tabbar`, so the
+ * height is stated once and the stage, the overlays and both side panels follow
+ * without anyone repeating a number. Floating it would have been fewer lines and
+ * would have put tabs over the model, which is the thing the window is for.
+ */
+:root { --tabbar: 34px; }
+
+#tabbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--tabbar);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 8px;
+  box-sizing: border-box;
+  background: var(--panel, #16181c);
+  border-bottom: 1px solid var(--line, #2a2e35);
+  z-index: 40;
+  overflow: hidden;
+}
+/* The strip scrolls sideways rather than shrinking its tabs: twenty models open
+   is a scroll, not twenty slivers none of which can be read or aimed at. */
+#tabbar #tabs-strip {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+#tabbar #tabs-strip::-webkit-scrollbar { height: 0; }
+
+#app {
+  position: relative;
+  top: var(--tabbar);
+  height: calc(100% - var(--tabbar));
+}
 
 #stage {
   position: absolute;

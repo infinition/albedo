@@ -7,6 +7,16 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <!--
+      One tab per open model, in a bar of its own across the very top.
+
+      It used to share the left cluster with seven buttons, a format badge and
+      the render segment, so it was cramped from the day it was born: a strip
+      that never had room of its own. Full width, above everything, and nothing
+      else in it. Filled by src/ui/tabs.js.
+    -->
+    <div id="tabbar"><div id="tabs-strip"></div></div>
+
     <div id="app">
       <!-- The render surface has its own box so the library can hand it a
            strip of the window without either one moving the other. -->
@@ -56,11 +66,6 @@
           <button id="btn-open-file" class="icon" type="button" title="Ouvrir un fichier (Ctrl+O)">
             <svg viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v1"/><path d="M3.4 18.6l2.2-7.2h16l-2.2 7.2a1 1 0 0 1-1 .7H4.4a1 1 0 0 1-1-.7z"/></svg>
           </button>
-          <!--
-            One tab per open model, where the single file name used to be.
-            Filled by src/ui/tabs.js; empty here so nothing is drawn twice.
-          -->
-          <div id="tabs-strip"></div>
           <span id="file-kind" class="badge" hidden></span>
           <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
             <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
