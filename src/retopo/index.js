@@ -1014,11 +1014,28 @@ export function createRetopo({
    * end of the bar, so the button naming both is the only place the two are
    * visible at once.
    */
+  /**
+   * Mark what this mode put in the scene.
+   *
+   * A flag on the object rather than "the last part", which is what this used to
+   * mean and what made it fragile: importing anything by hand between two runs
+   * moved the target, and the run would drop the user's own object instead of
+   * its own output.
+   */
+  function claimResult(object) {
+    if (object) object.userData.retopoResult = true;
+  }
+
+  /** Every part this mode put in the scene, newest last. */
+  const results = () => (viewer.parts || []).filter((p) => p.object?.userData?.retopoResult);
+
   /** Drop the result currently in the scene, if there is one. */
   function dropResult() {
-    const parts = viewer.parts || [];
-    if (parts.length < 2) return;
-    viewer.removePart(parts.at(-1));
+    const mine = results();
+    if (!mine.length) return;
+    // All of them, not the last one. A stacked result is a bug this function is
+    // also the repair for, so it must not leave one behind.
+    for (const part of mine) viewer.removePart(part);
     cage?.dispose();
     cage = null;
   }
@@ -1039,6 +1056,7 @@ export function createRetopo({
     if (cursor >= 0) {
       const entry = history[cursor];
       await importPart(entry.path);
+      claimResult(viewer.parts.at(-1)?.object);
       await dressResult(viewer.parts.at(-1)?.object, entry.path);
       last = entry.report;
       lastRun = { high: entry.high, low: entry.path };
@@ -1224,7 +1242,38 @@ export function createRetopo({
    * control makes.
    */
   async function withScope(fn) {
-    if (scope === "all") return fn();
+    /*
+     * The mode's own output never goes back into the mode's own input.
+     *
+     * The export walks the whole scene, and a previous result is in that scene:
+     * decimating twice fed the engine the source *and* the low poly made from
+     * it, so the second run's "input triangles" counted a mesh the user never
+     * put there. Invisible to the glTF fast path, which reads the file on disk,
+     * and therefore invisible on exactly the formats that get tested most.
+     *
+     * Marked not-visible for the length of the export, like everything else the
+     * scope leaves out, and put straight back after.
+     */
+    const mine = [];
+    for (const part of results()) {
+      part.object.traverse((o) => {
+        if ((o.isMesh || o.isSkinnedMesh) && o.visible) {
+          mine.push(o);
+          o.visible = false;
+        }
+      });
+    }
+    const restore = () => {
+      for (const o of mine) o.visible = true;
+    };
+
+    if (scope === "all") {
+      try {
+        return await fn();
+      } finally {
+        restore();
+      }
+    }
 
     /*
      * Which meshes the exporter is allowed to see.
@@ -1250,17 +1299,16 @@ export function createRetopo({
       return !mats.length || !mats.every((m) => hidden.has(m.uuid));
     };
 
-    if (scope === "picked" && !selection.size) return fn();
-
     const touched = [];
-    viewer.root.traverse((o) => {
-      if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible) return;
-      if (!keep(o)) {
-        touched.push(o);
-        o.visible = false;
-      }
-    });
-    if (!touched.length) return fn();
+    if (scope !== "picked" || selection.size) {
+      viewer.root.traverse((o) => {
+        if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible) return;
+        if (!keep(o)) {
+          touched.push(o);
+          o.visible = false;
+        }
+      });
+    }
     try {
       // Awaited, not returned. `finally` around a returned promise runs before
       // the promise settles, so the meshes would come back visible while the
@@ -1268,6 +1316,7 @@ export function createRetopo({
       return await fn();
     } finally {
       for (const o of touched) o.visible = true;
+      restore();
     }
   }
 
@@ -1345,7 +1394,12 @@ export function createRetopo({
       });
 
       say("Chargement du résultat…", 1);
+      // The previous result leaves before the new one arrives. Without this a
+      // second run stacked a second low poly on the first, so the scene held
+      // three meshes claiming to be two and every count above was a lie.
+      dropResult();
       await importPart(dirs.output);
+      claimResult(viewer.parts.at(-1)?.object);
       last = r;
       // Both files stay named, so the bake can be redone on its own without
       // touching the geometry again.
@@ -1409,8 +1463,21 @@ export function createRetopo({
       });
 
       say("Chargement du résultat…", 1);
+      /*
+       * A bake replaces the result; it does not add one.
+       *
+       * Baking does not touch the geometry — that is the whole reason it exists
+       * as its own button — so a bake that left the previous mesh in the scene
+       * put two identical low polys on top of each other, differing only in
+       * their textures. Same reason the history entry is *rewritten* rather than
+       * pushed: undo walks geometry, and a bake is not a step in that walk. It
+       * would otherwise take two undos to get back one decimation.
+       */
+      dropResult();
       await importPart(dirs.rebake);
+      claimResult(viewer.parts.at(-1)?.object);
       lastRun = { high: lastRun.high, low: dirs.rebake };
+      if (cursor >= 0) history[cursor] = { ...history[cursor], path: dirs.rebake };
       last = { ...last, ...r, outputTriangles: r.outputTriangles || last.outputTriangles };
       reportOn(r, true);
       toast?.(`Cartes refaites en ${(r.millis / 1000).toFixed(1)} s`);
