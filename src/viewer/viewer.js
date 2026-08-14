@@ -1296,8 +1296,8 @@ export class Viewer {
    * exactly wrong when it is being put aside to come back to.
    *
    * Everything that belongs to *this* model travels in the returned object.
-   * Everything that belongs to the *viewer* — the lights, the grid, the stand,
-   * the environment, the camera rig — stays where it is, because it is the room
+   * Everything that belongs to the *viewer*, meaning the lights, the grid, the
+   * stand, the environment and the camera rig, stays where it is: it is the room
    * rather than the thing in it.
    *
    * @returns {object} an opaque holder to hand back to `attachModel`

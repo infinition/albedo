@@ -630,6 +630,100 @@ Decisions taken:
       selection: `src/selection.js` takes the modifier, and the tree, the
       material list and the viewport pick all go through it.
 
+---
+
+## After the panel: four defects and a tab strip
+
+Reported after the refactor landed, and all of them found to be broader than the
+report.
+
+### One wireframe, working everywhere [x]
+
+There were two. Albedo's set `material.wireframe`, which *replaces* the surface
+with lines and therefore throws away the shading you opened a wireframe to judge.
+Retopo's drew them over it, in the shader. Two controls in two places for one
+idea, and both could be on at once, in which case the crude one won by destroying
+the surface the other was painting.
+
+Only the overlay survives, and `wire.js` moved from `src/retopo/` to
+`src/viewer/`: it is a capability of the viewer, not of a mode. One switch in the
+Vue pane, the `W` key, and a bar button that is now a mirror.
+
+Three defects found by measuring the compiled shaders rather than reading them:
+
+- **`ChannelView` hands out a stand-in material per channel and nobody patched
+  them.** The wireframe vanished without a word on ten channels out of eleven.
+  That is the "it does not work on retopologised meshes" report: the stand-in is
+  there the moment you look at anything but the physical render. The class that
+  decides which material a mesh draws with is now the class that dresses it.
+- **`vChart`, `vDev` and `vRtNormal` were declared in both stages and assigned in
+  neither.** The atlas view, the deviation heatmap and the x-ray were each
+  painting a plausible picture out of an unwritten register.
+- **The injection anchored on `#include <dithering_fragment>`**, which does not
+  exist in `MeshNormalMaterial`. It targets the end of `main` now, which is the
+  same place in the shaders that have the include and a place that exists in the
+  ones that do not.
+
+Two more found by clicking: the bar opened without reflecting the current state,
+and two quick toggles crossed because switching on awaits a module while
+switching off is an assignment. A sequence counter makes the last ask win rather
+than the fastest.
+
+And `prepareWire` now leaves an already prepared geometry alone when the call
+carries no data: switching the wireframe on used to wipe the quad mask a run had
+just written.
+
+### One result, not a pile [x]
+
+A second run stacked a second low poly on the first, so the scene held three
+objects while claiming two and every counter above lied. A bake alone did the
+same, though it does not touch the geometry: two identical meshes differing only
+in their textures. The bake replaces, and it *rewrites* its history entry rather
+than pushing one, because undo walks geometries and a bake is not a step in that
+walk.
+
+The export to the engine also saw the previous result, so decimating twice fed it
+the source *and* the low poly made from it. Invisible on the glTF fast path,
+which reads the file on disk, and therefore invisible on the formats that get
+tested most.
+
+The result now carries a mark on its object rather than being "the last part",
+which broke the moment anything was imported between two runs.
+
+### Tabs, and a preview tab [x]
+
+Clicking a model in the library replaced the scene without a word. Now there is
+one tab per open model, all resident, and switching is a detach and an attach
+rather than a load, so an unsaved edit survives a trip to another tab and back.
+
+One of them is a **preview**: selecting cards in the library reuses that single
+tab instead of opening one per curiosity, and it stops being a preview the moment
+looking becomes working. Opening the retopology mode is one of those moments.
+
+Retopo's history follows its document: it holds paths to files produced from one
+particular model, so carrying it across a tab switch would offer an undo that
+swaps in a low poly of something else.
+
+Two defects the tabs revealed, both about memory:
+
+- Two models referencing the same image share one texture object, so closing a
+  tab or loading over one would free a texture a parked tab was sitting on, and
+  that tab came back with a black surface. The viewer asks the host what the
+  other documents still hold, at every release.
+- `clear()` could not be reused for parking: it *releases*, which is right for a
+  model being thrown away and ruinous for one being put aside.
+
+### The split that would not move [x]
+
+With the library and Retopo open together the divider was frozen at half.
+`body.peeking.retopo-open { --peek: 50% }` in the stylesheet beat the inline value
+the drag handle writes on the root element, because a rule on `body` outranks an
+inherited value for everything inside it. The widening is a one time nudge from
+the module now, through the same property the handle writes, and only when the
+strip is too narrow to work in.
+
+---
+
 ### Phase 7: paying the rent [ ]
 - [ ] Export the result. GLB exists; OBJ is worth adding for one concrete reason,
       it stores quads natively and glTF cannot.

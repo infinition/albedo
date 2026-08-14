@@ -922,7 +922,7 @@ function selectMaterial(uuid, add = false) {
     setEditMode(editMode);
     return;
   }
-  // Picking a surface is a question about its matter, so show the answer —
+  // Picking a surface is a question about its matter, so show the answer,
   // unless the panel is already showing a pane that says something about the
   // selection, in which case moving it under the pointer is the surprise.
   if (selection.material && !SELECTION_PANES.has(currentPane())) showPane("matter");
@@ -1413,7 +1413,7 @@ applyChannel("shaded");
  * Lazy for a reason that is not only startup weight: preparing a geometry for
  * the overlay un-indexes it, which triples its vertex buffer and cannot be
  * undone. A session that never switches the wireframe on never pays either
- * cost, and the module is not in the startup bundle at all — which matters here
+ * cost, and the module is not in the startup bundle at all, which matters here
  * more than usual, this executable also being the Explorer thumbnail provider.
  */
 let wire = null;
