@@ -12,6 +12,8 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-confirm",
+    "dialog:allow-ask",
+    "dialog:allow-message",
     "fs:allow-read-file",
     "fs:default",
     {

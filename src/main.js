@@ -60,6 +60,83 @@ let typingTransform = false;
 const history = { past: [], future: [], limit: 80 };
 let pendingPose = null;
 
+/**
+ * Whether the scene holds work that leaving would throw away.
+ *
+ * A viewer does not need this. The moment it grew handles, texture replacement,
+ * material presets, imported objects and a retopology engine, it stopped being
+ * one: clicking a file in the library replaced everything with no question
+ * asked, and there was no way to know afterwards what had been there.
+ *
+ * Only changes that would survive an export count. Hiding a material, unplugging
+ * a map, choosing a channel or moving the camera are ways of *looking* and are
+ * deliberately not tracked: a confirmation that fires because someone toggled
+ * the grid is a confirmation people learn to dismiss without reading, which is
+ * worse than none.
+ */
+let sceneDirty = false;
+
+function markDirty() {
+  sceneDirty = true;
+}
+
+function clearDirty() {
+  sceneDirty = false;
+}
+
+/**
+ * Ask before throwing the scene away.
+ *
+ * Returns true when it is fine to go ahead. The shell's own dialog when there is
+ * one, because a webview `confirm` in a Tauri window looks like a web page in a
+ * way nothing else in this application does.
+ */
+/**
+ * Said once, not once per card.
+ *
+ * Browsing a folder selects a dozen entries in a few seconds, and a message per
+ * selection is noise that hides the one thing it is trying to say.
+ */
+let previewNoticeAt = 0;
+function sayPreviewRefused() {
+  const now = Date.now();
+  if (now - previewNoticeAt < 8000) return;
+  previewNoticeAt = now;
+  toast("Modèle modifié : l'aperçu ne le remplace pas. Ouvre-le pour cela.", 3200);
+}
+
+async function confirmDiscard(what = "Le modèle en cours a été modifié.") {
+  if (!sceneDirty) return true;
+  const question = `${what}\nContinuer sans enregistrer ni exporter ?`;
+  /*
+   * `ask` with its own labels rather than `confirm` with Ok and Cancel.
+   *
+   * "Ok" on a warning about losing work says nothing about which way it goes.
+   *
+   * Both plugin functions go through `plugin:dialog|message` underneath and
+   * compare the pressed button against the label they asked for, which is worth
+   * knowing twice over: the permission the capability set needs is
+   * `dialog:allow-message`, not the `dialog:allow-confirm` that was listed and
+   * would have failed in the built application and nowhere else; and a stub that
+   * answers with a boolean instead of a label always reads as a refusal.
+   */
+  if (tauri?.dialog?.ask) {
+    return !!(await tauri.dialog
+      .ask(question, {
+        title: "Albedo",
+        kind: "warning",
+        okLabel: "Abandonner les changements",
+        cancelLabel: "Revenir",
+      })
+      .catch((e) => {
+        // A dialog that cannot open must not become a silent yes.
+        console.warn("[albedo] confirmation impossible :", e);
+        return false;
+      }));
+  }
+  return window.confirm(question);
+}
+
 /** Field, what it reads, which axis, and what to multiply by to show it. */
 const XFORM = [
   ["tx", "position", "x", 1], ["ty", "position", "y", 1], ["tz", "position", "z", 1],
@@ -278,6 +355,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     nav.calibrate(viewer.boxHelper.box);
     channels.reset();
     selection.clear();
+    clearDirty();
     // A new model needs its own geometry prepared before it can draw lines.
     await setWireframe($("opt-wireframe").checked, false);
     applyChannel(currentChannel);
@@ -373,8 +451,27 @@ function showStats(stats, extra) {
 /** The file on disk the viewport is showing, when there is one. */
 let openedPath = null;
 
-async function openPath(path) {
+async function openPath(path, { force = false, keepLibrary = false } = {}) {
   if (!tauri) return;
+  /*
+   * The one funnel every route to a new model goes through: the library, a drop,
+   * "Open with", the file picker. Asking here rather than at each of them is
+   * what makes it impossible to add a fifth route that forgets to ask.
+   *
+   * The preview strip is the exception, and it gets a refusal rather than a
+   * question. Selecting a card is browsing, not opening, so a dialog on every
+   * card would be one people dismiss without reading; and loading anyway is the
+   * very thing being complained about. A modified scene simply does not get
+   * previewed over, and the strip goes on showing what it showed.
+   */
+  if (keepLibrary) {
+    if (sceneDirty) {
+      sayPreviewRefused();
+      return;
+    }
+  } else if (!force && !(await confirmDiscard())) {
+    return;
+  }
   const url = tauri.core.convertFileSrc(path);
   const name = path.split(/[\\/]/).pop();
   // A NIF names its maps, so it asks for them by name instead of being handed
@@ -633,6 +730,7 @@ async function swapTexture(uuid, slot) {
   if (!material) return;
   try {
     await replaceMap(material, slot, picked.url, picked.name);
+    markDirty();
     // The channel views hold copies built from the old material
     channels.refresh();
     showStats(viewer.stats());
@@ -815,6 +913,7 @@ function textureBlock(uuid) {
         span: bounds.isEmpty() ? 1 : bounds.max.distanceTo(bounds.min),
       });
       channels.swapMaterial(uuid, next);
+      markDirty();
       // The substitute takes the selection with it, so the panel goes on showing
       // the surface you were working on rather than emptying itself.
       selection.set([[next.uuid, "material"]]);
@@ -833,6 +932,7 @@ function textureBlock(uuid) {
     revert.textContent = "Rétablir le matériau du fichier";
     revert.addEventListener("click", () => {
       const original = channels.restoreMaterial(uuid);
+      markDirty();
       if (original) selection.set([[original.uuid, "material"]]);
       else paintMaterialList();
     });
@@ -1149,6 +1249,8 @@ async function exportModel({ overwrite = false } = {}) {
       }
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(path, bytes);
+      // The work is on disk, so leaving no longer throws it away.
+      clearDirty();
       note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
     } else {
       const url = URL.createObjectURL(new Blob([bytes], { type: "model/gltf-binary" }));
@@ -1157,6 +1259,7 @@ async function exportModel({ overwrite = false } = {}) {
       a.download = name;
       a.click();
       URL.revokeObjectURL(url);
+      clearDirty();
       note.textContent = `${name} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
     }
   } catch (e) {
@@ -1327,6 +1430,8 @@ $("shot-save").addEventListener("click", async () => {
       if (!path) return;
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(path, bytes);
+      // The work is on disk, so leaving no longer throws it away.
+      clearDirty();
       note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
     } else {
       const a = document.createElement("a");
@@ -2045,7 +2150,10 @@ else {
 if (import.meta.env && import.meta.env.DEV) {
   window.__albedo = {
     viewer, channels, nav, open, applyChannel, prefs,
-    selection, showPane, toggleRetopo,
+    selection, showPane, toggleRetopo, openPath, markDirty, clearDirty,
+    get dirty() {
+      return sceneDirty;
+    },
     get retopo() {
       return retopo;
     },
@@ -2090,7 +2198,11 @@ let library = null;
 async function toggleLibrary() {
   if (!library) {
     const { createLibrary } = await import("./library/index.js");
-    library = createLibrary({ tauri, prefs, onOpen: (path) => openPath(path) });
+    library = createLibrary({
+      tauri,
+      prefs,
+      onOpen: (path, options) => openPath(path, options),
+    });
     // The preview strip loads into this very viewer, so nothing is duplicated
     library.show();
     return;
@@ -2518,6 +2630,7 @@ function recordAfter() {
     return;
   }
   history.past.push({ before: pendingPose, after });
+  markDirty();
   if (history.past.length > history.limit) history.past.shift();
   // A new edit is a new branch: what was undone can no longer be redone
   history.future.length = 0;
@@ -2865,6 +2978,7 @@ async function importPart(path) {
     ignoreDeadVertexColors(object);
     ensureAoUv(object);
     const entry = viewer.addPart(object, name);
+    markDirty();
     selectedPart = entry;
     // The scene changed underneath the channel copies and the material list
     channels.reset();
