@@ -1056,3 +1056,27 @@ details[open] summary::before { content: "▾ "; }
   background: transparent;
 }
 .tabs-eye:hover { opacity: 1; color: var(--fg); }
+
+/* --- the view bar tucks itself away -------------------------------------- */
+#viewbar { transition: opacity 5s ease, transform 5s ease; }
+#viewbar.tucked {
+  opacity: 0;
+  transform: translateX(-115%);
+  pointer-events: none;
+}
+.ov-handle {
+  top: calc(var(--gap) + 48px);
+  left: 0;
+  width: 16px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 0 8px 8px 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease 4.5s;
+}
+.ov-handle svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+.ov-handle[aria-expanded="false"] { opacity: 0.55; pointer-events: auto; }
+.ov-handle:hover { opacity: 1; }

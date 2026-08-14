@@ -600,6 +600,38 @@ $("vb-wire-dark").addEventListener("click", async () => {
  * Reading the DOM has no such ordering, and the panel is the source of truth
  * anyway.
  */
+/*
+ * The view bar puts itself away when it is not in use.
+ *
+ * Fifteen seconds without a pointer on it or a click in it and it slides off to
+ * the left, over five seconds, into a handle at the edge. Anything brings it
+ * back at once, and that asymmetry is deliberate: waiting five seconds for a
+ * control you have just reached for would be the tool making you watch an
+ * animation.
+ */
+const TUCK_AFTER = 15000;
+let tuckTimer = null;
+
+function untuck() {
+  $("viewbar").classList.remove("tucked");
+  $("viewbar-handle").setAttribute("aria-expanded", "true");
+  clearTimeout(tuckTimer);
+  tuckTimer = setTimeout(() => {
+    // Never while the pointer is on it: the timer fires on a schedule, the
+    // pointer is a fact, and the fact wins.
+    if ($("viewbar").matches(":hover")) return untuck();
+    $("viewbar").classList.add("tucked");
+    $("viewbar-handle").setAttribute("aria-expanded", "false");
+  }, TUCK_AFTER);
+}
+
+for (const ev of ["pointerenter", "pointerdown", "focusin", "wheel"]) {
+  $("viewbar").addEventListener(ev, untuck, { passive: true });
+}
+$("viewbar-handle").addEventListener("click", untuck);
+$("viewbar-handle").addEventListener("pointerenter", untuck);
+untuck();
+
 function paintViewbar() {
   const live = document.querySelector("#channels .active")?.dataset.id;
   for (const b of document.querySelectorAll("[data-vb-ch]")) {
