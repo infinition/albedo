@@ -643,8 +643,20 @@ export function createLibrary({ tauri, onOpen, prefs }) {
          * dismissed is an argument, not a convenience, so an explicit close is
          * remembered for the session and a click then does what it did before.
          */
-        if (!state.peek && !state.peekDismissed) setPeek(true);
-        if (state.peek) peek(state.selected);
+        if (!state.peek && !state.peekDismissed) {
+          /*
+           * `setPeek` peeks on its way in, so this must not peek again.
+           *
+           * `peek` opens with `clearTimeout(peekTimer)` and then returns early
+           * when the asset asked for is the one it is already showing. A second
+           * call therefore cancels the load the first one had just scheduled and
+           * returns without rescheduling it: the panel opened and stayed empty,
+           * which is exactly the shape of the bug this line caused.
+           */
+          setPeek(true);
+        } else if (state.peek) {
+          peek(state.selected);
+        }
       }
     });
     node.addEventListener("dblclick", () => open(entry));

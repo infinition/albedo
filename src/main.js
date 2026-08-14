@@ -503,6 +503,30 @@ paintTabs();
  * the failure is silent until that tab comes forward with a black surface. The
  * viewer asks; here is the only place that knows the answer.
  */
+/*
+ * Refit a previewed model when the strip it lives in changes width.
+ *
+ * The camera frames once, at load, against whatever the canvas measured then.
+ * Open the panel or drag the splitter afterwards and the framing is a leftover
+ * from a box that no longer exists: a model sized for half the window rattling
+ * around in a third of it, or clipped by it.
+ *
+ * Only while previewing. A preview is browsing, so refitting is what you want;
+ * a document you are working in has a camera you placed on purpose, and moving
+ * it because a panel moved would be the tool overruling you.
+ *
+ * Debounced to the end of the gesture: reframing on every pixel of a drag fights
+ * the drag, and the answer only matters once it stops.
+ */
+let refitTimer = null;
+window.addEventListener("resize", () => {
+  if (!activeDoc?.preview || !viewer.current) return;
+  clearTimeout(refitTimer);
+  refitTimer = setTimeout(() => {
+    if (activeDoc?.preview && viewer.current) viewer.frameCurrent();
+  }, 140);
+});
+
 viewer.alsoKeep = () => {
   const keep = new Set();
   for (const doc of documents) {
