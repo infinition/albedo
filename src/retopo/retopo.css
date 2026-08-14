@@ -57,18 +57,49 @@ body.peeking #retopo .rt-hud { display: none; }
   backdrop-filter: blur(8px);
   border: 1px solid var(--line, #2a2e35);
 }
-.rt-panel h2 {
-  margin: 0 0 6px;
+/*
+ * Four tabs, not one long column.
+ *
+ * It was one long column first and that was wrong twice over: you had to scroll
+ * past the whole bake to reach the result, and an error written at the bottom of
+ * it was invisible, so a run that failed looked exactly like a button that did
+ * nothing. The tab strip does not scroll; only the page under it does.
+ */
+.rt-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--line, #2a2e35) 45%, transparent);
+  flex: none;
+}
+.rt-tab {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 4px;
+  font: inherit;
   font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--dim, #8b929c);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.rt-block { display: flex; flex-direction: column; gap: 8px; }
-.rt-block + .rt-block {
-  padding-top: 12px;
-  border-top: 1px solid var(--line, #2a2e35);
+.rt-tab:hover { color: var(--fg, #e6e9ef); }
+.rt-tab.active {
+  color: var(--fg, #e6e9ef);
+  background: color-mix(in srgb, var(--panel, #16181c) 90%, white 8%);
 }
+
+/* Only the page scrolls. The strip and the bar stay put. */
+.rt-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.rt-page { display: none; flex-direction: column; gap: 8px; }
+.rt-page.active { display: flex; }
+
+.rt-err { color: var(--bad, #ff8b7a); }
 
 /* The panel is a column, so a range is given the width it has rather than
    asked for its own. Without this the three sliders push the panel four pixels
@@ -103,6 +134,7 @@ body.peeking #retopo .rt-hud { display: none; }
  * is worse than a little visual noise. Learned in plancton, kept here.
  */
 [data-el="bakeTools"],
+[data-el="atlasTools"],
 [data-el="aoTools"] {
   display: flex;
   flex-direction: column;
@@ -151,6 +183,50 @@ body.peeking #retopo .rt-hud { display: none; }
   white-space: nowrap;
 }
 .rt-note:empty { display: none; }
+
+/*
+ * The bake switch sits next to the button whose cost it changes.
+ *
+ * It was a checkbox halfway down the Textures tab, which is the wrong place for
+ * the one setting that decides whether a run takes one second or twenty.
+ */
+.rt-switch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px 0 6px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.rt-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.rt-switch i {
+  width: 30px;
+  height: 17px;
+  border-radius: 9px;
+  flex: none;
+  position: relative;
+  background: color-mix(in srgb, var(--line, #2a2e35) 90%, transparent);
+  transition: background 0.15s ease;
+}
+.rt-switch i::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--dim, #8b929c);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.rt-switch input:checked + i { background: color-mix(in srgb, var(--accent, #7cc4ff) 45%, transparent); }
+.rt-switch input:checked + i::after {
+  transform: translateX(13px);
+  background: var(--accent, #7cc4ff);
+}
+.rt-switch input:focus-visible + i { outline: 2px solid var(--accent, #7cc4ff); outline-offset: 2px; }
 
 /* --- the head-up display ------------------------------------------------- */
 

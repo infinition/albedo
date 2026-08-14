@@ -1861,6 +1861,9 @@ async function toggleRetopo() {
     importPart,
     onBusy: setBusy,
     toast,
+    // When the model came off disk as glTF the engine opens that file itself,
+    // rather than being handed a forty megabyte re-export across the bridge.
+    sourcePath: () => openedPath,
     // The right edge holds one panel at a time. Retopo is a state of the viewer
     // rather than a second viewer, so it never sits beside the inspector: the
     // two would overlap, and the third surface would be showing the same model

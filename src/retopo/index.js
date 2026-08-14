@@ -4,19 +4,20 @@ import "./retopo.css";
  * The Retopo mode.
  *
  * A third mode beside the inspector and the library, and not a pane inside the
- * inspector: the tool has a triangle budget, three guards, a bake with six knobs
- * and a per material selection to come, and none of that fits a 324 pixel
+ * inspector: the tool has a triangle budget, three guards, a bake with eight
+ * knobs and a per material selection to come, and none of that fits a 324 pixel
  * column. It is chrome around the viewport rather than a screen in front of it,
  * because you cannot judge a retopology without looking at it.
+ *
+ * The panel is four tabs and not one long column. It was one long column first
+ * and that was wrong twice over: you had to scroll past the bake to reach the
+ * result, and an error message written at the bottom of it was invisible, so a
+ * run that failed looked exactly like a button that did nothing.
  *
  * This module, its stylesheet and the exporter it reaches for are one lazy
  * chunk. Nothing here is parsed until the mode is opened for the first time,
  * which matters more than usual: this executable is also the Explorer thumbnail
  * provider, one process per file.
- *
- * Nothing large crosses the bridge. The exported GLB goes to a file the Rust
- * side chose, the engine runs in a child process, and the result comes back
- * through the loader the application already has.
  */
 
 const SHELL = `
@@ -28,8 +29,17 @@ const SHELL = `
 </dl>
 
 <div class="rt-panel" data-el="panel">
-  <div class="rt-block">
-    <h2>Méthode</h2>
+  <nav class="rt-tabs" role="tablist">
+    <button class="rt-tab active" type="button" data-tab="method" role="tab">Méthode</button>
+    <button class="rt-tab" type="button" data-tab="clean" role="tab">Nettoyage</button>
+    <button class="rt-tab" type="button" data-tab="maps" role="tab">Cartes</button>
+    <button class="rt-tab" type="button" data-tab="atlas" role="tab">Atlas</button>
+    <button class="rt-tab" type="button" data-tab="result" role="tab">Bilan</button>
+  </nav>
+
+  <div class="rt-body">
+
+  <section class="rt-page active" data-tab="method">
     <div class="segment" role="group" aria-label="Méthode">
       <button class="seg active" type="button" data-el="mDecimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
       <button class="seg" type="button" data-el="mIsotropic" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
@@ -38,13 +48,15 @@ const SHELL = `
       <span>Triangles <span class="rt-num" data-el="targetValue">—</span></span>
       <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
     </label>
-    <p class="rt-hint" data-el="methodHint">L'erreur quadrique met les triangles là
-      où la silhouette en a besoin, pas régulièrement. C'est ce que veut un
-      accessoire figé.</p>
-  </div>
+    <p class="rt-hint" data-el="methodHint"></p>
 
-  <div class="rt-block">
-    <h2>Garde-fous</h2>
+    <p class="rt-sub">Quads</p>
+    <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
+    <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
+      fichier comme un masque de diagonale, un entier par triangle.</p>
+  </section>
+
+  <section class="rt-page" data-tab="clean">
     <label class="rt-check"><input type="checkbox" data-el="holes" /><span>Combler les trous d'abord</span></label>
     <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span>Épingler les bords ouverts</span></label>
     <label class="rt-field">
@@ -58,10 +70,8 @@ const SHELL = `
     <p class="rt-hint">Une arête plus pliée que l'angle compte comme un pli et
       résiste. Le coût d'une couture protège les bords d'UV, dont la rupture se
       voit dans la texture bien avant de se voir dans la forme.</p>
-  </div>
 
-  <div class="rt-block">
-    <h2>Lissage</h2>
+    <p class="rt-sub">Lissage</p>
     <label class="rt-field">
       <span>Passes <span class="rt-num" data-el="relaxValue">0</span></span>
       <input type="range" data-el="relax" min="0" max="10" step="1" value="0" />
@@ -75,22 +85,13 @@ const SHELL = `
       voulu : un maillage réduit cinquante fois est facetté partout, donc l'angle
       qui veut dire « pli » pour un décimateur veut dire « tout le modèle » pour
       un lisseur.</p>
-  </div>
+  </section>
 
-  <div class="rt-block">
-    <h2>Quads</h2>
-    <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
-    <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
-      fichier comme un masque de diagonale, un entier par triangle.</p>
-  </div>
-
-  <div class="rt-block">
-    <h2>Textures</h2>
-    <label class="rt-check"><input type="checkbox" data-el="bake" /><span>Projeter la source sur le résultat</span></label>
+  <section class="rt-page" data-tab="maps">
     <p class="rt-hint">Le maillage réduit porte encore la disposition d'UV de
       l'original, et passé un certain point cette disposition ne décrit plus la
-      surface sur laquelle elle est posée. Le bake est ce qui rend une réduction
-      agressive utilisable.</p>
+      surface sur laquelle elle est posée. L'interrupteur est en bas, à côté du
+      bouton dont il change le coût.</p>
 
     <div data-el="bakeTools">
       <label class="rt-field">
@@ -107,8 +108,7 @@ const SHELL = `
       <p class="rt-hint">La couleur de base seule ne suffit pas : sans métal ni
         rugosité, tout le résultat hérite d'une seule paire de scalaires, et une
         boucle en laiton sur un manche en bois revient en bois mat. L'émissif est
-        abandonné tout seul quand rien n'émet, donc le laisser coché ne coûte
-        rien.</p>
+        abandonné tout seul quand rien n'émet.</p>
 
       <div data-el="aoTools">
         <label class="rt-field">
@@ -121,17 +121,20 @@ const SHELL = `
         </label>
         <p class="rt-hint">Courte, seuls les creux s'assombrissent ; longue, toute
           la silhouette s'ombre elle-même. La séquence de tirage est déterministe,
-          donc deux bakes du même modèle se ressemblent exactement et comparer
-          deux réglages n'est pas une devinette.</p>
+          donc comparer deux réglages n'est pas une devinette.</p>
       </div>
+    </div>
+  </section>
 
+  <section class="rt-page" data-tab="atlas">
+    <div data-el="atlasTools">
       <p class="rt-sub">Cage</p>
       <label class="rt-field">
-        <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.02</span></span>
+        <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.020</span></span>
         <input type="range" data-el="cageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
       </label>
       <label class="rt-field">
-        <span>Vers l'intérieur <span class="rt-num" data-el="cageInValue">0.02</span></span>
+        <span>Vers l'intérieur <span class="rt-num" data-el="cageInValue">0.020</span></span>
         <input type="range" data-el="cageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
       </label>
       <p class="rt-hint">Trop courte, le rayon rate ce qui dépasse du maillage
@@ -155,15 +158,21 @@ const SHELL = `
         mélange, la bavure est de la couleur peinte au-delà de chaque bord pour
         que le filtrage n'aille jamais chercher le fond.</p>
     </div>
-  </div>
+  </section>
 
-  <div class="rt-block">
-    <h2>Dernier passage</h2>
+  <section class="rt-page" data-tab="result">
     <p class="rt-hint" data-el="report">Rien encore.</p>
+    <p class="rt-hint rt-err" data-el="err" hidden></p>
+    <p class="rt-hint" data-el="sourceNote"></p>
+  </section>
+
   </div>
 </div>
 
 <div class="rt-bar" data-el="bar">
+  <label class="rt-switch" title="Reprojeter les textures de la source sur le résultat">
+    <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
+  </label>
   <button class="wide" type="button" data-el="run">Décimer</button>
   <span class="rt-note" data-el="note"></span>
   <button class="wide" type="button" data-el="close">Fermer</button>
@@ -185,8 +194,9 @@ function countTriangles(root) {
 }
 
 const fr = (n) => n.toLocaleString("fr-FR");
+const isGltf = (p) => /\.(glb|gltf)$/i.test(p || "");
 
-export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, toast }) {
+export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, toast, sourcePath }) {
   const host = document.createElement("div");
   host.id = "retopo";
   host.innerHTML = SHELL;
@@ -211,20 +221,42 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
       "déformer ou se subdiviser, et c'est aussi ce dont l'appairage en quads a besoin.",
   };
 
+  // --- tabs ---------------------------------------------------------------
+
+  function showTab(name) {
+    for (const t of host.querySelectorAll(".rt-tab")) {
+      t.classList.toggle("active", t.dataset.tab === name);
+    }
+    for (const p of host.querySelectorAll(".rt-page")) {
+      p.classList.toggle("active", p.dataset.tab === name);
+    }
+  }
+  for (const t of host.querySelectorAll(".rt-tab")) {
+    t.addEventListener("click", () => showTab(t.dataset.tab));
+  }
+
+  // --- painting -----------------------------------------------------------
+
+  /** The budget in triangles, from the slider's percentage. */
+  const budget = () => Math.max(4, Math.round((source * Number(el.target.value)) / 100));
+
+  /** The atlas side, from the slider's exponent. The useful sizes are powers of
+   *  two and a linear 256..8192 slider spends its travel on values nobody picks. */
+  const mapSize = () => 2 ** Number(el.mapSize.value);
+
   function setMethod(next) {
     method = next;
     el.mDecimate.classList.toggle("active", next === "decimate");
     el.mIsotropic.classList.toggle("active", next === "isotropic");
     el.methodHint.textContent = METHOD_HINT[next];
-    // The run button says what it will do, and the method is what decides that.
     paint();
   }
 
-  /** The budget in triangles, from the slider's percentage. */
-  const budget = () => Math.max(4, Math.round((source * Number(el.target.value)) / 100));
-
-  /** The atlas side, from the slider's exponent. */
-  const mapSize = () => 2 ** Number(el.mapSize.value);
+  /** A stat nobody has filled in yet should not read as loudly as a real one. */
+  function setStat(node, text) {
+    node.textContent = text ?? "—";
+    node.classList.toggle("rt-void", text == null);
+  }
 
   function paint() {
     el.targetValue.textContent = source ? `${fr(budget())} · ${el.target.value} %` : `${el.target.value} %`;
@@ -232,10 +264,6 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     el.seamValue.textContent = el.seam.value;
     el.relaxValue.textContent = el.relax.value;
     el.relaxAngleValue.textContent = `${el.relaxAngle.value}°`;
-
-    // The atlas slider is an exponent, because the useful sizes are powers of
-    // two and a linear 256..8192 slider spends most of its travel on values
-    // nobody picks.
     el.mapSizeValue.textContent = String(mapSize());
     el.cageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
     el.cageInValue.textContent = Number(el.cageIn.value).toFixed(3);
@@ -246,6 +274,7 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     el.aoDistanceValue.textContent = Number(el.aoDistance.value).toFixed(2);
 
     el.bakeTools.classList.toggle("rt-off", !el.bake.checked);
+    el.atlasTools.classList.toggle("rt-off", !el.bake.checked);
     el.aoTools.classList.toggle("rt-off", !el.mAo.checked);
 
     setStat(el.hudSource, source ? fr(source) : null);
@@ -256,27 +285,25 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     );
     setStat(el.hudQuads, last?.quads ? `${(last.quadFraction * 100).toFixed(0)} %` : null);
 
-    // The button says what it will do, because the method segment is above the
-    // fold and the button is at the bottom of the window.
-    el.run.textContent = el.bake.checked
-      ? method === "isotropic"
-        ? "Reconstruire et projeter"
-        : "Décimer et projeter"
-      : method === "isotropic"
-        ? "Reconstruire"
-        : "Décimer";
-  }
-
-  /** A stat nobody has filled in yet should not read as loudly as a real one. */
-  function setStat(node, text) {
-    node.textContent = text ?? "—";
-    node.classList.toggle("rt-void", text == null);
+    // The button says what it will do: the method segment is on another tab now
+    // and the switch is at the other end of the bar.
+    const verb = method === "isotropic" ? "Reconstruire" : "Décimer";
+    el.run.textContent = el.bake.checked ? `${verb} et projeter` : verb;
   }
 
   function refresh() {
     source = viewer.current ? countTriangles(viewer.root) : 0;
     el.run.disabled = source === 0 || running || !tauri;
     el.run.title = source === 0 ? "Ouvre un modèle d'abord" : "";
+
+    // Say where the geometry will come from, because the two paths behave
+    // differently and the difference is worth a sentence rather than a surprise.
+    const p = sourcePath?.();
+    el.sourceNote.textContent = !source
+      ? ""
+      : isGltf(p)
+        ? "Le moteur lira le fichier d'origine directement."
+        : "La scène sera exportée en glTF avant d'être lue, ce qui prend un moment sur un gros modèle.";
     paint();
   }
 
@@ -292,6 +319,8 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
   el.mDecimate.addEventListener("click", () => setMethod("decimate"));
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
 
+  // --- running ------------------------------------------------------------
+
   /** The bar, the fill and the note, in one place so they cannot disagree. */
   function say(text, fraction) {
     el.note.textContent = text || "";
@@ -299,29 +328,63 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     if (typeof fraction === "number") el.fill.style.width = `${Math.round(fraction * 100)}%`;
   }
 
-  async function decimate() {
+  /**
+   * An error has to be impossible to miss.
+   *
+   * It used to be written into the report at the bottom of a long scrolling
+   * panel, where a run that failed looked exactly like a button that did
+   * nothing. Now it goes to the bar, to a toast, to its own line on the Résultat
+   * tab, to that tab being brought forward, and to the console.
+   */
+  function fail(e) {
+    const text = String(e?.message || e);
+    console.error("[retopo]", e);
+    el.err.textContent = text;
+    el.err.hidden = false;
+    showTab("result");
+    say("");
+    toast?.("La retopologie a échoué", 2600);
+  }
+
+  /**
+   * The file the engine should read.
+   *
+   * When the model came off disk as glTF, hand over that path and let the engine
+   * open it: retopology does not care about the scene transform, and pushing a
+   * forty megabyte export back across the bridge is exactly what this module
+   * says elsewhere it will not do. Every other format still has to be exported,
+   * which is what makes a NIF or a USD retopologisable at all.
+   */
+  async function inputFor(dirs) {
+    const p = sourcePath?.();
+    if (isGltf(p)) return p;
+
+    say("Export de la scène…", 0);
+    // The group, not the object inside it: the orientation buttons and the edit
+    // handles both write to the group.
+    const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+    const glb = await new GLTFExporter().parseAsync(viewer.root, {
+      binary: true,
+      includeCustomExtensions: true,
+    });
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
+    await writeFile(dirs.input, new Uint8Array(glb));
+    return dirs.input;
+  }
+
+  async function run() {
     if (running || !tauri || !viewer.current) return;
     running = true;
     el.run.disabled = true;
+    el.err.hidden = true;
     el.fill.style.width = "0%";
-    say("Export de la scène…", 0);
+    say("Préparation…", 0);
     onBusy?.(true);
 
     let stop = null;
     try {
       const dirs = await tauri.core.invoke("retopo_workdir");
-
-      // The group, not the object inside it: the orientation buttons and the
-      // edit handles both write to the group, so exporting the object alone
-      // hands the engine a model still lying on its side.
-      const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-      const glb = await new GLTFExporter().parseAsync(viewer.root, {
-        binary: true,
-        includeCustomExtensions: true,
-      });
-
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
-      await writeFile(dirs.input, new Uint8Array(glb));
+      const input = await inputFor(dirs);
 
       const verb = method === "isotropic" ? "Reconstruction" : "Décimation";
       say(`${verb}…`, 0);
@@ -334,7 +397,7 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
       });
 
       const r = await tauri.core.invoke("retopo_decimate", {
-        input: dirs.input,
+        input,
         output: dirs.output,
         request: {
           method,
@@ -406,20 +469,17 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
         // A miss is a ray that fell back to the nearest surface point rather
         // than finding the high poly. A few are normal; a lot means the cage is
         // too tight for this pair of meshes, or a chart wrapped around something
-        // thin. Worth saying out loud rather than leaving in a number.
-        if (miss > 15) {
-          lines.push("Beaucoup de manques : essaie une cage plus longue.");
-        }
+        // thin.
+        if (miss > 15) lines.push("Beaucoup de manques : essaie une cage plus longue.");
       }
       el.report.textContent = lines.join(" ");
+      showTab("result");
 
       const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
       toast?.(`${fr(r.outputTriangles)} triangles, ${cut} % de moins`);
       say("");
     } catch (e) {
-      el.report.textContent = String(e);
-      say("");
-      toast?.("La retopologie a échoué");
+      fail(e);
     } finally {
       stop?.();
       running = false;
@@ -429,7 +489,7 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     }
   }
 
-  el.run.addEventListener("click", decimate);
+  el.run.addEventListener("click", run);
   el.close.addEventListener("click", () => api.hide());
   setMethod("decimate");
 
