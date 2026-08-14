@@ -386,6 +386,24 @@ Decisions taken:
       12,344 bytes and it arrives **only when the mode is opened**, which is the
       whole claim. The shared view toolbar added since did not drag it forward.
 
+      **Remeasured after the toolbar merge**, off the build rather than off the
+      network, so the figures are comparable only in their compressed column:
+      **7 chunks, 720,060 bytes on disk, 194,886 compressed**, and the mode's own
+      chunk **36,133 bytes on disk, 12,129 compressed**. Against the numbers
+      above that is 2,717 bytes less at startup and 215 bytes less in the lazy
+      chunk, which is the answer that mattered: folding this mode's toolbar into
+      the shared one moved *nothing* forward into the startup bundle. It could
+      not, because what moved is markup and stylesheet rather than module code,
+      and what left this module -- five colour buttons, the wire pair, the frame
+      button and their handlers -- is larger than the injection code that
+      replaced it.
+
+      The one real cost is `index.html`, **7,945 bytes larger**, being the inline
+      glyphs of the bar and the comments explaining them. That is paid by the
+      thumbnail process too, one per file, so it is worth knowing; it is also
+      parse-once markup rather than script, and the compressed startup total
+      still went down.
+
       *As the shell sees it*, one process per file over a folder of eleven
       models: **10,464 ms total, 951 ms each**, eleven thumbnails written.
 
@@ -425,6 +443,24 @@ Decisions taken:
       cannot disagree about what is on screen. Everything about looking at the
       model is reached for constantly while judging a result, and a control you
       must open a panel for is a control you stop using.
+
+      **And then it stopped being this mode's toolbar.** It was laid out over the
+      same corner as Albedo's own view bar and hid it while the mode was open,
+      which meant two bars asking one question, drawn two different ways: words
+      there, icons here. Every duplicated control was a control that could drift,
+      and every one of them had. Couleur read as two unrelated widgets depending
+      on which mode you were in; the same channel was called Handpainted in one
+      list and Unlit in another; and this bar's Caméra group had quietly lost
+      Libre and Rotation continue, which nobody could see for as long as the bar
+      that still had them was hidden underneath.
+
+      There is one bar now, in `index.html`, and this mode adds to it: two data
+      views into the Couleur plate, three surface layers into Calques, the
+      comparison plate and the counters as groups of their own. They go in on
+      `show` and come back out on `hide`. What it no longer carries is anything
+      the bar already had, which is the point: the wireframe, its light-or-dark
+      flip, Recadrer and five channels are Albedo's, they work whether this mode
+      is open or not, and there is only one of each to keep correct.
 - [x] **Cancellation**, which the child process made almost free: the whole
       implementation is killing the child. In process it would have meant
       threading a flag through every inner loop of an engine that does not know
@@ -446,6 +482,23 @@ Decisions taken:
 > full width with `max-content` children: an invisible rectangle across the top
 > of the viewport, eating clicks meant for the model. Only the boxes that are
 > actually painted take events back.
+>
+> Both the column and the strip are gone with the merge, and so is the class of
+> bug: the groups this mode lends live in `#chrome`, which never gave its pointer
+> events up in the first place.
+
+> **A button that did nothing, with nothing to show for it.** Flat shading had
+> two listeners, identical, added a hundred lines apart. Both fired on one click:
+> the first read `aria-pressed`, found false, turned flat shading on and wrote
+> true; the second read the value the first had just written, concluded the
+> button was being switched off, and put everything back. Net effect zero, no
+> error, no console line, and a button that looks broken in exactly the way a
+> missing handler does.
+>
+> Reading state back off the DOM is what made it possible, and it is still the
+> right thing to do here -- the alternative is a second copy of the truth. What
+> is not survivable is two writers to one attribute, so the audit worth running
+> is for a `data-el` name appearing in more than one `addEventListener`.
 
 > The inspector panes overflow horizontally by 4 pixels, Caméra, Rendu and Effets alike,
 > for the same reason: a full width `input[type=range]`. Left alone on purpose.
@@ -716,7 +769,7 @@ inactive tabs now fit where one named tab did.
 > times an hour. And the name is *hidden* rather than absent, so a tab keeps its
 > width when it becomes active and the strip does not jump under the cursor.
 
-One of them is a **preview**: selecting cards in the library reuses that single
+One of them is a **preview**: selecting cards in the library reuses that single
 tab instead of opening one per curiosity, and it stops being a preview the moment
 looking becomes working. Opening the retopology mode is one of those moments.
 

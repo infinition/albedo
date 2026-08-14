@@ -76,6 +76,15 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 
 | Feature | Status | Evidence |
 | --- | :---: | --- |
+| One toolbar, shared by every mode | [x] | Retopo opened and closed: the bar keeps its four groups, gains Scène and the counters, and hands them back. 23 buttons clicked in sequence, no error |
+| Couleur says the same thing in both modes | [x] | One plate of icons, one set of names. `unlit` and "Handpainted" were the same channel under two names and are now one entry |
+| Gizmo reachable over the model | [x] | Three relays into `setEditMode`; the pane's four buttons, the bar's three and the G R S keys all repaint together |
+| Retopo stays a lazy chunk after the merge | [x] | 7 chunks and 720,060 bytes at startup, 16 bytes more than before the merge. The mode's own chunk went from 38,001 to 36,133 bytes |
+| The view bar tucks itself away | [x] | Fifteen seconds of quiet, five seconds to leave, an eighth of a second to come back. Measured with the transition cut, see the pitfall below |
+| Full screen hides every overlay | [ ] | Written and checked in the preview; the Tauri window call itself is not exercised |
+| Panel flush with the right edge | [x] | 8 pixels from the window edge at 1280, with and without the library |
+| Canvas stops at the library, not under it | [x] | Stage left edge lands exactly on the library's right edge at a 800 pixel split |
+| Scrubber clear of the Retopo action bar | [x] | Lifted by the bar's own measured height, so it survives the bar wrapping |
 | Layout follows its own box, not the window | [x] | Fifty widths from 300 to 1280, viewer and library, nothing overflowing its box |
 | Preview strip follows a single selection | [x] | Twelve clicks over five assets, two single ones: two loads |
 | A model released when the next one loads | [x] | Eight loads: counts flat, picture identical, shared textures intact |
@@ -103,6 +112,34 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | --- | :---: |
 | USD animation and skinning | [ ] the rig decodes, the pose does not compose |
 | NIF skinning applied at load | [ ] not started |
+| The whole interface batch, in the compiled application | [ ] verified in the browser preview only; needs `npx tauri build --no-bundle` and a pass by hand |
+| Shell initialisation behind a top level `await` | [ ] `src/main.js` awaits two shell round trips at module scope. Nothing below them attaches until both resolve, so a rejection or a hang would leave the window inert. Not the cause of the outage below, but the same shape |
+
+### Faults Found and Fixed This Round
+
+Recorded because each was invisible in a different way, and the way it was
+invisible is the reusable part.
+
+| Fault | How it hid |
+| --- | --- |
+| Every button in the application dead | `applyChannel` reached for `#mode-pbr`, deleted from the markup several commits earlier. Reading a property of null at module scope stops the module: nothing below that line was ever attached. Clicking every button in the page reports nothing, because a button with no listener throws nothing. One red line in the console, on the first load |
+| Flat shading did nothing | Two identical listeners on one button. The first turned it on and wrote the pressed state, the second read what the first had just written and turned it back off. No error, no visible change |
+| A dead band down the right edge | `#inspector` is a child of `#stage`, so shrinking the stage to stop the canvas at the panel moved the panel left by the same amount |
+| The canvas drawn behind the library | Same cause, other axis: the preview strip is width plus a right anchor, and the panel moved the anchor without narrowing the width |
+
+### Measurement Pitfalls, Verified
+
+- **CSS transitions do not advance in the automation panel.** It composes no
+  frames, so an animated property keeps its starting value indefinitely.
+  `getComputedStyle` on `transform` or `opacity` right after a class change
+  reports the old value for ever, and a working drawer was reverted on that
+  reading. Measure something that does not animate, such as `pointer-events`, or
+  set `transition: none` before reading.
+- **A browser preview proves nothing about the shell paths.** `tauri` is null
+  there, so every `if (tauri)` block is skipped.
+- **`onOpenChange` swallows its errors.** A change to it stopped `#retopo`
+  mounting with nothing in the console. Check `document.getElementById("retopo")`
+  after opening the mode.
 
 ---
 
@@ -135,8 +172,22 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 - [x] Cross-section clipping plane along any axis.
 - [x] Multi-source environment controls (studio probe, gradient, HDR panorama).
 - [x] Persistent roaming settings.
+- [x] One toolbar over the viewport, shared by every mode, that Retopo adds
+      groups to instead of replacing. Colour, layers, gizmo and camera in one
+      place, in one visual language, whichever mode is open.
+- [x] Chrome that gets out of the way: a bar that tucks itself after fifteen
+      seconds, and a full screen that hides every overlay with a corner to come
+      back through.
 
 ### Next / Upcoming Features
 
+- [ ] **Exercise the interface batch in the compiled application.** Everything
+      since the toolbar merge was verified against the dev server. Build with
+      `npx tauri build --no-bundle`, close Albedo first, and walk the four
+      groups, both modes, the library split and full screen.
+- [ ] **Take the shell initialisation off the critical path.** Wrap the
+      `if (tauri)` block of `src/main.js` in a floating async call, or move it
+      below the listener registrations, so a failed or slow shell call can no
+      longer leave a complete looking window with nothing wired to it.
 - [ ] **USD Skinning & Animation**: Complete composition of bind-space meshes into pose space once matching reference assets are verified.
 - [ ] **NIF Skinning at Load**: Apply NIF skinning upon initial file load rather than defaulting to bind pose.
