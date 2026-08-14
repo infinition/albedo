@@ -103,23 +103,24 @@ Three of plancton's display modes do not survive the trip through GLB into
 three.js. This is the real cost of the integration and it should not be
 discovered late.
 
-- **Quad topology.** glTF has no quads. plancton pairs triangles and carries the
-  result as a per triangle diagonal mask inside PMSH, its own wire format, which
-  the GLB does not hold. Load the result into three.js untouched and you see
-  triangles. The 86 percent quad coverage that the Rebuild path is sold on
-  becomes invisible. The mask has to travel beside the GLB and a line material
-  has to honour it.
-- **The deviation heatmap.** Per vertex distance from the source, measured
-  through the BVH. It is an attribute the engine computes and nothing in three.js
-  knows about. Needs its own transport and a shader.
-- **The bake cage as a shell.** Geometry pushed along its own normals, drawn
-  translucent, updating live with the slider. Cheap in three.js, but it does not
-  exist there yet, and there is no other way to judge a cage distance than to see
-  whether it swallows the detail without reaching onto the next part.
+- **Quad topology.** [x] glTF has no quads. The mask travels beside the GLB as
+  one `u32` per triangle and the shader honours it: bit `k` means the edge from
+  corner `k` to `k+1` is real, and the cleared bit on a paired triangle is the
+  diagonal. Done as a barycentric overlay rather than a line list, so it draws
+  over the shaded surface in one pass with no second geometry.
+- **The bake cage as a shell.** [x] Pushed along its own normals in the vertex
+  shader, translucent, live under the slider.
+- **The deviation heatmap.** [ ] Per vertex distance from the source, measured
+  through the BVH. Still the largest of the three, and now the only one left: the
+  other two needed a mask and a uniform, this one needs a number *per vertex* out
+  of the engine, a transport for it, and a scale control beside it. The engine
+  computes the number already; nothing carries it across.
 
 Everything else in plancton's viewer is either already in Albedo and better
 (eleven unlit inspection channels against one unlit mode) or is a three.js
-one-liner (wireframe, x-ray).
+one-liner (x-ray). The wireframe turned out not to be a one-liner: three.js's own
+`material.wireframe` *replaces* the surface with lines, which throws away the
+shading you opened the wireframe to judge. The overlay had to be written.
 
 The compute ports at one to one. `plancton-core`, `plancton-remesh` and
 `plancton-bake` are libraries with no interface in them at all.
