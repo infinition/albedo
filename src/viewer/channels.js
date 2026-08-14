@@ -123,6 +123,52 @@ export class ChannelView {
     return material;
   }
 
+  /**
+   * Everything this class knows about the model currently in the scene.
+   *
+   * Handed out when a document is put aside and handed back when it returns, so
+   * a tab keeps its hidden materials, its per material render modes and the
+   * stand-ins already built for it. `reset()` is the wrong tool there: it
+   * *releases* those materials, which is right for a model being thrown away and
+   * ruinous for one that is coming back.
+   *
+   * The wire is deliberately not in here. It is one overlay for the whole
+   * application, shared by every document, like the lights and the grid.
+   */
+  snapshot() {
+    return {
+      original: this.original,
+      built: this.built,
+      materialModes: this.materialModes,
+      hiddenMaterials: this.hiddenMaterials,
+      pristine: this.pristine,
+      mode: this.mode,
+    };
+  }
+
+  adopt(state) {
+    this.original = state?.original || new Map();
+    this.built = state?.built || new Map();
+    this.materialModes = state?.materialModes || new Map();
+    this.hiddenMaterials = state?.hiddenMaterials || new Set();
+    this.pristine = state?.pristine;
+    this.mode = state?.mode || "shaded";
+  }
+
+  /** Release a snapshot that will never be adopted again: a closed tab. */
+  releaseSnapshot(state) {
+    if (!state) return;
+    const keep = this.viewer.keptTextures();
+    releaseMaterials(
+      [...(state.built?.values() || []), ...(state.original?.values() || []),
+       ...(state.pristine?.values() || [])],
+      keep
+    );
+    state.built?.clear();
+    state.original?.clear();
+    state.pristine?.clear();
+  }
+
   reset() {
     // These maps are the other half of the model's materials: the ones built
     // per channel, and the originals held on the meshes' behalf while a channel

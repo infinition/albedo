@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { releaseSubtree } from "./release.js";
+import { releaseSubtree, texturesOf } from "./release.js";
 
 /** Where the gradient starts before anyone touches it. */
 export const DEFAULT_STOPS = [
@@ -1269,6 +1269,125 @@ export class Viewer {
     this.invalidate();
   }
 
+
+  /**
+   * Take the whole model out of the scene without releasing any of it.
+   *
+   * This is the difference between a tab and a replacement, and it is the whole
+   * reason `clear()` could not be reused: `clear` releases geometries, materials
+   * and textures, which is exactly right when a model is being thrown away and
+   * exactly wrong when it is being put aside to come back to.
+   *
+   * Everything that belongs to *this* model travels in the returned object.
+   * Everything that belongs to the *viewer* — the lights, the grid, the stand,
+   * the environment, the camera rig — stays where it is, because it is the room
+   * rather than the thing in it.
+   *
+   * @returns {object} an opaque holder to hand back to `attachModel`
+   */
+  detachModel() {
+    const held = {
+      objects: [...this.root.children],
+      rotation: this.root.rotation.clone(),
+      parts: this.parts,
+      current: this.current,
+      skeletons: [...this.skeletons.children],
+      skeletonsVisible: this.skeletons.visible,
+      box: this.boxHelper.box.clone(),
+      mixer: this.mixer,
+      clips: this.clips || [],
+      playing: this.playing,
+      // The camera is part of what you were doing, not part of the file. Coming
+      // back to a tab and finding it framed from somewhere else is the same
+      // small betrayal as coming back to a scrolled page at the top.
+      camera: {
+        position: this.camera.position.clone(),
+        target: this.controls.target.clone(),
+        zoom: this.camera.zoom,
+      },
+    };
+    // The handles point at an object that is about to leave the scene.
+    if (this.gizmo) this.setGizmo(null);
+    for (const o of held.objects) this.root.remove(o);
+    for (const s of held.skeletons) this.skeletons.remove(s);
+    this.parts = [];
+    this.current = null;
+    this.mixer = null;
+    this.clips = [];
+    this.selected = [];
+    this.post?.outline([]);
+    this.invalidate();
+    return held;
+  }
+
+  /** Put back what `detachModel` took out, exactly as it was. */
+  attachModel(held) {
+    if (!held) return;
+    for (const o of held.objects) this.root.add(o);
+    for (const s of held.skeletons) this.skeletons.add(s);
+    this.root.rotation.copy(held.rotation);
+    this.parts = held.parts;
+    this.current = held.current;
+    this.skeletons.visible = held.skeletonsVisible;
+    this.boxHelper.box.copy(held.box);
+    this.mixer = held.mixer;
+    this.clips = held.clips;
+    this.playing = held.playing;
+    this.camera.position.copy(held.camera.position);
+    this.controls.target.copy(held.camera.target);
+    if (held.camera.zoom) this.camera.zoom = held.camera.zoom;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    // The grid and the stand are sized against whatever is in the scene, so they
+    // have to be told the scene changed even though nothing was loaded.
+    this.scaleGrid(this.sceneBox());
+    this.placePedestal();
+    this.invalidate();
+  }
+
+  /**
+   * Release a detached model.
+   *
+   * Closing a tab is the one moment a held scene stops being worth keeping, and
+   * it is not on screen at that point, so nothing else will do it.
+   */
+  /** Every texture a held document still points at. */
+  texturesHeldBy(held) {
+    const out = new Set();
+    if (!held) return out;
+    for (const o of [...held.objects, ...held.skeletons]) {
+      o.traverse?.((n) => {
+        const m = n.material;
+        if (!m) return;
+        for (const one of Array.isArray(m) ? m : [m]) texturesOf(one, out);
+      });
+    }
+    return out;
+  }
+
+  releaseHeld(held, alsoKeep = null) {
+    if (!held) return;
+    /*
+     * What the *live* scene still needs, plus whatever the caller says is still
+     * needed elsewhere.
+     *
+     * `keptTextures` only knows about the scene on screen, which was the whole
+     * truth while there was one document. With tabs it is not: two models that
+     * reference the same image file share one texture, so closing one tab would
+     * free a texture another tab is parked on and that tab would come back with
+     * a black surface. The caller holds the other documents and is the only
+     * place that can name them.
+     */
+    const keep = this.keptTextures();
+    if (alsoKeep) for (const t of alsoKeep) keep.add(t);
+    for (const o of held.objects) releaseSubtree(o, keep);
+    for (const s of held.skeletons) releaseSubtree(s, keep);
+    held.objects.length = 0;
+    held.skeletons.length = 0;
+    held.parts = [];
+    held.current = null;
+    held.mixer = null;
+  }
 
   /** Keep the floor grid readable whatever the model scale is. */
   scaleGrid(box) {

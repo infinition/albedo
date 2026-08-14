@@ -1601,6 +1601,33 @@ export function createRetopo({
       open ? api.hide() : api.show();
     },
     refresh,
+    /**
+     * The history belongs to a document, not to the mode.
+     *
+     * It holds paths to files produced from one particular model, so carrying it
+     * across a tab switch would offer an undo that swaps in a low poly of
+     * something else entirely. Handed out when a tab is parked and handed back
+     * when it returns, so each model keeps its own runs.
+     */
+    saveState() {
+      return { history, cursor, last, lastRun, hasQuads, devMax };
+    },
+    loadState(state) {
+      history = state?.history || [];
+      cursor = state?.cursor ?? -1;
+      last = state?.last || null;
+      lastRun = state?.lastRun || null;
+      hasQuads = state?.hasQuads || false;
+      devMax = state?.devMax || 0;
+      wireU.uQuads.value = hasQuads ? 1 : 0;
+      cage?.dispose();
+      cage = null;
+      el.err.hidden = true;
+      el.report.textContent = "";
+      el.resultSection.hidden = true;
+      paintHistory();
+      refresh();
+    },
     /** The shared selection moved: only the scope line depends on it. */
     onSelection: paintScope,
     /**

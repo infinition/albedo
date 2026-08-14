@@ -122,12 +122,105 @@ body.clean #inspector { opacity: 0; pointer-events: none; }
   backdrop-filter: none;
 }
 
-#file-name {
+/* --- the tab strip --------------------------------------------------------
+ *
+ * One tab per open model, where the single file name used to sit. It lives in
+ * the top left cluster rather than in a bar of its own because everything in
+ * this application floats over the viewport and nothing is docked: a full width
+ * title bar would be the first thing to break that, and it would cost a row of
+ * height on every launch to show one tab.
+ */
+.tabs-strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.tabs-rail {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-rail::-webkit-scrollbar { height: 0; }
+
+.tabs-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  /* Shrinks before it scrolls, the way every tab strip does, but never past the
+     point where the name stops being a name. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 190px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.tabs-tab:hover { background: rgba(255, 255, 255, 0.06); }
+.tabs-tab.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg);
+}
+.tabs-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tabs-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#file-name.idle { color: var(--muted); }
+
+/* Modified, said with a dot rather than a word: it has to read at a glance in a
+   strip where the name is already fighting for room. */
+.tabs-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.tabs-close,
+.tabs-new {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  flex: none;
+  border-radius: 5px;
+  color: var(--muted);
+  opacity: 0.55;
+}
+.tabs-close svg,
+.tabs-new svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.tabs-close:hover,
+.tabs-new:hover { opacity: 1; color: var(--fg); background: rgba(255, 255, 255, 0.12); }
+/* The cross appears on the tab you are pointing at or working in. A strip of
+   crosses is a strip inviting you to click one by accident. */
+.tabs-tab .tabs-close { opacity: 0; }
+.tabs-tab:hover .tabs-close,
+.tabs-tab.active .tabs-close { opacity: 0.55; }
+.tabs-tab:hover .tabs-close:hover,
+.tabs-tab.active .tabs-close:hover { opacity: 1; }
+
+/* A single tab is not a choice, so it stops looking like one: no plate, no
+   cross. The name still shows, because it is also the file name. */
+.tabs-strip.alone .tabs-tab { background: none; padding-left: 2px; }
+.tabs-strip.alone .tabs-close { display: none; }
+.tabs-strip.alone .tabs-tab:not(.active) { color: var(--muted); }
 
 .badge {
   padding: 1px 6px;

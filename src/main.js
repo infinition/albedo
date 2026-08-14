@@ -17,6 +17,7 @@ import { createPrefs } from "./prefs.js";
 import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 import { selection } from "./selection.js";
+import { createTabs } from "./ui/tabs.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -60,6 +61,204 @@ let typingTransform = false;
 const history = { past: [], future: [], limit: 80 };
 let pendingPose = null;
 
+/*
+ * --- documents ------------------------------------------------------------
+ *
+ * One open model per tab, all of them resident.
+ *
+ * The viewer draws one scene, so exactly one document is attached to it at a
+ * time and the rest sit in their holders: the objects, their materials and their
+ * textures, alive but out of the graph. Switching is a detach and an attach, not
+ * a load, which is what makes it instant and what makes an unsaved edit survive
+ * a trip to another tab and back.
+ *
+ * The cost is stated rather than hidden: five tabs on heavy models is five
+ * models in memory, on an application whose own notes say meshes are held whole
+ * and twice over while a job runs. That is what tabs mean, and it is the answer
+ * chosen deliberately over reloading on every switch, which would have had to
+ * serialise unsaved work to avoid throwing away the very thing tabs exist to
+ * protect.
+ *
+ * What belongs to a document: its objects, its camera, its channel state, its
+ * pose history, its selection, its path and whether it is modified. What belongs
+ * to the viewer and is shared by all of them: the lights, the grid, the stand,
+ * the environment, the exposure, and the wireframe overlay. The rule is whether
+ * it would still be true of the file after an export.
+ */
+
+let docSeq = 0;
+/** Every open model, in strip order. */
+const documents = [];
+/** The one attached to the viewer. Null only before the first document. */
+let activeDoc = null;
+let tabs = null;
+
+function makeDocument({ title = "Nouvel onglet", path = null } = {}) {
+  const doc = {
+    id: ++docSeq,
+    title,
+    path,
+    idle: !path,
+    dirty: false,
+    /** Viewer state while put aside; null while this document is the live one. */
+    held: null,
+    /** Channel state while put aside; null while live. */
+    channelState: null,
+    /** Pose history, which is about this model and no other. */
+    history: { past: [], future: [], limit: 80 },
+    selection: [],
+    retopo: null,
+  };
+  documents.push(doc);
+  return doc;
+}
+
+function paintTabs() {
+  tabs?.paint(documents, activeDoc?.id ?? null);
+}
+
+/** Take the live document out of the viewer and into its own holder. */
+function parkActive() {
+  if (!activeDoc) return;
+  activeDoc.held = viewer.detachModel();
+  activeDoc.channelState = channels.snapshot();
+  activeDoc.path = openedPath;
+  activeDoc.dirty = sceneDirty;
+  activeDoc.history.past = history.past;
+  activeDoc.history.future = history.future;
+  activeDoc.selection = [...selection.ids].map((id) => [id, selection.kindOf(id)]);
+  activeDoc.selectedPart = selectedPart;
+  activeDoc.retopo = retopo?.saveState?.() ?? activeDoc.retopo;
+}
+
+/** Put a document back in the viewer and point every panel at it. */
+function adoptDocument(doc) {
+  activeDoc = doc;
+  channels.adopt(doc.channelState);
+  viewer.attachModel(doc.held);
+  openedPath = doc.path;
+  sceneDirty = doc.dirty;
+  history.past = doc.history.past;
+  history.future = doc.history.future;
+  selectedPart = doc.selectedPart && viewer.parts.includes(doc.selectedPart)
+    ? doc.selectedPart
+    : null;
+  selection.set(doc.selection || []);
+  retopo?.loadState?.(doc.retopo);
+
+  // Everything that reads the scene has to be told it changed, because nothing
+  // was loaded and none of the usual load-time repaints will fire.
+  currentTitle = doc.title;
+  const kind = /\.([a-z0-9]+)$/i.exec(doc.title);
+  $("file-kind").hidden = !kind;
+  if (kind) $("file-kind").textContent = kind[1];
+  applyChannel(currentChannel);
+  $("empty").classList.toggle("hidden", !!viewer.current);
+  showStats(viewer.stats());
+  showDimensions();
+  paintOrientation();
+  paintParts();
+  paintSaveButtons();
+  paintMaterialList();
+  paintShotPreview();
+  paintHistory();
+  paintTransform();
+  paintEditTarget();
+  tree?.reset();
+  $("tree").textContent = viewer.current ? viewer.sceneTree() : "";
+  buildAnimationUi(viewer.clips || []);
+  $("btn-export").disabled = !viewer.current;
+  $("btn-snapshot").disabled = !viewer.current;
+  retopo?.refresh();
+  paintTabs();
+}
+
+function switchTo(id) {
+  if (activeDoc?.id === id) return;
+  const next = documents.find((d) => d.id === id);
+  if (!next) return;
+  parkActive();
+  adoptDocument(next);
+}
+
+/**
+ * A new tab, empty, ready to be composed in.
+ *
+ * Empty is a real state rather than a placeholder: the import button and a drop
+ * both add to whatever is in the scene, so a tab with nothing in it is exactly
+ * where you start when the thing you want is several files put together.
+ */
+function newDocument({ activate = true } = {}) {
+  parkActive();
+  const doc = makeDocument();
+  // An empty holder rather than null, so `adoptDocument` has the same shape to
+  // work with whether the tab has ever held anything or not.
+  doc.held = viewer.detachModel();
+  doc.channelState = channels.snapshot();
+  channels.reset();
+  doc.channelState = channels.snapshot();
+  if (activate) adoptDocument(doc);
+  else paintTabs();
+  return doc;
+}
+
+async function closeDocument(id) {
+  const doc = documents.find((d) => d.id === id);
+  if (!doc) return;
+
+  /*
+   * Ask about the tab being closed, not about the one on screen.
+   *
+   * `confirmDiscard` reads the live scene's flag, which is the wrong question
+   * when the cross being clicked belongs to a tab that is parked. Bringing it
+   * forward first is also the honest thing: nobody should be asked to decide
+   * about work they cannot see.
+   */
+  if (doc.dirty || (doc === activeDoc && sceneDirty)) {
+    if (doc !== activeDoc) switchTo(id);
+    if (!(await confirmDiscard(`« ${doc.title} » a été modifié.`))) return;
+  }
+
+  const index = documents.indexOf(doc);
+  const wasActive = doc === activeDoc;
+  documents.splice(index, 1);
+
+  if (wasActive) {
+    // Park it so its objects are in a holder to release, then take up the
+    // neighbour on the right, the way every tab strip does.
+    doc.held = viewer.detachModel();
+    doc.channelState = channels.snapshot();
+    activeDoc = null;
+  }
+  /*
+   * What the other tabs still point at.
+   *
+   * Two models that reference the same image file share one texture object, so
+   * releasing this document's textures without asking the others would leave a
+   * parked tab with a black surface when it came back. The live scene protects
+   * itself; the parked ones have to be named.
+   */
+  const stillNeeded = new Set();
+  for (const other of documents) {
+    for (const t of viewer.texturesHeldBy(other.held)) stillNeeded.add(t);
+  }
+  viewer.releaseHeld(doc.held, stillNeeded);
+  channels.releaseSnapshot(doc.channelState);
+  doc.held = null;
+  doc.channelState = null;
+
+  if (!documents.length) {
+    // Never no tabs at all: an application with an empty strip has nowhere to
+    // drop a file, and the empty state is a tab like any other.
+    channels.reset();
+    adoptDocument(makeDocument());
+    setTitle("Albedo", true);
+    return;
+  }
+  if (wasActive) adoptDocument(documents[Math.min(index, documents.length - 1)]);
+  else paintTabs();
+}
+
 /**
  * Whether the scene holds work that leaving would throw away.
  *
@@ -78,10 +277,19 @@ let sceneDirty = false;
 
 function markDirty() {
   sceneDirty = true;
+  // The tab shows it, so the flag and the dot cannot disagree.
+  if (activeDoc && !activeDoc.dirty) {
+    activeDoc.dirty = true;
+    paintTabs();
+  }
 }
 
 function clearDirty() {
   sceneDirty = false;
+  if (activeDoc && activeDoc.dirty) {
+    activeDoc.dirty = false;
+    paintTabs();
+  }
 }
 
 /**
@@ -209,6 +417,27 @@ function refreshSliderValues() {
 const labelOfChannel = (id) => CHANNELS.find((c) => c.id === id)?.label || id;
 const viewer = new Viewer($("view"));
 const channels = new ChannelView(viewer);
+
+/*
+ * The strip, and the first tab, before anything can want either.
+ *
+ * `setTitle` paints the strip and runs long before the rest of the wiring, and
+ * the empty state is a document like any other, so both exist from here on.
+ * The module is a plain import rather than a lazy one: it is a hundred lines and
+ * a handful of nodes, and there is no session in which the strip is not needed.
+ */
+tabs = createTabs({
+  host: $("tabs-strip"),
+  onActivate: switchTo,
+  onClose: closeDocument,
+  onNew: () => {
+    newDocument();
+    setTitle("Albedo", true);
+    toast("Nouvel onglet · dépose un fichier ou importe un objet");
+  },
+});
+activeDoc = makeDocument({ title: "Albedo" });
+paintTabs();
 
 // The HUD needs the navigation and the navigation fires HUD actions, so the
 // handlers are filled in once both exist.
@@ -401,15 +630,26 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
   }
 }
 
+/**
+ * What the active document is called.
+ *
+ * Held here rather than read back out of the strip. The name is used to propose
+ * an export file name, and reading it out of a tab would mean reading back
+ * whatever the strip decided to truncate it to.
+ */
+let currentTitle = "Albedo";
+
 function setTitle(label, idle = false) {
-  const el = $("file-name");
-  el.textContent = label;
-  el.title = label;
-  el.classList.toggle("idle", idle);
+  currentTitle = label;
+  if (activeDoc) {
+    activeDoc.title = label;
+    activeDoc.idle = idle;
+  }
   const kind = /\.([a-z0-9]+)$/i.exec(label);
   const badge = $("file-kind");
   badge.hidden = !kind;
   if (kind) badge.textContent = kind[1];
+  paintTabs();
 }
 
 /**
@@ -464,12 +704,27 @@ async function openPath(path, { force = false, keepLibrary = false } = {}) {
    * very thing being complained about. A modified scene simply does not get
    * previewed over, and the strip goes on showing what it showed.
    */
-  if (keepLibrary) {
-    if (sceneDirty) {
-      sayPreviewRefused();
+  /*
+   * Opening a model no longer costs you the one you were working on.
+   *
+   * A fresh tab unless the one you are on is empty and untouched, in which case
+   * it is the tab you just made and filling it is what you meant. Opening a file
+   * that is already open brings its tab forward rather than loading a second
+   * copy of it, which is what every tab strip does and what stops a folder of
+   * clicks becoming a dozen identical tabs.
+   */
+  if (!keepLibrary) {
+    const already = documents.find((d) => d.path === path && d !== activeDoc);
+    if (already) {
+      switchTo(already.id);
       return;
     }
-  } else if (!force && !(await confirmDiscard())) {
+    if (!force && (viewer.current || sceneDirty)) newDocument();
+  } else if (sceneDirty) {
+    // The preview strip gets a refusal rather than a question: selecting a card
+    // is browsing, not opening, so a dialog per card is one people dismiss
+    // without reading, and loading anyway is the thing being complained about.
+    sayPreviewRefused();
     return;
   }
   const url = tauri.core.convertFileSrc(path);
@@ -1234,7 +1489,7 @@ async function exportModel({ overwrite = false } = {}) {
       includeCustomExtensions: true,
     });
     const bytes = new Uint8Array(result);
-    const name = ($("file-name").textContent || "modele").replace(/\.[^.]+$/, "") + ".glb";
+    const name = (currentTitle || "modele").replace(/\.[^.]+$/, "") + ".glb";
 
     if (tauri) {
       const path = overwrite
@@ -1283,7 +1538,7 @@ async function saveSnapshot() {
   try {
     const url = viewer.snapshot(1024, { transparent: true });
     const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0));
-    const name = ($("file-name").textContent || "albedo").replace(/\.[^.]+$/, "") + ".png";
+    const name = (currentTitle || "albedo").replace(/\.[^.]+$/, "") + ".png";
     if (tauri) {
       const path = await tauri.dialog.save({
         defaultPath: name,
@@ -1421,7 +1676,7 @@ $("shot-save").addEventListener("click", async () => {
   try {
     const url = viewer.photo(shotOptions());
     const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0));
-    const name = ($("file-name").textContent || "albedo").replace(/\.[^.]+$/, "") + ".png";
+    const name = (currentTitle || "albedo").replace(/\.[^.]+$/, "") + ".png";
     if (tauri) {
       const path = await tauri.dialog.save({
         defaultPath: name,
@@ -2151,6 +2406,7 @@ if (import.meta.env && import.meta.env.DEV) {
   window.__albedo = {
     viewer, channels, nav, open, applyChannel, prefs,
     selection, showPane, toggleRetopo, openPath, markDirty, clearDirty,
+    importPart, newDocument, closeDocument, switchTo, documents,
     get dirty() {
       return sceneDirty;
     },
@@ -2942,7 +3198,9 @@ function paintSaveButtons() {
   const over = $("save-over");
   const canOverwrite = has && !!openedPath && WRITABLE.test(openedPath);
   $("save-transform").disabled = !has;
-  $("part-import").disabled = !has || !tauri;
+  // Importing into an empty tab is the whole point of an empty tab: a scene put
+  // together out of several files starts with nothing in it.
+  $("part-import").disabled = !tauri;
   over.disabled = !canOverwrite;
   over.title = canOverwrite
     ? `Remplacer ${openedPath.split(/[\\/]/).pop()}, sans retour possible`
@@ -2959,7 +3217,10 @@ function paintSaveButtons() {
  * colour spaces fixed and its textures found exactly as the first did.
  */
 async function importPart(path) {
-  if (!tauri || !viewer.current) return;
+  if (!tauri) return;
+  // An empty tab has no model to add to, and that is a state to fill rather
+  // than a reason to refuse: the first import becomes the scene.
+  const first = !viewer.current;
   setBusy(true);
   try {
     const url = tauri.core.convertFileSrc(path);
@@ -2980,6 +3241,16 @@ async function importPart(path) {
     const entry = viewer.addPart(object, name);
     markDirty();
     selectedPart = entry;
+    if (first) {
+      // Nothing was framed, sized or named yet, because nothing had been loaded
+      // through the usual path. The first object does all three.
+      viewer.boxHelper.box.setFromObject(object);
+      viewer.frame(viewer.boxHelper.box);
+      viewer.scaleGrid(viewer.sceneBox());
+      viewer.placePedestal();
+      setTitle(name);
+      $("empty").classList.add("hidden");
+    }
     // The scene changed underneath the channel copies and the material list
     channels.reset();
     // An imported object arrives with plain indexed geometry, so it needs the
@@ -3187,8 +3458,20 @@ window.addEventListener("keydown", (e) => {
     case "KeyS":
       if (!e.ctrlKey) setEditMode("scale");
       break;
+    /*
+     * Ctrl+T and Ctrl+W, which mean what they mean everywhere there are tabs.
+     *
+     * T on its own is still the turntable, and W on its own is still the
+     * wireframe. Neither is displaced: a modifier is what tells the two apart,
+     * and these are the two chords nobody has to be taught.
+     */
     case "KeyT":
-      if (nav.mode === "orbit") {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        newDocument();
+        setTitle("Albedo", true);
+        toast("Nouvel onglet · dépose un fichier ou importe un objet");
+      } else if (nav.mode === "orbit") {
         toggleTurntable();
         toast(viewer.spin ? "Rotation continue" : "Rotation arrêtée");
       }
@@ -3208,7 +3491,12 @@ window.addEventListener("keydown", (e) => {
       } else setEditMode("rotate");
       break;
     case "KeyW":
-      if (!e.ctrlKey && nav.mode === "orbit") {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        if (activeDoc) closeDocument(activeDoc.id);
+        break;
+      }
+      if (nav.mode === "orbit") {
         const on = !$("opt-wireframe").checked;
         setWireframe(on);
         toast(on ? "Fil de fer" : "Fil de fer coupé");
