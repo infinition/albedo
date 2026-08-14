@@ -297,31 +297,31 @@
           first time — this executable is also the Explorer thumbnail provider.
         -->
         <nav id="tabs" class="tabs" role="tablist" aria-label="Sections du panneau">
-          <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
+          <button class="tab" type="button" data-pane="scene" data-i18n-title="tab.scene" data-i18n-aria="tab.scene" title="Scène" aria-label="Scène">
             <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
           </button>
-          <button class="tab active" type="button" data-pane="view" title="Vue" aria-label="Vue">
+          <button class="tab active" type="button" data-pane="view" data-i18n-title="tab.view" data-i18n-aria="tab.view" title="Vue" aria-label="Vue">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="matter" title="Matière" aria-label="Matière">
+          <button class="tab" type="button" data-pane="matter" data-i18n-title="tab.matter" data-i18n-aria="tab.matter" title="Matière" aria-label="Matière">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M7 15a7 7 0 0 1 8-6" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="retopo" title="Retopo" aria-label="Retopo" hidden>
+          <button class="tab" type="button" data-pane="retopo" data-i18n-title="tab.retopo" data-i18n-aria="tab.retopo" title="Retopo" aria-label="Retopo" hidden>
             <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="camera" title="Caméra" aria-label="Caméra">
+          <button class="tab" type="button" data-pane="camera" data-i18n-title="tab.camera" data-i18n-aria="tab.camera" title="Caméra" aria-label="Caméra">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4v8l6 4" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="decor" title="Décor" aria-label="Décor">
+          <button class="tab" type="button" data-pane="decor" data-i18n-title="tab.decor" data-i18n-aria="tab.decor" title="Décor" aria-label="Décor">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="4" /><path d="M3 19h18M6 15l3-3 3 3" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="effects" title="Effets" aria-label="Effets">
+          <button class="tab" type="button" data-pane="effects" data-i18n-title="tab.effects" data-i18n-aria="tab.effects" title="Effets" aria-label="Effets">
             <svg viewBox="0 0 24 24"><path d="M5 12h4l2-5 2 10 2-5h4"/></svg>
           </button>
-          <button class="tab" type="button" data-pane="photo" title="Photo" aria-label="Photo">
+          <button class="tab" type="button" data-pane="photo" data-i18n-title="tab.photo" data-i18n-aria="tab.photo" title="Photo" aria-label="Photo">
             <svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
-          <button class="tab" type="button" data-pane="object" title="Objet" aria-label="Objet">
+          <button class="tab" type="button" data-pane="object" data-i18n-title="tab.object" data-i18n-aria="tab.object" title="Objet" aria-label="Objet">
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /><path d="M10 7l2-2 2 2M10 17l2 2 2-2M7 10l-2 2 2 2M17 10l2 2-2 2" /></svg>
           </button>
         </nav>
@@ -340,12 +340,12 @@
 
         <div class="pane active" data-pane="view">
         <section>
-          <h2>Canaux</h2>
+          <h2 data-i18n="pane.channels">Canaux</h2>
           <div class="grid" id="channels"></div>
         </section>
 
         <section>
-          <h2>Affichage</h2>
+          <h2 data-i18n="pane.display">Affichage</h2>
           <!--
             One wireframe, here, for the whole application. There were two: this
             switch, which set three.js's own `material.wireframe` and therefore
@@ -354,29 +354,29 @@
             shading is losing the thing you opened a wireframe to judge — and the
             bar in Retopo mirrors this switch rather than owning a second one.
           -->
-          <label class="check"><input type="checkbox" id="opt-wireframe" /><span>Fil de fer (W)</span></label>
-          <label class="check" id="opt-wire-dark-row"><input type="checkbox" id="opt-wire-dark" /><span>Traits sombres</span></label>
-          <label class="check"><input type="checkbox" id="opt-grid" checked /><span>Grille</span></label>
-          <label class="check"><input type="checkbox" id="opt-bounds" /><span>Boîte englobante</span></label>
-          <label class="check"><input type="checkbox" id="opt-skeleton" /><span>Squelette</span></label>
+          <label class="check"><input type="checkbox" id="opt-wireframe" /><span data-i18n="pane.wireframe">Fil de fer (W)</span></label>
+          <label class="check" id="opt-wire-dark-row"><input type="checkbox" id="opt-wire-dark" /><span data-i18n="pane.wireDark">Traits sombres</span></label>
+          <label class="check"><input type="checkbox" id="opt-grid" checked /><span data-i18n="pane.grid">Grille</span></label>
+          <label class="check"><input type="checkbox" id="opt-bounds" /><span data-i18n="pane.bounds">Boîte englobante</span></label>
+          <label class="check"><input type="checkbox" id="opt-skeleton" /><span data-i18n="pane.skeleton">Squelette</span></label>
           <label class="field">
-            <span>Exposition</span>
+            <span data-i18n="pane.exposure">Exposition</span>
             <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" />
           </label>
         </section>
 
         <section>
-          <h2>Coupe</h2>
+          <h2 data-i18n="pane.clip">Coupe</h2>
           <div class="row">
-            <div class="segment" role="group" aria-label="Axe de coupe">
-              <button id="clip-off" class="seg active" type="button" title="Aucune coupe">Aucune</button>
-              <button id="clip-x" class="seg" type="button" title="Couper selon X">X</button>
-              <button id="clip-y" class="seg" type="button" title="Couper selon Y">Y</button>
-              <button id="clip-z" class="seg" type="button" title="Couper selon Z">Z</button>
+            <div class="segment" role="group" data-i18n-aria="pane.clipAxis" aria-label="Axe de coupe">
+              <button id="clip-off" class="seg active" type="button" data-i18n-title="pane.clipNoneTitle" data-i18n="pane.clipNone" title="Aucune coupe">Aucune</button>
+              <button id="clip-x" class="seg" type="button" data-i18n-title="pane.clipXTitle" title="Couper selon X">X</button>
+              <button id="clip-y" class="seg" type="button" data-i18n-title="pane.clipYTitle" title="Couper selon Y">Y</button>
+              <button id="clip-z" class="seg" type="button" data-i18n-title="pane.clipZTitle" title="Couper selon Z">Z</button>
             </div>
           </div>
           <label class="field">
-            <span>Position</span>
+            <span data-i18n="pane.clipPos">Position</span>
             <input type="range" id="clip-at" min="0" max="1" step="0.005" value="0.5" />
           </label>
         </section>
@@ -384,276 +384,276 @@
 
         <div class="pane" data-pane="matter">
         <section id="materials-section" hidden>
-          <h2>Matériaux</h2>
+          <h2 data-i18n="pane.materials">Matériaux</h2>
           <div id="materials"></div>
         </section>
-        <p class="hint" id="matter-empty">Ouvre un modèle pour voir ses matières.</p>
+        <p class="hint" id="matter-empty" data-i18n="pane.matterEmpty">Ouvre un modèle pour voir ses matières.</p>
         </div>
 
         <div class="pane" data-pane="camera">
         <section>
-          <h2>Caméra</h2>
+          <h2 data-i18n="pane.camera">Caméra</h2>
           <div class="row">
-            <div class="segment" role="group" aria-label="Projection">
-              <button id="proj-persp" class="seg active" type="button" title="Perspective">Perspective</button>
-              <button id="proj-ortho" class="seg" type="button" title="Orthographique">Ortho</button>
+            <div class="segment" role="group" data-i18n-aria="pane.projection" aria-label="Projection">
+              <button id="proj-persp" class="seg active" type="button" data-i18n-title="pane.persp" data-i18n="pane.persp" title="Perspective">Perspective</button>
+              <button id="proj-ortho" class="seg" type="button" data-i18n-title="pane.ortho" data-i18n="pane.ortho" title="Orthographique">Ortho</button>
             </div>
           </div>
           <label class="field">
-            <span>Champ <span id="fov-value" class="mono">45°</span></span>
+            <span data-i18n="pane.fov">Champ <span id="fov-value" class="mono">45°</span></span>
             <input type="range" id="opt-fov" min="10" max="100" step="1" value="45" />
           </label>
-          <p class="hint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
+          <p class="hint" data-i18n="pane.camHint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
         </section>
         </div>
 
         <div class="pane" data-pane="decor">
         <section>
-          <h2>Environnement</h2>
+          <h2 data-i18n="pane.environment">Environnement</h2>
           <div class="row">
-            <div class="segment" role="group" aria-label="Environnement">
-              <button id="env-studio" class="seg active" type="button" title="Éclairage neutre généré">Studio</button>
-              <button id="env-gradient" class="seg" type="button" title="Fond en dégradé">Dégradé</button>
-              <button id="env-image" class="seg" type="button" title="Panorama 360, HDR ou image">Image</button>
+            <div class="segment" role="group" data-i18n-aria="pane.environment" aria-label="Environnement">
+              <button id="env-studio" class="seg active" type="button" data-i18n-title="pane.envStudio" data-i18n="pane.envStudio" title="Éclairage neutre généré">Studio</button>
+              <button id="env-gradient" class="seg" type="button" data-i18n-title="pane.envGradient" data-i18n="pane.envGradient" title="Fond en dégradé">Dégradé</button>
+              <button id="env-image" class="seg" type="button" data-i18n-title="pane.envImage" data-i18n="pane.envImage" title="Panorama 360, HDR ou image">Image</button>
             </div>
           </div>
-          <p id="env-file" class="hint">Aucun panorama</p>
+          <p id="env-file" class="hint" data-i18n="pane.noPanorama">Aucun panorama</p>
           <div class="row" id="env-image-tools" hidden>
-            <button id="env-replace" class="seg" type="button" title="Choisir une autre image">Remplacer</button>
-            <button id="env-clear" class="seg" type="button" title="Revenir à l'éclairage studio">Retirer</button>
+            <button id="env-replace" class="seg" type="button" data-i18n-title="pane.envReplaceTitle" data-i18n="pane.envReplace" title="Choisir une autre image">Remplacer</button>
+            <button id="env-clear" class="seg" type="button" data-i18n-title="pane.envClearTitle" data-i18n="pane.envClear" title="Revenir à l'éclairage studio">Retirer</button>
           </div>
-          <label class="check"><input type="checkbox" id="env-background" checked /><span>Fond visible</span></label>
-          <label class="check"><input type="checkbox" id="env-lighting" checked /><span>Éclaire la scène</span></label>
-          <label class="check"><input type="checkbox" id="key-light" checked /><span>Lumière d'appoint</span></label>
+          <label class="check"><input type="checkbox" id="env-background" checked /><span data-i18n="pane.envBg">Fond visible</span></label>
+          <label class="check"><input type="checkbox" id="env-lighting" checked /><span data-i18n="pane.envLight">Éclaire la scène</span></label>
+          <label class="check"><input type="checkbox" id="key-light" checked /><span data-i18n="pane.keyLight">Lumière d'appoint</span></label>
           <div id="key-light-tools">
             <label class="field">
-              <span>Force de l'appoint <span id="key-power-value" class="mono">1.6</span></span>
+              <span data-i18n="pane.keyPower">Force de l'appoint <span id="key-power-value" class="mono">1.6</span></span>
               <input type="range" id="key-power" min="0" max="5" step="0.1" value="1.6" />
             </label>
             <div class="map-row">
-              <span class="map-role">Couleur</span>
+              <span class="map-role" data-i18n="pane.lightColor">Couleur</span>
               <input type="color" id="key-colour" class="swatch" value="#ffffff" />
             </div>
           </div>
           <label class="field">
-            <span>Intensité de l'éclairage <span id="env-intensity-value" class="mono">1.0</span></span>
+            <span data-i18n="pane.envIntensity">Intensité de l'éclairage <span id="env-intensity-value" class="mono">1.0</span></span>
             <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1" />
           </label>
 
-          <h2 style="margin-top:18px">Lumières</h2>
+          <h2 style="margin-top:18px" data-i18n="pane.lights">Lumières</h2>
           <div id="lights-list"></div>
           <div class="row">
             <select id="light-kind" class="quiet">
-              <option value="directional">Directionnelle</option>
-              <option value="point">Ponctuelle</option>
-              <option value="spot">Projecteur</option>
+              <option value="directional" data-i18n="pane.lightDirectional">Directionnelle</option>
+              <option value="point" data-i18n="pane.lightPoint">Ponctuelle</option>
+              <option value="spot" data-i18n="pane.lightSpot">Projecteur</option>
             </select>
-            <button id="light-add" class="seg" type="button" title="Ajouter une lumière">Ajouter</button>
+            <button id="light-add" class="seg" type="button" data-i18n-title="pane.lightAddTitle" data-i18n="pane.lightAdd" title="Ajouter une lumière">Ajouter</button>
           </div>
           <div id="light-editor" hidden>
-            <label class="field"><span>Intensité <span id="light-power-value" class="mono">2.0</span></span>
+            <label class="field"><span data-i18n="pane.lightIntensity">Intensité <span id="light-power-value" class="mono">2.0</span></span>
               <input type="range" id="light-power" min="0" max="20" step="0.1" value="2" /></label>
-            <label class="field"><span>Azimut <span id="light-azimuth-value" class="mono">45°</span></span>
+            <label class="field"><span data-i18n="pane.lightAzimuth">Azimut <span id="light-azimuth-value" class="mono">45°</span></span>
               <input type="range" id="light-azimuth" min="-180" max="180" step="1" value="45" /></label>
-            <label class="field"><span>Hauteur <span id="light-elevation-value" class="mono">35°</span></span>
+            <label class="field"><span data-i18n="pane.lightHeight">Hauteur <span id="light-elevation-value" class="mono">35°</span></span>
               <input type="range" id="light-elevation" min="-89" max="89" step="1" value="35" /></label>
-            <label class="field"><span>Distance <span id="light-distance-value" class="mono">2.5×</span></span>
+            <label class="field"><span data-i18n="pane.lightDistance">Distance <span id="light-distance-value" class="mono">2.5×</span></span>
               <input type="range" id="light-distance" min="0.5" max="8" step="0.1" value="2.5" /></label>
             <div id="light-cone" hidden>
-              <label class="field"><span>Ouverture <span id="light-angle-value" class="mono">35°</span></span>
+              <label class="field"><span data-i18n="pane.lightAngle">Ouverture <span id="light-angle-value" class="mono">35°</span></span>
                 <input type="range" id="light-angle" min="5" max="80" step="1" value="35" /></label>
-              <label class="field"><span>Bord <span id="light-penumbra-value" class="mono">0.4</span></span>
+              <label class="field"><span data-i18n="pane.lightEdge">Bord <span id="light-penumbra-value" class="mono">0.4</span></span>
                 <input type="range" id="light-penumbra" min="0" max="1" step="0.02" value="0.4" /></label>
             </div>
             <div class="row">
               <input type="color" id="light-colour" class="swatch" value="#ffffff" />
-              <button id="light-remove" class="seg" type="button" title="Retirer cette lumière">Retirer</button>
+              <button id="light-remove" class="seg" type="button" data-i18n-title="pane.lightRemoveTitle" data-i18n="pane.lightRemove" title="Retirer cette lumière">Retirer</button>
             </div>
           </div>
 
           <div id="env-framing" hidden>
             <label class="field">
-              <span>Zoom <span id="zoom-value" class="mono">1.0×</span></span>
+              <span data-i18n="pane.envZoom">Zoom <span id="zoom-value" class="mono">1.0×</span></span>
               <input type="range" id="env-zoom" min="1" max="4" step="0.05" value="1" />
             </label>
             <label class="field">
-              <span>Rotation <span id="rot-value" class="mono">0°</span></span>
+              <span data-i18n="pane.envRotation">Rotation <span id="rot-value" class="mono">0°</span></span>
               <input type="range" id="env-rotation" min="-180" max="180" step="1" value="0" />
             </label>
             <label class="field">
-              <span>Flou</span>
+              <span data-i18n="pane.envBlur">Flou</span>
               <input type="range" id="env-blur" min="0" max="1" step="0.01" value="0" />
             </label>
           </div>
 
           <div id="gradient-editor" hidden>
-            <div id="gradient-strip" class="strip" title="Le dégradé, de haut en bas"></div>
+            <div id="gradient-strip" class="strip" data-i18n-title="pane.gradientStrip" title="Le dégradé, de haut en bas"></div>
             <div id="gradient-stops"></div>
             <div class="row">
-              <button id="gradient-add" class="seg" type="button">Ajouter une couleur</button>
+              <button id="gradient-add" class="seg" type="button" data-i18n="pane.gradientAdd">Ajouter une couleur</button>
             </div>
             <label class="field">
-              <span>Teinte <span id="hue-value" class="mono">0°</span></span>
+              <span data-i18n="pane.gradientHue">Teinte <span id="hue-value" class="mono">0°</span></span>
               <input type="range" id="grad-hue" min="-180" max="180" step="1" value="0" />
             </label>
           </div>
 
           <label class="field">
-            <span>Luminosité du fond</span>
+            <span data-i18n="pane.bgBrightness">Luminosité du fond</span>
             <input type="range" id="bg-brightness" min="0" max="3" step="0.05" value="1" />
           </label>
         </section>
 
         <section>
-          <h2>Socle</h2>
+          <h2 data-i18n="pane.stand">Socle</h2>
           <div class="row">
-            <button id="btn-pedestal" class="wide" type="button">Choisir un socle</button>
+            <button id="btn-pedestal" class="wide" type="button" data-i18n="pane.pedestal">Choisir un socle</button>
           </div>
-          <p id="pedestal-file" class="hint">Aucun socle</p>
+          <p id="pedestal-file" class="hint" data-i18n="pane.noStand">Aucun socle</p>
           <div id="pedestal-tools" hidden>
             <div class="row">
-              <div class="segment" role="group" aria-label="Rendu du socle">
-                <button id="stand-pbr" class="seg active" type="button" title="Éclairé par l'environnement">PBR</button>
-                <button id="stand-unlit" class="seg" type="button" title="Texture telle quelle">Unlit</button>
+              <div class="segment" role="group" data-i18n-aria="pane.standRender" aria-label="Rendu du socle">
+                <button id="stand-pbr" class="seg active" type="button" data-i18n-title="pane.standPbrTitle" data-i18n="pane.standPbr" title="Éclairé par l'environnement">PBR</button>
+                <button id="stand-unlit" class="seg" type="button" data-i18n-title="pane.standUnlitTitle" data-i18n="pane.standUnlit" title="Texture telle quelle">Unlit</button>
               </div>
             </div>
             <div class="row">
-              <div class="segment" role="group" aria-label="Gizmo">
-                <button id="giz-move" class="seg" type="button" title="Déplacer">Déplacer</button>
-                <button id="giz-rotate" class="seg" type="button" title="Tourner">Tourner</button>
-                <button id="giz-scale" class="seg" type="button" title="Échelle">Échelle</button>
-                <button id="giz-off" class="seg active" type="button" title="Masquer le gizmo">Aucun</button>
+              <div class="segment" role="group" data-i18n-aria="pane.gizmo" aria-label="Gizmo">
+                <button id="giz-move" class="seg" type="button" data-i18n-title="pane.gizMove" data-i18n="pane.gizMove" title="Déplacer">Déplacer</button>
+                <button id="giz-rotate" class="seg" type="button" data-i18n-title="pane.gizRotate" data-i18n="pane.gizRotate" title="Tourner">Tourner</button>
+                <button id="giz-scale" class="seg" type="button" data-i18n-title="pane.gizScale" data-i18n="pane.gizScale" title="Échelle">Échelle</button>
+                <button id="giz-off" class="seg active" type="button" data-i18n-title="pane.gizOffTitle" data-i18n="pane.gizOff" title="Masquer le gizmo">Aucun</button>
               </div>
             </div>
             <div class="row">
-              <button id="pedestal-refit" class="wide" type="button">Replacer automatiquement</button>
+              <button id="pedestal-refit" class="wide" type="button" data-i18n="pane.pedestalRefit">Replacer automatiquement</button>
             </div>
           </div>
         </section>
         </div>
 
         <div class="pane" data-pane="effects">
-        <p class="hint">Chargés à la demande : tant que rien n'est activé, la chaîne n'existe pas.</p>
+        <p class="hint" data-i18n="pane.effectsHint">Chargés à la demande : tant que rien n'est activé, la chaîne n'existe pas.</p>
 
         <section>
-          <h2>Occlusion ambiante</h2>
-          <label class="check"><input type="checkbox" id="ao-on" /><span>Activer</span></label>
-          <label class="field"><span>Rayon</span>
+          <h2 data-i18n="pane.ao">Occlusion ambiante</h2>
+          <label class="check"><input type="checkbox" id="ao-on" /><span data-i18n="pane.enable">Activer</span></label>
+          <label class="field"><span data-i18n="pane.radius">Rayon</span>
             <input type="range" id="ao-radius" min="0.05" max="1.5" step="0.01" value="0.25" /></label>
-          <label class="field"><span>Force</span>
+          <label class="field"><span data-i18n="pane.strength">Force</span>
             <input type="range" id="ao-intensity" min="0" max="2" step="0.02" value="1" /></label>
         </section>
 
         <section>
-          <h2>Bloom</h2>
-          <label class="check"><input type="checkbox" id="bloom-on" /><span>Activer</span></label>
-          <label class="field"><span>Force</span>
+          <h2 data-i18n="pane.bloom">Bloom</h2>
+          <label class="check"><input type="checkbox" id="bloom-on" /><span data-i18n="pane.enable">Activer</span></label>
+          <label class="field"><span data-i18n="pane.strength">Force</span>
             <input type="range" id="bloom-strength" min="0" max="2" step="0.01" value="0.6" /></label>
-          <label class="field"><span>Rayon</span>
+          <label class="field"><span data-i18n="pane.radius">Rayon</span>
             <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="field"><span>Seuil</span>
+          <label class="field"><span data-i18n="pane.threshold">Seuil</span>
             <input type="range" id="bloom-threshold" min="0" max="2" step="0.01" value="1.1" /></label>
         </section>
 
         <section>
-          <h2>Profondeur de champ</h2>
-          <label class="check"><input type="checkbox" id="dof-on" /><span>Activer</span></label>
-          <label class="field"><span>Mise au point</span>
+          <h2 data-i18n="pane.dof">Profondeur de champ</h2>
+          <label class="check"><input type="checkbox" id="dof-on" /><span data-i18n="pane.enable">Activer</span></label>
+          <label class="field"><span data-i18n="pane.focus">Mise au point</span>
             <input type="range" id="dof-focus" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="field"><span>Ouverture</span>
+          <label class="field"><span data-i18n="pane.aperture">Ouverture</span>
             <input type="range" id="dof-aperture" min="0" max="0.06" step="0.001" value="0.02" /></label>
-          <label class="field"><span>Flou maximal</span>
+          <label class="field"><span data-i18n="pane.maxblur">Flou maximal</span>
             <input type="range" id="dof-maxblur" min="0" max="0.05" step="0.001" value="0.012" /></label>
         </section>
 
         <section>
-          <h2>Étalonnage</h2>
-          <label class="check"><input type="checkbox" id="grade-on" /><span>Activer</span></label>
-          <label class="field"><span>Contraste</span>
+          <h2 data-i18n="pane.grade">Étalonnage</h2>
+          <label class="check"><input type="checkbox" id="grade-on" /><span data-i18n="pane.enable">Activer</span></label>
+          <label class="field"><span data-i18n="pane.contrast">Contraste</span>
             <input type="range" id="grade-contrast" min="0.5" max="2" step="0.01" value="1" /></label>
-          <label class="field"><span>Saturation</span>
+          <label class="field"><span data-i18n="pane.saturation">Saturation</span>
             <input type="range" id="grade-saturation" min="0" max="2" step="0.01" value="1" /></label>
-          <label class="field"><span>Température</span>
+          <label class="field"><span data-i18n="pane.temperature">Température</span>
             <input type="range" id="grade-temperature" min="-1" max="1" step="0.01" value="0" /></label>
-          <label class="field"><span>Vignettage</span>
+          <label class="field"><span data-i18n="pane.vignette">Vignettage</span>
             <input type="range" id="grade-vignette" min="0" max="1" step="0.01" value="0.25" /></label>
-          <label class="field"><span>Grain</span>
+          <label class="field"><span data-i18n="pane.grain">Grain</span>
             <input type="range" id="grade-grain" min="0" max="0.3" step="0.005" value="0.04" /></label>
-          <label class="field"><span>Aberration chromatique</span>
+          <label class="field"><span data-i18n="pane.aberration">Aberration chromatique</span>
             <input type="range" id="grade-aberration" min="0" max="2" step="0.01" value="0" /></label>
-          <label class="field"><span>Netteté</span>
+          <label class="field"><span data-i18n="pane.sharpen">Netteté</span>
             <input type="range" id="grade-sharpen" min="0" max="1" step="0.01" value="0.2" /></label>
         </section>
 
         <section>
-          <h2>Anticrénelage</h2>
-          <label class="check"><input type="checkbox" id="aa-on" checked /><span>SMAA sur l'image finale</span></label>
+          <h2 data-i18n="pane.aa">Anticrénelage</h2>
+          <label class="check"><input type="checkbox" id="aa-on" checked /><span data-i18n="pane.smaa">SMAA sur l'image finale</span></label>
         </section>
         </div>
 
         <div class="pane" data-pane="photo">
         <section>
-          <h2>Photo</h2>
+          <h2 data-i18n="pane.photo">Photo</h2>
           <div class="shot-preview"><img id="shot-preview" alt="" /></div>
-          <p id="shot-note" class="hint">Le cadrage est celui de la vue.</p>
+          <p id="shot-note" class="hint" data-i18n="pane.shotNote">Le cadrage est celui de la vue.</p>
           <div class="row">
-            <div class="segment" role="group" aria-label="Format">
-              <button id="shot-view" class="seg active" type="button" title="Le rapport de la fenêtre">Vue</button>
-              <button id="shot-11" class="seg" type="button" title="Carré">1:1</button>
-              <button id="shot-169" class="seg" type="button" title="Panoramique">16:9</button>
-              <button id="shot-43" class="seg" type="button" title="Classique">4:3</button>
+            <div class="segment" role="group" data-i18n-aria="pane.format" aria-label="Format">
+              <button id="shot-view" class="seg active" type="button" data-i18n-title="pane.shotViewTitle" data-i18n="pane.shotView" title="Le rapport de la fenêtre">Vue</button>
+              <button id="shot-11" class="seg" type="button" data-i18n-title="pane.shot11Title" title="Carré">1:1</button>
+              <button id="shot-169" class="seg" type="button" data-i18n-title="pane.shot169Title" title="Panoramique">16:9</button>
+              <button id="shot-43" class="seg" type="button" data-i18n-title="pane.shot43Title" title="Classique">4:3</button>
             </div>
           </div>
           <div class="row">
-            <label class="field" style="flex:1"><span>Largeur</span>
+            <label class="field" style="flex:1"><span data-i18n="pane.shotWidth">Largeur</span>
               <input type="number" id="shot-width" min="64" max="8192" step="16" value="1920" /></label>
-            <label class="field" style="flex:1"><span>Hauteur</span>
+            <label class="field" style="flex:1"><span data-i18n="pane.shotHeight">Hauteur</span>
               <input type="number" id="shot-height" min="64" max="8192" step="16" value="1080" /></label>
           </div>
           <div class="row">
-            <div class="segment" role="group" aria-label="Multiplicateur">
-              <button id="shot-x1" class="seg" type="button" title="Taille de la vue">×1</button>
-              <button id="shot-x2" class="seg" type="button" title="Le double">×2</button>
-              <button id="shot-x4" class="seg" type="button" title="Le quadruple">×4</button>
+            <div class="segment" role="group" data-i18n-aria="pane.multiplier" aria-label="Multiplicateur">
+              <button id="shot-x1" class="seg" type="button" data-i18n-title="pane.shotX1Title" title="Taille de la vue">×1</button>
+              <button id="shot-x2" class="seg" type="button" data-i18n-title="pane.shotX2Title" title="Le double">×2</button>
+              <button id="shot-x4" class="seg" type="button" data-i18n-title="pane.shotX4Title" title="Le quadruple">×4</button>
             </div>
           </div>
-          <label class="check"><input type="checkbox" id="shot-alpha" /><span>Fond détouré</span></label>
-          <label class="check"><input type="checkbox" id="shot-grid" /><span>Garder la grille</span></label>
-          <label class="check"><input type="checkbox" id="shot-stand" checked /><span>Garder le socle</span></label>
+          <label class="check"><input type="checkbox" id="shot-alpha" /><span data-i18n="pane.shotAlpha">Fond détouré</span></label>
+          <label class="check"><input type="checkbox" id="shot-grid" /><span data-i18n="pane.shotGrid">Garder la grille</span></label>
+          <label class="check"><input type="checkbox" id="shot-stand" checked /><span data-i18n="pane.shotStand">Garder le socle</span></label>
           <div class="row">
-            <button id="shot-save" class="wide" type="button">Enregistrer la photo</button>
+            <button id="shot-save" class="wide" type="button" data-i18n="pane.shotSave">Enregistrer la photo</button>
           </div>
         </section>
         </div>
 
         <div class="pane" data-pane="object">
         <section>
-          <h2>Édition</h2>
-          <div class="segment" role="group" aria-label="Outil de transformation">
-            <button id="edit-off" class="seg active" type="button" title="Quitter le mode édition (Échap)">Aucun</button>
-            <button id="edit-translate" class="seg" type="button" title="Déplacer (G)">Déplacer</button>
-            <button id="edit-rotate" class="seg" type="button" title="Tourner (R)">Tourner</button>
-            <button id="edit-scale" class="seg" type="button" title="Redimensionner (S)">Échelle</button>
+          <h2 data-i18n="pane.edit">Édition</h2>
+          <div class="segment" role="group" data-i18n-aria="pane.editTool" aria-label="Outil de transformation">
+            <button id="edit-off" class="seg active" type="button" data-i18n-title="pane.editOffTitle" data-i18n="pane.editOff" title="Quitter le mode édition (Échap)">Aucun</button>
+            <button id="edit-translate" class="seg" type="button" data-i18n-title="pane.editMoveTitle" data-i18n="pane.editMove" title="Déplacer (G)">Déplacer</button>
+            <button id="edit-rotate" class="seg" type="button" data-i18n-title="pane.editRotateTitle" data-i18n="pane.editRotate" title="Tourner (R)">Tourner</button>
+            <button id="edit-scale" class="seg" type="button" data-i18n-title="pane.editScaleTitle" data-i18n="pane.editScale" title="Redimensionner (S)">Échelle</button>
           </div>
-          <p class="hint">G déplacer, R tourner, S échelle, Échap sortir. Maj pendant le
+          <p class="hint" data-i18n="pane.editHint">G déplacer, R tourner, S échelle, Échap sortir. Maj pendant le
             glisser règle par crans. Clique une surface pour n'agir que sur elle.</p>
-          <p class="hint" id="edit-target">Cible : le modèle entier</p>
+          <p class="hint" id="edit-target" data-i18n="pane.editTarget">Cible : le modèle entier</p>
           <div class="xform">
-            <label><span>Position</span>
+            <label><span data-i18n="pane.pos">Position</span>
               <input type="number" id="tx" step="0.01" /><input type="number" id="ty" step="0.01" /><input type="number" id="tz" step="0.01" />
             </label>
-            <label><span>Rotation °</span>
+            <label><span data-i18n="pane.rot">Rotation °</span>
               <input type="number" id="rx" step="1" /><input type="number" id="ry" step="1" /><input type="number" id="rz" step="1" />
             </label>
-            <label><span>Échelle</span>
+            <label><span data-i18n="pane.scale">Échelle</span>
               <input type="number" id="sx" step="0.01" /><input type="number" id="sy" step="0.01" /><input type="number" id="sz" step="0.01" />
             </label>
           </div>
           <div id="parts-list"></div>
           <div class="row">
-            <button id="part-import" class="seg" type="button" title="Ajouter un autre fichier 3D à la scène">Importer un objet</button>
-            <button id="undo" class="seg" type="button" title="Annuler (Ctrl+Z)" disabled>←</button>
-            <button id="redo" class="seg" type="button" title="Rétablir (Ctrl+Maj+Z)" disabled>→</button>
+            <button id="part-import" class="seg" type="button" data-i18n-title="pane.importTitle" data-i18n="pane.importPart" title="Ajouter un autre fichier 3D à la scène">Importer un objet</button>
+            <button id="undo" class="seg" type="button" data-i18n-title="pane.undoTitle" title="Annuler (Ctrl+Z)" disabled>←</button>
+            <button id="redo" class="seg" type="button" data-i18n-title="pane.redoTitle" title="Rétablir (Ctrl+Maj+Z)" disabled>→</button>
           </div>
         </section>
 
@@ -696,21 +696,21 @@
           <div class="row">
             <button id="btn-spacemouse" class="wide" type="button" data-i18n="pan.spacemouse">Connecter une SpaceMouse</button>
           </div>
-          <p id="dev-pad" class="hint">Manette : aucune détectée</p>
+          <p id="dev-pad" class="hint" data-i18n="pane.padNone">Manette : aucune détectée</p>
           <details id="dev-tuning">
-            <summary>Réglages</summary>
-            <label class="field"><span>Sensibilité manette</span>
+            <summary data-i18n="pane.settings">Réglages</summary>
+            <label class="field"><span data-i18n="pane.padSens">Sensibilité manette</span>
               <input type="range" id="pad-sens" min="0.2" max="3" step="0.05" value="1" /></label>
-            <label class="field"><span>Zone morte manette</span>
+            <label class="field"><span data-i18n="pane.padDead">Zone morte manette</span>
               <input type="range" id="pad-dead" min="0" max="0.4" step="0.01" value="0.14" /></label>
-            <label class="check"><input type="checkbox" id="pad-inverty" /><span>Inverser l'axe Y</span></label>
-            <label class="field"><span>Translation SpaceMouse</span>
+            <label class="check"><input type="checkbox" id="pad-inverty" /><span data-i18n="pane.padInvert">Inverser l'axe Y</span></label>
+            <label class="field"><span data-i18n="pane.smTranslation">Translation SpaceMouse</span>
               <input type="range" id="sm-trans" min="0.1" max="4" step="0.05" value="1" /></label>
-            <label class="field"><span>Rotation SpaceMouse</span>
+            <label class="field"><span data-i18n="pane.smRotation">Rotation SpaceMouse</span>
               <input type="range" id="sm-rot" min="0.1" max="4" step="0.05" value="1" /></label>
-            <p class="hint">Chaque axe : écouté ou non, sa vitesse, et son sens</p>
+            <p class="hint" data-i18n="pane.smHint">Chaque axe : écouté ou non, sa vitesse, et son sens</p>
             <div id="sm-invert"></div>
-            <label class="check"><input type="checkbox" id="sm-lockroll" /><span>Bloquer le roulis</span></label>
+            <label class="check"><input type="checkbox" id="sm-lockroll" /><span data-i18n="pane.smLockRoll">Bloquer le roulis</span></label>
           </details>
         </section>
 
