@@ -725,3 +725,65 @@ body.retopo-open #inspector { display: none; }
 }
 .rt-mini:hover:not(:disabled) { background: rgb(255 255 255 / 0.06); }
 .rt-mini:disabled { opacity: 0.35; cursor: default; }
+
+/* --- the tree, folded ------------------------------------------------------
+ *
+ * Carets and guide lines, because indent alone stops carrying depth after two
+ * levels in a narrow column: at three levels the eye loses which material a map
+ * belongs to, which is the one relationship the tree exists to show.
+ */
+.rt-caret {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dim, #8b929c);
+  font-size: 9px;
+  line-height: 1;
+  width: 14px;
+  padding: 0;
+  flex: none;
+  cursor: pointer;
+  text-align: left;
+}
+.rt-caret.empty { cursor: default; }
+.rt-caret:hover:not(.empty) { color: var(--fg, #e6e9ef); }
+
+/*
+ * The guide line runs down the left of every nested row, drawn on the row rather
+ * than as a separate element so it cannot drift out of step with what it guides.
+ */
+.rt-mat, .rt-map { position: relative; }
+.rt-mat::before, .rt-map::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line, #2a2e35);
+}
+.rt-map::before { left: -7px; }
+.rt-mat::after, .rt-map::after {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  width: 6px;
+  height: 1px;
+  background: var(--line, #2a2e35);
+}
+
+/* Replace a texture, on the row of the texture it replaces. */
+.rt-swap {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dim, #8b929c);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+}
+.rt-swap:hover { color: var(--accent, #7cc4ff); background: rgb(255 255 255 / 0.08); }

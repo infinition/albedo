@@ -265,6 +265,14 @@ const SHELL = `
       laisse tranquille.</p>
     <div class="rt-tree" data-el="tree"></div>
 
+    <div data-el="props" hidden>
+      <p class="rt-sub">Matière · <span data-el="propName"></span></p>
+      <div data-el="propRows"></div>
+      <p class="rt-hint">Descendre la normale à zéro est la façon de savoir si la
+        forme qu'on juge est de la géométrie ou une image de géométrie. C'est la
+        question qui décide d'un budget de triangles.</p>
+    </div>
+
   </section>
 
   <section class="rt-page" data-tab="result">
@@ -467,8 +475,42 @@ export function createRetopo({
    */
   const picked = new Set();
 
+  /**
+   * Which branches are open.
+   *
+   * Meshes start open and materials start closed, because the first question is
+   * always "what parts are there" and the maps only matter once you have chosen
+   * one. Kept as ids, and kept across repaints: a tree that snaps shut every time
+   * you toggle an eye is a tree you stop using.
+   */
+  const opened = new Set();
+  let treeSeen = false;
+
+  /** A caret that opens a branch, or a spacer that keeps the column straight. */
+  function caret(id, has) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rt-caret" + (has ? "" : " empty");
+    b.textContent = has ? (opened.has(id) ? "▾" : "▸") : "";
+    if (has) {
+      b.title = opened.has(id) ? "Replier" : "Déplier";
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        opened.has(id) ? opened.delete(id) : opened.add(id);
+        paintTree();
+      });
+    }
+    return b;
+  }
+
   function paintTree() {
     const meshes = readScene(viewer, channels);
+    // First paint of a model opens every mesh, so the shape of the file is
+    // visible without a single click.
+    if (!treeSeen && meshes.length) {
+      for (const m of meshes) opened.add(m.id);
+      treeSeen = true;
+    }
     el.tree.textContent = "";
 
     for (const mesh of meshes) {
@@ -477,10 +519,11 @@ export function createRetopo({
 
       const row = document.createElement("div");
       row.className = "rt-row rt-mesh" + (picked.has(mesh.id) ? " picked" : "");
-      row.innerHTML =
+      row.appendChild(caret(mesh.id, mesh.materials.length > 0));
+      row.insertAdjacentHTML("beforeend",
         `<span class="rt-glyph">▦</span>` +
         `<span class="rt-name">${mesh.name}</span>` +
-        `<span class="rt-num">${fr(mesh.triangles)}</span>`;
+        `<span class="rt-num">${fr(mesh.triangles)}</span>`);
       row.title = `${mesh.name} — ${fr(mesh.triangles)} triangles`;
       row.addEventListener("click", (e) => choose(mesh.id, e.ctrlKey || e.metaKey));
 
@@ -499,19 +542,25 @@ export function createRetopo({
       row.appendChild(eye);
       group.appendChild(row);
 
+      if (!opened.has(mesh.id)) {
+        el.tree.appendChild(group);
+        continue;
+      }
+
       for (const mat of mesh.materials) {
         const mrow = document.createElement("div");
         mrow.className =
           "rt-row rt-mat" + (picked.has(mat.id) ? " picked" : "") + (mat.hidden ? " muted" : "");
         const url = thumbnail(mat.material.map);
-        mrow.innerHTML =
+        mrow.appendChild(caret(mat.id, mat.maps.length > 0));
+        mrow.insertAdjacentHTML("beforeend",
           `<span class="mat-chip"${
             url
               ? ` style="background-image:url(${url})"`
               : ` style="background:${mat.material.color ? "#" + mat.material.color.getHexString() : "#3a3f48"}"`
           }></span>` +
           `<span class="rt-name">${mat.name}</span>` +
-          `<span class="rt-num">${fr(mat.triangles)}</span>`;
+          `<span class="rt-num">${fr(mat.triangles)}</span>`);
         mrow.title = `${mat.name} — ${fr(mat.triangles)} triangles`;
         mrow.addEventListener("click", (e) => choose(mat.id, e.ctrlKey || e.metaKey));
 
@@ -529,6 +578,8 @@ export function createRetopo({
         });
         mrow.appendChild(meye);
         group.appendChild(mrow);
+
+        if (!opened.has(mat.id)) continue;
 
         for (const map of mat.maps) {
           const krow = document.createElement("div");
@@ -575,6 +626,60 @@ export function createRetopo({
       el.tree.appendChild(group);
     }
     paintSelection();
+    paintProperties(meshes);
+  }
+
+  /**
+   * The selected material, and the four numbers that actually change how it
+   * looks.
+   *
+   * Not a full material editor: the point here is the one thing a retopology
+   * needs, which is being able to turn a normal map's strength down to nothing
+   * and see whether the shape you are judging is geometry or a picture of
+   * geometry. Metalness and roughness come along because they are the two that
+   * make a surface unreadable when they are wrong, and a surface you cannot read
+   * is one you cannot judge.
+   */
+  function paintProperties(meshes) {
+    const mat = meshes
+      .flatMap((m) => m.materials)
+      .find((m) => picked.has(m.id))?.material;
+    el.props.hidden = !mat;
+    if (!mat) return;
+
+    el.propName.textContent = mat.name || "(sans nom)";
+    const rows = [
+      ["Métal", "metalness", 0, 1, 0.01],
+      ["Rugosité", "roughness", 0, 1, 0.01],
+      ["Normale", "normalScale", 0, 2, 0.05],
+      ["Émissif", "emissiveIntensity", 0, 4, 0.05],
+    ].filter(([, key]) => key in mat && mat[key] !== undefined && mat[key] !== null);
+
+    el.propRows.textContent = "";
+    for (const [label, key, min, max, step] of rows) {
+      const field = document.createElement("label");
+      field.className = "rt-field";
+      const head = document.createElement("span");
+      // normalScale is a Vector2 and the others are numbers, so the value is
+      // read and written through the one axis that matters rather than assuming.
+      const get = () => (key === "normalScale" ? mat[key].x : mat[key]);
+      head.innerHTML = `<span>${label}</span><span class="rt-num">${get().toFixed(2)}</span>`;
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = min;
+      input.max = max;
+      input.step = step;
+      input.value = get();
+      input.addEventListener("input", () => {
+        const v = Number(input.value);
+        if (key === "normalScale") mat[key].set(v, v);
+        else mat[key] = v;
+        head.lastChild.textContent = v.toFixed(2);
+        viewer.invalidate?.();
+      });
+      field.append(head, input);
+      el.propRows.appendChild(field);
+    }
   }
 
   function choose(id, add) {
