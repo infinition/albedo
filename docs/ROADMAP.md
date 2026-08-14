@@ -113,7 +113,7 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | USD animation and skinning | [ ] the rig decodes, the pose does not compose |
 | NIF skinning applied at load | [ ] not started |
 | The whole interface batch, in the compiled application | [ ] `npx tauri build --no-bundle` green, `albedo.exe` built and started; the walk of the four groups, both modes, the library split and full screen is in progress |
-| Shell initialisation behind a top level `await` | [ ] `src/main.js` awaits two shell round trips at module scope. Nothing below them attaches until both resolve, so a rejection or a hang would leave the window inert. Not the cause of the outage below, but the same shape |
+| Shell initialisation behind a top level `await` | [ ] `src/main.js` awaited two shell round trips at module scope. Both now live behind a deferred `shellReady`: every listener attaches at once, and `prefs`, the drag-and-drop, the thumbnail job and the startup file each wait on that promise alone. `wireHud` reads the shell handle through a getter at click time. Builds green, nothing measured in the compiled app yet |
 
 ### Faults Found and Fixed This Round
 
@@ -185,9 +185,10 @@ invisible is the reusable part.
       since the toolbar merge was verified against the dev server. `npx tauri
       build --no-bundle` is green and `albedo.exe` starts; the walk of the four
       groups, both modes, the library split and full screen is the last step.
-- [ ] **Take the shell initialisation off the critical path.** Wrap the
-      `if (tauri)` block of `src/main.js` in a floating async call, or move it
-      below the listener registrations, so a failed or slow shell call can no
-      longer leave a complete looking window with nothing wired to it.
+- [ ] **Confirm the deferred startup in the compiled application.** The shell
+      calls of `src/main.js` no longer gate the module: `shellReady` carries the
+      two round trips, and `prefs`, the post chain and the light rig restore off
+      that same promise. The walk of `albedo.exe` is the confirmation that
+      settings still land and the window is never inert.
 - [ ] **USD Skinning & Animation**: Complete composition of bind-space meshes into pose space once matching reference assets are verified.
 - [ ] **NIF Skinning at Load**: Apply NIF skinning upon initial file load rather than defaulting to bind pose.

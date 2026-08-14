@@ -739,41 +739,57 @@ $("view").addEventListener(
 let timelinePaint = () => {};
 
 let tauri = null;
-// The packages import fine in a plain browser; what tells the shell apart is
-// the injected runtime, not the module resolution.
-if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
-  const core = await import("@tauri-apps/api/core");
-  const dialog = await import("@tauri-apps/plugin-dialog");
-  const event = await import("@tauri-apps/api/event");
-  tauri = { core, dialog, event };
+/** Saved settings, null until the deferred load below assigns it. */
+let prefs = null;
 
-  // Free look without the webview's capture, and so without its banner: the
-  // shell holds the cursor at the window level and puts it back in the middle
-  // before it can reach an edge.
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const { PhysicalPosition } = await import("@tauri-apps/api/dpi");
-  const win = getCurrentWindow();
-  nav.pointer = {
-    grab: (on) => win.setCursorGrab(on).catch(() => {}),
-    show: (on) => win.setCursorVisible(on).catch(() => {}),
-    async recenter() {
-      try {
-        const pos = await win.outerPosition();
-        const size = await win.innerSize();
-        await win.setCursorPosition(
-          new PhysicalPosition(
-            pos.x + Math.round(size.width / 2),
-            pos.y + Math.round(size.height / 2)
-          )
-        );
-      } catch (_) {
-        /* a window that moved out from under us is not worth a message */
-      }
-    },
-  };
-}
+/**
+ * The startup work that used to gate this module.
+ *
+ * `createPrefs` and the shell block further down each round trip the backend
+ * once at module scope. Everything between here and there registered its
+ * listeners only after both resolved, so a backend that was slow or dead left
+ * a complete looking window with nothing wired to it. Both now finish in the
+ * background: every listener attaches at once, and the few pieces that need a
+ * result chain on this promise instead of on the whole module.
+ */
+const shellReady = (async () => {
+  // The packages import fine in a plain browser; what tells the shell apart is
+  // the injected runtime, not the module resolution.
+  if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+    const core = await import("@tauri-apps/api/core");
+    const dialog = await import("@tauri-apps/plugin-dialog");
+    const event = await import("@tauri-apps/api/event");
+    tauri = { core, dialog, event };
 
-const prefs = await createPrefs(tauri);
+    // Free look without the webview's capture, and so without its banner: the
+    // shell holds the cursor at the window level and puts it back in the middle
+    // before it can reach an edge.
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const { PhysicalPosition } = await import("@tauri-apps/api/dpi");
+    const win = getCurrentWindow();
+    nav.pointer = {
+      grab: (on) => win.setCursorGrab(on).catch(() => {}),
+      show: (on) => win.setCursorVisible(on).catch(() => {}),
+      async recenter() {
+        try {
+          const pos = await win.outerPosition();
+          const size = await win.innerSize();
+          await win.setCursorPosition(
+            new PhysicalPosition(
+              pos.x + Math.round(size.width / 2),
+              pos.y + Math.round(size.height / 2)
+            )
+          );
+        } catch (_) {
+          /* a window that moved out from under us is not worth a message */
+        }
+      },
+    };
+  }
+
+  prefs = await createPrefs(tauri);
+})().catch((e) => console.error("[albedo] démarrage différé:", e));
+
 /** True when this process exists only to draw one thumbnail and stop. */
 let headless = false;
 
@@ -2694,52 +2710,53 @@ window.addEventListener("drop", (e) => {
   if (f) open(URL.createObjectURL(f) + "#." + f.name.split(".").pop(), f.name);
 });
 
-if (tauri) {
-  const win = await import("@tauri-apps/api/webviewWindow");
-  const current = win.getCurrentWebviewWindow();
-  current.onDragDropEvent((e) => {
-    if (e.payload.type === "over") app.classList.add("dragover");
-    else if (e.payload.type === "drop") {
-      app.classList.remove("dragover");
-      const p = e.payload.paths && e.payload.paths[0];
-      if (p) openPath(p);
-    } else app.classList.remove("dragover");
-  });
-
-  // A headless render short circuits everything else: this process exists to
-  // produce one image for the shell and then stop.
-  const job = await tauri.core.invoke("thumbnail_job").catch(() => null);
-  if (job) {
-    headless = true;
-    renderThumbnail(job);
-  } else {
-    // A file passed on the command line ("Open with…")
-    const startup = await tauri.core.invoke("startup_file").catch(() => null);
-    if (startup) openPath(startup);
-    tauri.event.listen("open-file", (e) => e.payload && openPath(e.payload));
-    // Something was written on the user's behalf, so they are told which, and
-    // where to undo it. Once, on the first launch of a machine that had none.
-    tauri.event.listen("shell-enabled", () => {
-      refreshShellState();
-      toast("Vignettes 3D activées dans l'explorateur · Objet pour les retirer", 4000);
+void shellReady.then(async () => {
+  if (tauri) {
+    const win = await import("@tauri-apps/api/webviewWindow");
+    const current = win.getCurrentWebviewWindow();
+    current.onDragDropEvent((e) => {
+      if (e.payload.type === "over") app.classList.add("dragover");
+      else if (e.payload.type === "drop") {
+        app.classList.remove("dragover");
+        const p = e.payload.paths && e.payload.paths[0];
+        if (p) openPath(p);
+      } else app.classList.remove("dragover");
     });
-  }
-}
 
-// A thumbnail is a file's identity card, not a picture of one session.
-//
-// The headless process ran the same startup as the window, so it inherited
-// whatever exposure, environment and lighting the user happened to be using:
-// pictures came out at one and a half stops over, lit by whichever panorama was
-// loaded that day. Worse, the cache key says nothing about any of it, so a
-// picture taken under one look was served for ever, and the shell and the
-// library, asking at different moments for different sizes, ended up holding
-// two different pictures of one file.
-if (headless) neutralLook();
-else {
-  restoreDevices();
-  applyPrefs();
-}
+    // A headless render short circuits everything else: this process exists to
+    // produce one image for the shell and then stop.
+    const job = await tauri.core.invoke("thumbnail_job").catch(() => null);
+    if (job) {
+      headless = true;
+      renderThumbnail(job);
+    } else {
+      // A file passed on the command line ("Open with…")
+      const startup = await tauri.core.invoke("startup_file").catch(() => null);
+      if (startup) openPath(startup);
+      tauri.event.listen("open-file", (e) => e.payload && openPath(e.payload));
+      // Something was written on the user's behalf, so they are told which, and
+      // where to undo it. Once, on the first launch of a machine that had none.
+      tauri.event.listen("shell-enabled", () => {
+        refreshShellState();
+        toast("Vignettes 3D activées dans l'explorateur · Objet pour les retirer", 4000);
+      });
+    }
+  }
+
+  // A thumbnail is a file's identity card, not a picture of one session. The
+  // headless process ran the same startup as the window, so it inherited
+  // whatever exposure, environment and lighting the user happened to be using:
+  // pictures came out at one and a half stops over, lit by whichever panorama
+  // was loaded that day. Worse, the cache key says nothing about any of it, so
+  // a picture taken under one look was served for ever, and the shell and the
+  // library, asking at different moments for different sizes, ended up holding
+  // two different pictures of one file.
+  if (headless) neutralLook();
+  else {
+    restoreDevices();
+    applyPrefs();
+  }
+});
 
 // Dev hook: drive the app from the console while building the UI.
 //
@@ -2749,7 +2766,7 @@ else {
 // never does.
 if (import.meta.env && import.meta.env.DEV) {
   window.__albedo = {
-    viewer, channels, nav, open, applyChannel, prefs,
+    viewer, channels, nav, open, applyChannel, get prefs() { return prefs; },
     selection, showPane, toggleRetopo, openPath, markDirty, clearDirty,
     importPart, newDocument, closeDocument, switchTo, documents,
     get dirty() {
@@ -2769,7 +2786,10 @@ if (import.meta.env && import.meta.env.DEV) {
 const hud = wireHud({
   viewer,
   nav,
-  tauri,
+  // A getter, not the value: `tauri` is null until the deferred startup above
+  // finishes, and this wires at module scope, before that. The fullscreen
+  // toggle reads it at click time and needs the shell handle then.
+  tauri: () => tauri,
   onSettings: () => prefs.set("devices", deviceSnapshot()),
   onNotice: (msg) => {
     $("stats").title = msg || "";
@@ -2971,7 +2991,7 @@ for (const [group, key, id] of POST_CONTROLS) {
 
 // Restore what was left on, and only then: a saved set that is entirely off
 // must not drag the chain in at launch.
-{
+void shellReady.then(() => {
   const saved = prefs.get("post");
   const wanted = saved && Object.values(saved).some((g) => g && g.on);
   for (const [group, key, id] of POST_CONTROLS) {
@@ -2987,7 +3007,7 @@ for (const [group, key, id] of POST_CONTROLS) {
       viewer.invalidate();
     });
   }
-}
+});
 
 
 // --- custom lights --------------------------------------------------------
@@ -3094,13 +3114,13 @@ $("light-colour").addEventListener("input", (e) => {
   saveLights();
 });
 
-{
+void shellReady.then(() => {
   const saved = prefs.get("lights");
   if (saved?.length) {
     viewer.applyLights(saved);
     paintLights();
   }
-}
+});
 
 
 

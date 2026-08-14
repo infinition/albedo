@@ -13,6 +13,10 @@ const PLAY = "M8 5l11 7-11 7z";
 const PAUSE = "M8 5h3v14H8zM13 5h3v14h-3z";
 
 export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
+  // `tauri` is a getter into the module that owns the handle: it is still null
+  // while the shell startup is in flight, so it is read at click time, when it
+  // holds whatever the startup settled on.
+  const shell = () => tauri();
   // --- navigation mode ---
   // Fly mode can end on its own, when the pointer capture is released, so the
   // buttons follow the navigation rather than the other way round.
@@ -41,7 +45,7 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
 
   // --- fullscreen ---
   const toggleFullscreen = async () => {
-    if (tauri) {
+    if (shell()) {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const w = getCurrentWindow();
       const next = !(await w.isFullscreen());
