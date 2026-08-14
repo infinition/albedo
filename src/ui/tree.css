@@ -153,7 +153,7 @@
 
 /*
  * A mesh's own portrait, in place of a glyph that only ever said "this row is a
- * mesh" — a thing the indent already said.
+ * mesh", a thing the indent already said.
  *
  * Transparent background on purpose: the render has no ground and no backdrop,
  * so the part floats on the row and reads as a silhouette rather than as a

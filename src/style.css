@@ -175,6 +175,17 @@ body.clean #inspector { opacity: 0; pointer-events: none; }
   white-space: nowrap;
 }
 
+/*
+ * A tab you are only looking through.
+ *
+ * Italic, the way an editor says the same thing, because it has to read as
+ * "this one is on loan" without taking any room: the strip is already the
+ * tightest thing on screen. There is at most one, and the next model looked at
+ * takes its place, which is what makes clicking through a folder of two hundred
+ * assets cost one tab instead of two hundred.
+ */
+.tabs-tab.preview .tabs-name { font-style: italic; }
+
 /* Modified, said with a dot rather than a word: it has to read at a glance in a
    strip where the name is already fighting for room. */
 .tabs-dot {

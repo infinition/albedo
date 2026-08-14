@@ -69,20 +69,21 @@
 body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
 
 /*
- * With the library open, Retopo takes half the window rather than the preview
- * strip.
+ * With the library open, Retopo asks for half the window rather than the preview
+ * strip, and it *asks* rather than takes.
  *
- * 460 pixels is the right size for *previewing* a model you are about to pick.
- * It is the wrong size for judging a retopology, which is the one thing this
- * mode exists to let you do: at that width the panel alone is most of the
- * viewport and the model is a thumbnail. Opening the mode is a statement that
- * the model is what you came to look at, so the split follows.
+ * 460 pixels is the right size for previewing a model you are about to pick and
+ * the wrong size for judging a retopology: at that width the panel alone is most
+ * of the viewport and the model is a thumbnail. So opening the mode widens the
+ * split.
  *
- * The rule lives here rather than in the library's stylesheet because it is
- * Retopo's requirement, and the library should not have to know which modes are
- * demanding.
+ * It used to do that with a rule here, and that was wrong in a way only using it
+ * shows: `--peek` is set inline on the root element by the drag handle, and a
+ * rule on `body` beats an inherited inline value for everything inside body. So
+ * the split froze at half and the handle did nothing. The widening is a one time
+ * nudge from the module now, through the same property the handle writes, which
+ * leaves the handle in charge afterwards.
  */
-body.peeking.retopo-open { --peek: 50%; }
 
 /*
  * The panel stops where the action bar starts.

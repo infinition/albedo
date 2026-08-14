@@ -26,13 +26,70 @@ Albedo shares one camera between two distinct navigation modes:
 | `Tab` | Open/close Inspector drawer |
 | `H` | Hide/show all UI overlays |
 | `U` | Toggle PBR / Unlit render mode |
-| `W` | Toggle wireframe rendering |
+| `W` | Toggle the wireframe overlay |
+| `Ctrl + T` / `Ctrl + W` | New tab / close tab |
 | `Shift + R` | Level camera horizon |
 | `1` to `5` | Switch inspection channels |
 | `F11` | Toggle fullscreen mode |
 | `Mouse wheel` | Zoom in Orbit mode / travel speed in Fly mode |
 | `Shift + drag` | Swing key light position |
 | `Ctrl + drag` | Adjust camera field of view (lens) |
+
+---
+
+## Tabs
+
+One tab per open model, in the top left where the file name used to sit alone.
+Opening a model no longer replaces the one you were working on: it takes a tab
+of its own, and opening a file that is already open brings its tab forward
+rather than loading a second copy.
+
+| Control | What it does |
+| --- | --- |
+| Click a tab | Switch to it. Instant: nothing is loaded, the scene is put back |
+| `+` or `Ctrl+T` | A new empty tab, to compose a scene out of several files |
+| The cross, middle click, or `Ctrl+W` | Close. A modified tab asks first |
+| A dot instead of the cross | This tab has changes an export would keep |
+| An italic name | A preview: the next model looked at takes its place |
+| Double click a preview | Keep it. The gesture for "this one, actually" |
+
+**One tab is a preview**, and it is what makes browsing possible at all. Selecting
+models in the library reuses that single tab rather than opening one per
+curiosity, so clicking through two hundred assets costs one tab and you can still
+orbit and zoom each of them properly, in the real viewer.
+
+It stops being a preview the moment looking becomes working: any change that
+would survive an export, opening the retopology mode on it, asking for the file
+explicitly rather than selecting it, or double clicking the tab. From then on it
+is a tab like any other and the next model previewed opens beside it.
+
+With the library open, entering Retopo widens the preview strip once, because
+460 pixels is the right size for picking a model and the wrong size for judging a
+retopology. It is a nudge and not a rule: the split stays draggable afterwards,
+and reopening the mode on a strip that is already wide enough leaves it alone.
+
+**Every tab stays in memory.** That is what makes switching instant and what lets
+an unsaved edit survive a trip to another tab and back. It also means five tabs
+on heavy models are five models resident, which is the deliberate trade: the
+alternative was reloading on every switch, which would have had to serialise
+unsaved work to avoid throwing away the thing tabs exist to protect.
+
+**An empty tab is a real state**, not a placeholder. Import adds to whatever is
+in the scene, so a tab with nothing in it is where you start when what you want
+is several files put together. The first object imported becomes the scene and
+gives the tab its name.
+
+What belongs to a tab: its objects, its camera, its channel state, its pose
+history, its selection, its path, and its retopology results. What is shared by
+all of them: the lights, the grid, the stand, the environment, the exposure and
+the wireframe. The rule is whether it would still be true of the file after an
+export.
+
+**Only real changes count as modified.** A pose, a replaced texture, a material
+preset, an imported object. Hiding a material, unplugging a map or changing
+channel are ways of looking, and counting them would give a confirmation that
+fires when you toggle the grid, and that is one people learn to dismiss
+without reading.
 
 ---
 

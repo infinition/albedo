@@ -349,9 +349,26 @@ export class Viewer {
    * model going away must not take them: the environment would come back black
    * and the UV checker would come back blank.
    */
+  /**
+   * Textures that must survive whatever is being released.
+   *
+   * The scene's own, plus whatever the host says is still needed elsewhere.
+   * That second half exists because of tabs: two models referencing the same
+   * image share one texture object, so a load that replaces the live scene would
+   * otherwise free a texture a parked tab is sitting on, and that tab would come
+   * back with a black surface. The viewer cannot know about parked documents,
+   * and the host cannot know when a release is about to happen, so the two meet
+   * on this hook.
+   *
+   * @type {null | (() => Iterable<any>)}
+   */
+  alsoKeep = null;
+
   keptTextures() {
+    const extra = this.alsoKeep?.() || [];
     return new Set(
       [
+        ...extra,
         this.studioMap,
         this.envMap,
         this.envPanorama,
@@ -1365,21 +1382,10 @@ export class Viewer {
     return out;
   }
 
-  releaseHeld(held, alsoKeep = null) {
+  releaseHeld(held) {
     if (!held) return;
-    /*
-     * What the *live* scene still needs, plus whatever the caller says is still
-     * needed elsewhere.
-     *
-     * `keptTextures` only knows about the scene on screen, which was the whole
-     * truth while there was one document. With tabs it is not: two models that
-     * reference the same image file share one texture, so closing one tab would
-     * free a texture another tab is parked on and that tab would come back with
-     * a black surface. The caller holds the other documents and is the only
-     * place that can name them.
-     */
+    // `keptTextures` already asks the host what the other documents still need.
     const keep = this.keptTextures();
-    if (alsoKeep) for (const t of alsoKeep) keep.add(t);
     for (const o of held.objects) releaseSubtree(o, keep);
     for (const s of held.skeletons) releaseSubtree(s, keep);
     held.objects.length = 0;

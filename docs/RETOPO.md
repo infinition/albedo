@@ -592,7 +592,7 @@ Decisions taken:
   > Both hung the engine on the first attempt, and the cause is worth keeping.
   > Every arm of the argument parser advances the index by two; the two new arms
   > advanced it by nothing, so the loop span forever on the same flag. No output,
-  > no progress line, no crash — it looked exactly like a slow model. A parser
+  > no progress line, no crash, and it looked exactly like a slow model. A parser
   > that loops is the failure mode with the fewest symptoms.
 
 - [x] **Triangle count per material.** In the inspector it is a curiosity; here
@@ -615,7 +615,7 @@ Decisions taken:
   > gets written. So those meshes are marked not-visible for the duration of the
   > export and put back after. And the wrapper has to *await* the export rather
   > than return its promise, because a `finally` around a returned promise runs
-  > before that promise settles — the meshes would come back visible while the
+  > before that promise settles, so the meshes would come back visible while the
   > exporter was still walking the scene and the filter would silently do
   > nothing.
 
@@ -692,7 +692,7 @@ shows the scene.
 - **Folding `hiddenMaterials` into the selection.** It looks like a third
   selection and it is not: it says what is *drawn*. That is exactly what lets the
   scope control offer "everything", "what is visible" and "what is selected" as
-  three different answers, and merging them would collapse two of the three —
+  three different answers, and merging them would collapse two of the three:
   hiding a surface would select it, and selecting one would hide the rest. The
   two states stay apart. What they now share is one tree that edits both, so they
   can no longer drift by being changed in two places that never look at each
@@ -837,7 +837,7 @@ repository; this is what these items mean once the engine lives in Albedo.
   simply inert. It now runs once, on the preference, at the one place a stale
   name can actually arrive.
 - **A new class name is a claim that no one else took it.** The scene tree used
-  `.tree`, which `style.css` had held for years for the monospace text outline —
+  `.tree`, which `style.css` had held for years for the monospace text outline:
   `white-space: pre` and a monospace font, applied to the whole new tree. Reading
   the stylesheet the page *serves* rather than the file on disk is what found it.
 - **Nothing animated can be measured in the automation panel.** It does not
@@ -851,7 +851,7 @@ repository; this is what these items mean once the engine lives in Albedo.
   left this document claiming four finished things were still to do. Once it
   inserted a *call* to `paintHistory` while the block *defining* it never landed,
   so `refresh()` threw, the model import failed, and the drop overlay stayed up
-  and ate every click — a model visible behind a veil, untouchable. Anchors are
+  and ate every click: a model visible behind a veil, untouchable. Anchors are
   asserted now.
 - **Click everything before believing any of it.** The regression above survives
   every check that reads code and dies instantly to one that runs it. Driving all

@@ -134,7 +134,7 @@ export function createTree({ host, viewer, channels, swapTexture, onNotice }) {
     );
     row.querySelector(".tree-name").textContent = mesh.name;
     row.querySelector(".tree-num").textContent = fr(mesh.triangles);
-    row.title = `${mesh.name} — ${fr(mesh.triangles)} triangles`;
+    row.title = `${mesh.name} · ${fr(mesh.triangles)} triangles`;
     row.addEventListener("click", (e) =>
       selection.choose(mesh.id, "mesh", e.ctrlKey || e.metaKey)
     );
@@ -177,7 +177,7 @@ export function createTree({ host, viewer, channels, swapTexture, onNotice }) {
     );
     row.querySelector(".tree-name").textContent = mat.name;
     row.querySelector(".tree-num").textContent = fr(mat.triangles);
-    row.title = `${mat.name} — ${fr(mat.triangles)} triangles`;
+    row.title = `${mat.name} · ${fr(mat.triangles)} triangles`;
     row.addEventListener("click", (e) =>
       selection.choose(mat.id, "material", e.ctrlKey || e.metaKey)
     );

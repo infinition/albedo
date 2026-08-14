@@ -93,13 +93,27 @@ const documents = [];
 let activeDoc = null;
 let tabs = null;
 
-function makeDocument({ title = "Nouvel onglet", path = null } = {}) {
+function makeDocument({ title = "Nouvel onglet", path = null, preview = false } = {}) {
   const doc = {
     id: ++docSeq,
     title,
     path,
     idle: !path,
     dirty: false,
+    /**
+     * A tab you are only looking through.
+     *
+     * There is at most one, and the next model looked at takes its place instead
+     * of opening a tab of its own. That is what makes clicking through a folder
+     * of two hundred assets possible at all: without it, browsing a library
+     * costs one tab per curiosity and the strip becomes the thing you have to
+     * manage instead of the models.
+     *
+     * It stops being a preview the moment it stops being a look: any change that
+     * would survive an export, and opening the retopology mode on it, which is a
+     * statement that this model is what you came for.
+     */
+    preview,
     /** Viewer state while put aside; null while this document is the live one. */
     held: null,
     /** Channel state while put aside; null while live. */
@@ -116,6 +130,22 @@ function makeDocument({ title = "Nouvel onglet", path = null } = {}) {
 function paintTabs() {
   tabs?.paint(documents, activeDoc?.id ?? null);
 }
+
+/**
+ * This tab is no longer something you are merely looking through.
+ *
+ * Called from every route that turns looking into working: a change that would
+ * survive an export, opening the retopology mode, and asking for the file
+ * explicitly rather than selecting it in the grid.
+ */
+function promoteDocument(doc = activeDoc) {
+  if (!doc?.preview) return;
+  doc.preview = false;
+  paintTabs();
+}
+
+/** The one tab being looked through, if there is one. */
+const previewDocument = () => documents.find((d) => d.preview) || null;
 
 /** Take the live document out of the viewer and into its own holder. */
 function parkActive() {
@@ -188,9 +218,9 @@ function switchTo(id) {
  * both add to whatever is in the scene, so a tab with nothing in it is exactly
  * where you start when the thing you want is several files put together.
  */
-function newDocument({ activate = true } = {}) {
+function newDocument({ activate = true, preview = false } = {}) {
   parkActive();
-  const doc = makeDocument();
+  const doc = makeDocument({ preview });
   // An empty holder rather than null, so `adoptDocument` has the same shape to
   // work with whether the tab has ever held anything or not.
   doc.held = viewer.detachModel();
@@ -238,11 +268,9 @@ async function closeDocument(id) {
    * parked tab with a black surface when it came back. The live scene protects
    * itself; the parked ones have to be named.
    */
-  const stillNeeded = new Set();
-  for (const other of documents) {
-    for (const t of viewer.texturesHeldBy(other.held)) stillNeeded.add(t);
-  }
-  viewer.releaseHeld(doc.held, stillNeeded);
+  // The document is already out of the list, so `viewer.alsoKeep` naturally
+  // names every tab that is left and nothing else.
+  viewer.releaseHeld(doc.held);
   channels.releaseSnapshot(doc.channelState);
   doc.held = null;
   doc.channelState = null;
@@ -277,11 +305,14 @@ let sceneDirty = false;
 
 function markDirty() {
   sceneDirty = true;
+  // A change is the end of a preview: what you are looking at has become what
+  // you are working on, and the next model looked at must not take its place.
+  if (activeDoc) activeDoc.preview = false;
   // The tab shows it, so the flag and the dot cannot disagree.
   if (activeDoc && !activeDoc.dirty) {
     activeDoc.dirty = true;
-    paintTabs();
   }
+  paintTabs();
 }
 
 function clearDirty() {
@@ -299,20 +330,6 @@ function clearDirty() {
  * one, because a webview `confirm` in a Tauri window looks like a web page in a
  * way nothing else in this application does.
  */
-/**
- * Said once, not once per card.
- *
- * Browsing a folder selects a dozen entries in a few seconds, and a message per
- * selection is noise that hides the one thing it is trying to say.
- */
-let previewNoticeAt = 0;
-function sayPreviewRefused() {
-  const now = Date.now();
-  if (now - previewNoticeAt < 8000) return;
-  previewNoticeAt = now;
-  toast("Modèle modifié : l'aperçu ne le remplace pas. Ouvre-le pour cela.", 3200);
-}
-
 async function confirmDiscard(what = "Le modèle en cours a été modifié.") {
   if (!sceneDirty) return true;
   const question = `${what}\nContinuer sans enregistrer ni exporter ?`;
@@ -430,6 +447,7 @@ tabs = createTabs({
   host: $("tabs-strip"),
   onActivate: switchTo,
   onClose: closeDocument,
+  onKeep: (id) => promoteDocument(documents.find((d) => d.id === id)),
   onNew: () => {
     newDocument();
     setTitle("Albedo", true);
@@ -438,6 +456,23 @@ tabs = createTabs({
 });
 activeDoc = makeDocument({ title: "Albedo" });
 paintTabs();
+
+/*
+ * What the parked tabs still point at, asked for at every release.
+ *
+ * Any load replaces the live scene and releases what it held, and any close
+ * releases a holder. Both would happily free a texture another tab shares, and
+ * the failure is silent until that tab comes forward with a black surface. The
+ * viewer asks; here is the only place that knows the answer.
+ */
+viewer.alsoKeep = () => {
+  const keep = new Set();
+  for (const doc of documents) {
+    if (doc === activeDoc) continue;
+    for (const t of viewer.texturesHeldBy(doc.held)) keep.add(t);
+  }
+  return keep;
+};
 
 // The HUD needs the navigation and the navigation fires HUD actions, so the
 // handlers are filled in once both exist.
@@ -705,27 +740,45 @@ async function openPath(path, { force = false, keepLibrary = false } = {}) {
    * previewed over, and the strip goes on showing what it showed.
    */
   /*
-   * Opening a model no longer costs you the one you were working on.
+   * Where the model lands, and it is three different answers.
    *
-   * A fresh tab unless the one you are on is empty and untouched, in which case
-   * it is the tab you just made and filling it is what you meant. Opening a file
-   * that is already open brings its tab forward rather than loading a second
-   * copy of it, which is what every tab strip does and what stops a folder of
-   * clicks becoming a dozen identical tabs.
+   * **Already open**: its tab comes forward. Nobody wants two tabs of one file,
+   * and a folder browsed twice would otherwise fill the strip with duplicates.
+   *
+   * **Selected in the library**: the preview tab, which is the one tab you are
+   * looking *through* rather than working in. The next model selected takes its
+   * place. Without this, browsing two hundred assets costs two hundred tabs and
+   * the strip becomes the thing being managed instead of the models.
+   *
+   * **Asked for explicitly**: a tab of its own, or the preview tab promoted if
+   * it already holds that very file, because asking for what you are looking at
+   * is exactly how a look becomes a piece of work.
    */
-  if (!keepLibrary) {
-    const already = documents.find((d) => d.path === path && d !== activeDoc);
-    if (already) {
-      switchTo(already.id);
-      return;
-    }
-    if (!force && (viewer.current || sceneDirty)) newDocument();
-  } else if (sceneDirty) {
-    // The preview strip gets a refusal rather than a question: selecting a card
-    // is browsing, not opening, so a dialog per card is one people dismiss
-    // without reading, and loading anyway is the thing being complained about.
-    sayPreviewRefused();
+  const already = documents.find((d) => d.path === path);
+  if (already && already !== activeDoc) {
+    switchTo(already.id);
+    if (!keepLibrary) promoteDocument(already);
     return;
+  }
+  if (already === activeDoc && already) {
+    if (!keepLibrary) promoteDocument(already);
+    return;
+  }
+
+  if (keepLibrary) {
+    // Browsing. Reuse the preview tab, or make one; never touch a tab that is
+    // being worked in, which is the whole complaint this answers.
+    const spare = previewDocument();
+    if (spare) {
+      if (spare !== activeDoc) switchTo(spare.id);
+    } else if (viewer.current || sceneDirty || documents.length > 1) {
+      newDocument({ preview: true });
+    } else {
+      // The untouched first tab is already a tab nobody is working in.
+      if (activeDoc) activeDoc.preview = true;
+    }
+  } else if (!force && (viewer.current || sceneDirty)) {
+    newDocument();
   }
   const url = tauri.core.convertFileSrc(path);
   const name = path.split(/[\\/]/).pop();
@@ -737,6 +790,16 @@ async function openPath(path, { force = false, keepLibrary = false } = {}) {
   };
   await open(url, name, { findTextures, resolveSibling: siblingResolver(path) });
   openedPath = path;
+  /*
+   * The document learns its own path now rather than when it is next parked.
+   *
+   * It used to be written only in `parkActive`, so the live tab's `path` stayed
+   * null while it was the one on screen. Asking "is this file already open" then
+   * missed the tab you were looking at, and asking for the file you were
+   * previewing opened a second tab of it beside the first.
+   */
+  if (activeDoc) activeDoc.path = path;
+  if (!keepLibrary) promoteDocument();
   paintSaveButtons();
   await rescueTextures(path, name);
 }
@@ -2529,6 +2592,7 @@ async function toggleRetopo() {
         // shared, so this is a change of subject rather than a second surface.
         hud.toggleInspector(true);
         showPane("retopo");
+        widenPeekForRetopo();
       } else if (currentPane() === "retopo") {
         // The tab is going away with the mode, so the panel is sent back to
         // whichever pane was remembered rather than left showing nothing.
@@ -2538,8 +2602,39 @@ async function toggleRetopo() {
   });
   retopo.show();
 }
-$("btn-retopo").addEventListener("click", toggleRetopo);
+$("btn-retopo").addEventListener("click", () => {
+  // Opening the engine on a model is a statement that this model is what you
+  // came for, so the tab stops being one you were only looking through.
+  promoteDocument();
+  toggleRetopo();
+});
 
+
+/**
+ * Give Retopo room when it opens over the library, once, and then get out of
+ * the way.
+ *
+ * The preview strip is sized for picking a model, not for judging a retopology:
+ * at 460 pixels the panel alone is most of it and the model is a thumbnail. So
+ * the mode nudges the split wider.
+ *
+ * A nudge and not a rule. It used to be `body.peeking.retopo-open { --peek: 50% }`
+ * in the stylesheet, which beat the inline value the drag handle writes on the
+ * root element, so the split froze at half and dragging it did nothing. Writing
+ * the same property the handle writes leaves the handle in charge, and the
+ * nudge only happens when the strip is actually too narrow to work in.
+ */
+function widenPeekForRetopo() {
+  if (!document.body.classList.contains("peeking")) return;
+  const half = Math.round(window.innerWidth / 2);
+  const now =
+    parseInt(document.documentElement.style.getPropertyValue("--peek"), 10) ||
+    parseInt(getComputedStyle(document.body).getPropertyValue("--peek"), 10) ||
+    460;
+  if (now >= window.innerWidth * 0.4) return;
+  document.documentElement.style.setProperty("--peek", `${half}px`);
+  window.dispatchEvent(new Event("resize"));
+}
 
 // --- post-processing ------------------------------------------------------
 
