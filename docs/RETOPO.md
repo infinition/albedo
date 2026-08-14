@@ -540,7 +540,11 @@ Decisions taken:
       in a number. A miss is a ray that fell back to the nearest surface point
       instead of finding the high poly; a lot of them means the cage is too
       tight for this pair of meshes.
-- [ ] The cage drawn as a translucent shell, live with the slider.
+- [x] **The cage drawn**, translucent and live under its own slider. Pushed along
+      the vertex normal in the vertex shader, because rebuilding positions on the
+      CPU per pixel of drag is a full buffer upload in the one interaction where
+      a stall is least forgivable. It never writes depth, and it is not
+      raycastable.
 - [ ] Baked maps surfaced in the Matières slots, so the existing restore works
       on them.
 
@@ -566,7 +570,7 @@ Decisions taken:
 > chart count grows badly on models made of many thin parts, and the miss rate
 > rises with it.
 
-### Phase 6: per material work [ ]
+### Phase 6: per material work [~]
 - [x] **`maxError` and `relaxStrength`**, both of which the engine had all along
       and neither of which was exposed. `maxError` is the second stop condition
       and the one that matters when the goal is a quality rather than a budget:
@@ -582,10 +586,35 @@ Decisions taken:
   > no progress line, no crash — it looked exactly like a slow model. A parser
   > that loops is the failure mode with the fewest symptoms.
 
+- [x] **Triangle count per material.** In the inspector it is a curiosity; here
+      it is the number that says where a budget will actually go and which
+      material is worth hiding before a restricted run. Counted in **two
+      passes**: a material carried by several meshes only has its full count once
+      every mesh has been seen, so counting while building rows in one traverse
+      undercounts everything but the last mesh to use it.
+- [x] **Isolate and hide per material**, which already existed and is now load
+      bearing: it is the selection mechanism the scope control reads.
+- [~] **Decimate restricted to the selection.** Hide a material in the Matières
+      tab, choose "Matières visibles", and the run leaves it alone.
+
+  > **Two traps in it, both found by reading rather than running.** Hiding swaps
+  > a material for one that writes neither colour nor depth, which is right for
+  > looking and invisible to an exporter: the geometry is still there and still
+  > gets written. So those meshes are marked not-visible for the duration of the
+  > export and put back after. And the wrapper has to *await* the export rather
+  > than return its promise, because a `finally` around a returned promise runs
+  > before that promise settles — the meshes would come back visible while the
+  > exporter was still walking the scene and the filter would silently do
+  > nothing.
+
+- [ ] **Per group, not just per mesh.** A mesh carrying four materials with one
+      hidden cannot be half exported without splitting its geometry, so scope is
+      all-or-nothing per mesh today. Splitting geometry to honour a display
+      toggle is a much bigger promise than that control currently makes.
+- [ ] Merge a restricted result back into one mesh. Today the untouched parts and
+      the decimated ones are two objects in one scene, which exports as one file
+      but is not the same thing as a merged mesh.
 - [ ] Ctrl-click to add to the selection, on top of `pick()`.
-- [ ] Triangle count per material, from the geometry groups.
-- [ ] Isolate and hide per material.
-- [ ] Decimate and bake restricted to the selection, leaving the rest untouched.
 
 ### Phase 7: paying the rent [ ]
 - [ ] Export the result. GLB exists; OBJ is worth adding for one concrete reason,
