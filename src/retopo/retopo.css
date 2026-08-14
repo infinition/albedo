@@ -20,9 +20,20 @@
   transition: opacity 0.16s ease;
 }
 #retopo.open { opacity: 1; }
+/*
+ * Only the boxes that are actually painted take pointer events back.
+ *
+ * Not `.rt-stack`: it is a full width column whose children are `max-content`,
+ * so granting it events would put an invisible rectangle across the top of the
+ * viewport and eat clicks meant for the model. And `.rt-top` has to be named
+ * explicitly, because naming only `.rt-hud` left the whole toolbar inheriting
+ * `pointer-events: none` from the host. Every icon in it was inert, which looks
+ * exactly like a handler that was never attached.
+ */
 #retopo.open .rt-panel,
 #retopo.open .rt-bar,
-#retopo.open .rt-stack { pointer-events: auto; }
+#retopo.open .rt-hud,
+#retopo.open .rt-top { pointer-events: auto; }
 
 /*
  * Retopo is a state of the viewer, not a second one, so it never shares the

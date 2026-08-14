@@ -396,6 +396,20 @@ export function createRetopo({
       ? "Refaire seulement les cartes, sans retoucher la géométrie"
       : "Il faut un résultat avant de pouvoir le cuire";
 
+    // A dead button should say why it is dead, in the bar rather than in a
+    // tooltip nobody hovers. "Nothing happens" is not a diagnosis anyone should
+    // have to make from the outside.
+    if (!running) {
+      const why = !tauri
+        ? "Pont natif absent : ouvert hors de l'application."
+        : source === 0
+          ? "Aucun modèle chargé."
+          : "";
+      if (why || el.note.textContent.startsWith("Aucun") || el.note.textContent.startsWith("Pont")) {
+        say(why);
+      }
+    }
+
     // Say where the geometry will come from, because the two paths behave
     // differently and the difference is worth a sentence rather than a surprise.
     const p = sourcePath?.();
@@ -548,14 +562,18 @@ export function createRetopo({
   async function run() {
     if (running || !tauri || !viewer.current) return;
     running = true;
-    el.run.disabled = true;
-    el.err.hidden = true;
-    el.fill.style.width = "0%";
-    say("Préparation…", 0);
-    onBusy?.(true);
 
     let stop = null;
     try {
+      // Everything that touches state lives inside the try, so a throw on the
+      // way in cannot leave `running` stuck true and the button disabled for the
+      // rest of the session.
+      el.run.disabled = true;
+      el.err.hidden = true;
+      el.fill.style.width = "0%";
+      say("Préparation…", 0);
+      onBusy?.(true);
+
       const dirs = await tauri.core.invoke("retopo_workdir");
       const input = await inputFor(dirs);
 
@@ -621,15 +639,16 @@ export function createRetopo({
   async function rebake() {
     if (running || !tauri || !lastRun) return;
     running = true;
-    el.run.disabled = true;
-    el.rebake.disabled = true;
-    el.err.hidden = true;
-    el.fill.style.width = "0%";
-    say("Projection des textures…", 0);
-    onBusy?.(true);
 
     let stop = null;
     try {
+      el.run.disabled = true;
+      el.rebake.disabled = true;
+      el.err.hidden = true;
+      el.fill.style.width = "0%";
+      say("Projection des textures…", 0);
+      onBusy?.(true);
+
       const dirs = await tauri.core.invoke("retopo_workdir");
       stop = await tauri.event.listen("retopo://progress", (e) => {
         const f = e.payload || 0;
