@@ -808,7 +808,7 @@ function paintMaterialList() {
   holder.textContent = "";
 
   for (const {
-    uuid, name, textured, alphaLost, invisible, deadVertexColors, hidden, triangles,
+    uuid, name, textured, alphaLost, invisible, deadVertexColors, hidden, triangles, map, color,
   } of list) {
     const row = document.createElement("div");
     row.className = "mat-row";
@@ -836,6 +836,47 @@ function paintMaterialList() {
     label.classList.toggle("selected", uuid === selectedMaterial);
     label.title = defect ? `${name} : ${defect}` : textured ? `${name} (texturé)` : name;
     label.addEventListener("click", () => selectMaterial(uuid));
+
+    /*
+     * A square of the material itself, before its name.
+     *
+     * A list of names says nothing about what each one covers: "Material.003"
+     * and "lambert2" are the two most common names in the world and neither
+     * describes a surface. The base colour map answers it at a glance, and a
+     * flat swatch of the diffuse colour answers it for materials that have no
+     * map at all — which is the case the name is least likely to help with.
+     */
+    const chip = document.createElement("span");
+    chip.className = "mat-chip";
+    if (map?.image) {
+      // The decoded image, drawn small. Reusing the texture's own image avoids
+      // decoding a second copy of something already in memory, which on a model
+      // with a dozen 4K maps is the difference between instant and not.
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 28;
+      const g = cv.getContext("2d");
+      try {
+        // The checker goes *into* the canvas, under the image, rather than into
+        // the stylesheet: an inline background-image beats a stylesheet one, so
+        // a CSS checker behind an inline texture would never be seen at all.
+        for (let y = 0; y < 28; y += 7) {
+          for (let x = 0; x < 28; x += 7) {
+            g.fillStyle = ((x + y) / 7) % 2 ? "#23272f" : "#1a1d23";
+            g.fillRect(x, y, 7, 7);
+          }
+        }
+        g.drawImage(map.image, 0, 0, 28, 28);
+        chip.style.backgroundImage = `url(${cv.toDataURL()})`;
+        chip.classList.add("has-map");
+      } catch {
+        // A compressed or data texture has no drawable image. The swatch below
+        // is the fallback rather than an empty square pretending to be one.
+        chip.style.background = color || "#3a3f48";
+      }
+    } else {
+      chip.style.background = color || "#3a3f48";
+    }
+    chip.title = textured ? "Couleur de base" : "Couleur unie, sans texture";
 
     // How many triangles this material is responsible for. In the inspector it
     // is a curiosity; in Retopo it is the number that says where a budget will
@@ -875,7 +916,7 @@ function paintMaterialList() {
     });
     group.appendChild(hide);
 
-    row.append(label, count, group);
+    row.append(chip, label, count, group);
     holder.appendChild(row);
     if (uuid === selectedMaterial) holder.appendChild(textureBlock(uuid));
   }

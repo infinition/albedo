@@ -131,7 +131,7 @@ body.peeking.retopo-open { --peek: 50%; }
  */
 .rt-tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 2px;
   padding: 2px;
   border-radius: 8px;
@@ -619,3 +619,94 @@ body.peeking.retopo-open { --peek: 50%; }
   text-transform: uppercase;
   color: var(--dim, #8b929c);
 }
+
+/* --- the outliner --------------------------------------------------------
+ *
+ * Meshes, their materials, and each material's maps.
+ *
+ * A flat list answers "what is in this file", which is an inspection question. A
+ * retopology asks "which part am I about to spend a budget on", and a model with
+ * one material across nine meshes looks identical in a flat list to one with
+ * nine materials on one mesh while being nothing alike to a decimator. The
+ * indent is the answer.
+ */
+.rt-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 42vh;
+  overflow-y: auto;
+  margin: 2px 0 4px;
+}
+.rt-node { display: flex; flex-direction: column; gap: 1px; }
+
+.rt-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.rt-row:hover { background: rgb(255 255 255 / 0.05); }
+/* Depth by indent *and* by size, because indent alone stops being legible after
+   two levels in a 320 pixel column. */
+.rt-mesh { font-weight: 600; }
+.rt-mat { margin-left: 14px; }
+.rt-map { margin-left: 28px; font-size: 11px; cursor: default; color: var(--dim, #8b929c); }
+.rt-map:hover { background: transparent; }
+
+.rt-row.picked {
+  background: color-mix(in srgb, var(--accent, #7cc4ff) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #7cc4ff) 45%, transparent);
+}
+/* Hidden things stay on screen, dimmed. Removing them from the list would make
+   the list disagree with the model about what exists. */
+.rt-row.muted { opacity: 0.42; }
+
+.rt-glyph { color: var(--dim, #8b929c); font-size: 11px; flex: none; }
+.rt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-row .rt-num { color: var(--dim, #8b929c); font-variant-numeric: tabular-nums; flex: none; }
+
+.rt-eye {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dim, #8b929c);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+}
+.rt-eye:hover { color: var(--fg, #e6e9ef); background: rgb(255 255 255 / 0.08); }
+.rt-eye.off { color: var(--accent, #7cc4ff); }
+
+.rt-tree .mat-chip { width: 18px; height: 18px; border-radius: 4px; }
+.rt-tree .mat-chip.small { width: 14px; height: 14px; border-radius: 3px; }
+
+/* The count and the two actions that operate on it, above the tree. */
+.rt-selbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dim, #8b929c);
+}
+.rt-selbar > span { flex: 1; }
+.rt-mini {
+  appearance: none;
+  border: 1px solid var(--line, #2a2e35);
+  background: transparent;
+  color: var(--fg, #e6e9ef);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.rt-mini:hover:not(:disabled) { background: rgb(255 255 255 / 0.06); }
+.rt-mini:disabled { opacity: 0.35; cursor: default; }

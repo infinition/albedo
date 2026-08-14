@@ -183,6 +183,10 @@ export class ChannelView {
           uuid: m.uuid,
           name: m.name || "(sans nom)",
           textured: !!m.map,
+          /** The base colour map itself, for a thumbnail beside the name. */
+          map: m.map || null,
+          /** The flat colour to show when there is no map to show instead. */
+          color: m.color ? `#${m.color.getHexString()}` : null,
           alphaLost: ChannelView.alphaLost(m),
           invisible: ChannelView.invisible(m),
           deadVertexColors: !!m.userData?.deadVertexColors,

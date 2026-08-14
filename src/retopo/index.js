@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { buildCage } from "./cage.js";
+import { readScene, thumbnail, toggleMap } from "./outline.js";
 import { ICONS } from "./icons.js";
 import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
 import "./retopo.css";
@@ -87,6 +88,7 @@ const SHELL = `
     <button class="rt-tab" type="button" data-tab="clean" role="tab">Nettoyage</button>
     <button class="rt-tab" type="button" data-tab="maps" role="tab">Cartes</button>
     <button class="rt-tab" type="button" data-tab="atlas" role="tab">Atlas</button>
+    <button class="rt-tab" type="button" data-tab="view" role="tab">Vue</button>
     <button class="rt-tab" type="button" data-tab="matter" role="tab">Matières</button>
     <button class="rt-tab" type="button" data-tab="result" role="tab">Bilan</button>
   </nav>
@@ -118,7 +120,8 @@ const SHELL = `
     <p class="rt-sub">Portée</p>
     <div class="segment" role="group" aria-label="Portée">
       <button class="seg active" type="button" data-scope="all" title="Tout le modèle">Tout</button>
-      <button class="seg" type="button" data-scope="visible" title="Seulement ce qui n'est pas masqué dans l'onglet Matières">Matières visibles</button>
+      <button class="seg" type="button" data-scope="visible" title="Seulement ce qui n'est pas masqué dans l'onglet Matières">Visible</button>
+      <button class="seg" type="button" data-scope="picked" title="Seulement ce qui est sélectionné dans l'arbre">Sélection</button>
     </div>
     <p class="rt-hint" data-el="scopeHint">Masque une matière dans l'onglet
       Matières et choisis « Matières visibles » pour la laisser tranquille. Le
@@ -244,11 +247,28 @@ const SHELL = `
     </div>
   </section>
 
+  <section class="rt-page" data-tab="view">
+    <p class="rt-hint">Le volet Vue d'Albedo, tel quel : les onze canaux, le fil
+      de fer, la grille, la boîte englobante, le squelette, l'exposition et la
+      coupe. La barre du haut n'en montre que les plus utilisés ; tout est ici.</p>
+    <div data-el="viewHost"></div>
+  </section>
+
   <section class="rt-page" data-tab="matter">
-    <p class="rt-hint">La liste des matières d'Albedo, telle quelle. Chaque
-      emplacement de texture peut être remplacé ou restauré ici, ce qui est la
-      façon de préparer une source avant de la cuire : une carte de normale
-      corrigée avant projection vaut mieux qu'une projection corrigée après.</p>
+    <div class="rt-selbar">
+      <span data-el="selCount">Rien de sélectionné</span>
+      <button type="button" class="rt-mini" data-el="selClear">Tout</button>
+      <button type="button" class="rt-mini" data-el="selIsolate">Isoler</button>
+    </div>
+    <p class="rt-hint">Clic pour sélectionner, ctrl-clic pour ajouter. L'œil
+      masque, et ce qui est masqué est ce que la portée « Matières visibles »
+      laisse tranquille.</p>
+    <div class="rt-tree" data-el="tree"></div>
+
+    <p class="rt-sub">Remplacer une texture</p>
+    <p class="rt-hint">La liste d'Albedo, telle quelle : chaque emplacement peut
+      être remplacé ou restauré ici. Corriger une carte de normale avant la
+      projection vaut mieux que corriger une projection après.</p>
     <div data-el="matterHost"></div>
   </section>
 
@@ -402,20 +422,192 @@ export function createRetopo({
    *
    * The two can never both want it, since opening either mode closes the other.
    */
-  let matterHome = null;
+  const borrowed = new Map();
 
-  function borrowMatter() {
-    const section = document.getElementById("materials-section");
-    if (!section || matterHome) return;
-    matterHome = { parent: section.parentNode, next: section.nextSibling };
-    el.matterHost.appendChild(section);
+  /**
+   * Move a node here and remember where it came from.
+   *
+   * `find` runs at return time as well as at borrow time, because the node has
+   * to be looked up again rather than held: the inspector repaints its own
+   * contents and a stale reference would put back something that is no longer
+   * the thing.
+   */
+  function borrow(key, find, host) {
+    const node = find();
+    if (!node || borrowed.has(key)) return;
+    borrowed.set(key, { parent: node.parentNode, next: node.nextSibling });
+    host.appendChild(node);
   }
 
-  function returnMatter() {
-    const section = document.getElementById("materials-section");
-    if (!section || !matterHome) return;
-    matterHome.parent.insertBefore(section, matterHome.next);
-    matterHome = null;
+  function giveBack(key, find) {
+    const node = find();
+    const home = borrowed.get(key);
+    if (!node || !home) return;
+    home.parent.insertBefore(node, home.next);
+    borrowed.delete(key);
+  }
+
+  const findMatter = () => document.getElementById("materials-section");
+  // `div.pane`, not merely `[data-pane]`: the nav button that *selects* the pane
+  // carries the same attribute, and grabbing it moves the tab instead of the
+  // contents — which looks like the borrow silently doing nothing.
+  const findView = () => document.querySelector('div.pane[data-pane="render"]');
+
+  function borrowPanes() {
+    borrow("matter", findMatter, el.matterHost);
+    // The whole render pane, not a copy of its parts: eleven channels, the
+    // wireframe, the grid, the bounding box, the skeleton, the exposure and the
+    // clipping, with every handler and every repaint still pointed at it.
+    borrow("view", findView, el.viewHost);
+  }
+
+  function returnPanes() {
+    giveBack("matter", findMatter);
+    giveBack("view", findView);
+  }
+
+  /**
+   * What the run is allowed to touch, as ids rather than flags on the objects.
+   *
+   * The scene is rebuilt on every import, so a flag would either be lost with it
+   * or, worse, survive onto a different model.
+   */
+  const picked = new Set();
+
+  function paintTree() {
+    const meshes = readScene(viewer, channels);
+    el.tree.textContent = "";
+
+    for (const mesh of meshes) {
+      const group = document.createElement("div");
+      group.className = "rt-node";
+
+      const row = document.createElement("div");
+      row.className = "rt-row rt-mesh" + (picked.has(mesh.id) ? " picked" : "");
+      row.innerHTML =
+        `<span class="rt-glyph">▦</span>` +
+        `<span class="rt-name">${mesh.name}</span>` +
+        `<span class="rt-num">${fr(mesh.triangles)}</span>`;
+      row.title = `${mesh.name} — ${fr(mesh.triangles)} triangles`;
+      row.addEventListener("click", (e) => choose(mesh.id, e.ctrlKey || e.metaKey));
+
+      const eye = document.createElement("button");
+      eye.type = "button";
+      eye.className = "rt-eye" + (mesh.visible ? "" : " off");
+      eye.title = mesh.visible ? "Masquer ce maillage" : "Afficher ce maillage";
+      eye.textContent = mesh.visible ? "◉" : "◌";
+      eye.addEventListener("click", (e) => {
+        e.stopPropagation();
+        mesh.node.visible = !mesh.node.visible;
+        say2(`${mesh.name} ${mesh.node.visible ? "affiché" : "masqué"}`);
+        viewer.invalidate?.();
+        paintTree();
+      });
+      row.appendChild(eye);
+      group.appendChild(row);
+
+      for (const mat of mesh.materials) {
+        const mrow = document.createElement("div");
+        mrow.className =
+          "rt-row rt-mat" + (picked.has(mat.id) ? " picked" : "") + (mat.hidden ? " muted" : "");
+        const url = thumbnail(mat.material.map);
+        mrow.innerHTML =
+          `<span class="mat-chip"${
+            url
+              ? ` style="background-image:url(${url})"`
+              : ` style="background:${mat.material.color ? "#" + mat.material.color.getHexString() : "#3a3f48"}"`
+          }></span>` +
+          `<span class="rt-name">${mat.name}</span>` +
+          `<span class="rt-num">${fr(mat.triangles)}</span>`;
+        mrow.title = `${mat.name} — ${fr(mat.triangles)} triangles`;
+        mrow.addEventListener("click", (e) => choose(mat.id, e.ctrlKey || e.metaKey));
+
+        const meye = document.createElement("button");
+        meye.type = "button";
+        meye.className = "rt-eye" + (mat.hidden ? " off" : "");
+        meye.title = mat.hidden ? "Afficher cette matière" : "Masquer cette matière";
+        meye.textContent = mat.hidden ? "◌" : "◉";
+        meye.addEventListener("click", (e) => {
+          e.stopPropagation();
+          channels?.setMaterialHidden?.(mat.id, !mat.hidden);
+          say2(`${mat.name} ${mat.hidden ? "affichée" : "masquée"}`);
+          viewer.invalidate?.();
+          paintTree();
+        });
+        mrow.appendChild(meye);
+        group.appendChild(mrow);
+
+        for (const map of mat.maps) {
+          const krow = document.createElement("div");
+          krow.className = "rt-row rt-map" + (map.hidden ? " muted" : "");
+          const kurl = thumbnail(map.texture, 18);
+          krow.innerHTML =
+            `<span class="mat-chip small"${kurl ? ` style="background-image:url(${kurl})"` : ""}></span>` +
+            `<span class="rt-name">${map.label}</span>`;
+          const keye = document.createElement("button");
+          keye.type = "button";
+          keye.className = "rt-eye" + (map.hidden ? " off" : "");
+          keye.textContent = map.hidden ? "◌" : "◉";
+          keye.title = map.hidden ? "Rebrancher cette carte" : "Débrancher cette carte";
+          keye.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const off = toggleMap(mat.material, map.slot);
+            say2(`${map.label} ${off ? "débranchée" : "rebranchée"}`);
+            viewer.invalidate?.();
+            paintTree();
+          });
+          krow.appendChild(keye);
+          group.appendChild(krow);
+        }
+      }
+      el.tree.appendChild(group);
+    }
+    paintSelection();
+  }
+
+  function choose(id, add) {
+    if (!add) {
+      const alone = picked.size === 1 && picked.has(id);
+      picked.clear();
+      if (!alone) picked.add(id);
+    } else if (picked.has(id)) {
+      picked.delete(id);
+    } else {
+      picked.add(id);
+    }
+    paintTree();
+  }
+
+  function paintSelection() {
+    el.selCount.textContent = picked.size
+      ? `${picked.size} sélectionné${picked.size > 1 ? "s" : ""}`
+      : "Rien de sélectionné";
+    el.selIsolate.disabled = picked.size === 0;
+  }
+
+  /**
+   * Hide everything that is not selected.
+   *
+   * The fastest way to answer "is this the part I think it is", and the fastest
+   * way to set up a restricted run: isolate, look, decimate the visible.
+   */
+  function isolate() {
+    if (!picked.size) return;
+    const meshes = readScene(viewer, channels);
+    let hidden = 0;
+    for (const mesh of meshes) {
+      const keepMesh = picked.has(mesh.id) || mesh.materials.some((m) => picked.has(m.id));
+      mesh.node.visible = keepMesh;
+      if (!keepMesh) hidden++;
+      for (const mat of mesh.materials) {
+        // A material is kept when it is picked itself, or when its whole mesh is.
+        const keep = picked.has(mesh.id) || picked.has(mat.id);
+        channels?.setMaterialHidden?.(mat.id, !keep);
+      }
+    }
+    say2(`Isolé : ${hidden} maillage${hidden > 1 ? "s" : ""} masqué${hidden > 1 ? "s" : ""}`);
+    viewer.invalidate?.();
+    paintTree();
   }
 
   /** The drawn bake cage, rebuilt with each result. */
@@ -595,6 +787,27 @@ export function createRetopo({
   for (const b of host.querySelectorAll("[data-colour]")) {
     b.addEventListener("click", () => setColour(b.dataset.colour));
   }
+
+  /*
+   * The bar follows the borrowed pane.
+   *
+   * Both are now ways of picking the same thing, and the one you are not looking
+   * at is the one that goes stale. Rather than route the pane's clicks through
+   * this module, the bar simply re-reads which channel Albedo says is active
+   * after any click inside the pane: one source of truth, and no assumption
+   * about how the inspector chooses to mark it.
+   */
+  el.viewHost.addEventListener("click", () => {
+    const live = document.querySelector("#channels .active")?.dataset.id;
+    if (!live) return;
+    // A data view is this module's own and no channel button can mean it, so
+    // picking a channel over there necessarily leaves it.
+    wireU.uView.value = 0;
+    for (const o of host.querySelectorAll("[data-colour]")) {
+      o.classList.toggle("active", o.dataset.colour === live);
+    }
+    viewer.invalidate?.();
+  });
 
   /*
    * Layers are toggles, and they look like toggles.
@@ -1207,24 +1420,43 @@ export function createRetopo({
    * control makes.
    */
   async function withScope(fn) {
-    if (scope !== "visible") return fn();
-    const hidden = new Set(
-      (channels?.materials?.() || []).filter((m) => m.hidden).map((m) => m.uuid)
-    );
-    if (!hidden.size) return fn();
+    if (scope === "all") return fn();
+
+    /*
+     * Which meshes the exporter is allowed to see.
+     *
+     * Two ways of saying it, and they answer different questions. **Visible**
+     * means "leave alone what I have hidden", which is subtractive and suits a
+     * model you have been pruning. **Selection** means "touch only this", which
+     * is additive and suits a model where you know exactly which part you want.
+     * Both end in the same place: a set of meshes marked not-visible for the
+     * length of the export and put straight back after.
+     */
+    const keep = (o) => {
+      const source = channels?.original?.get(o) ?? o.material;
+      const mats = (Array.isArray(source) ? source : [source]).filter(Boolean);
+      if (scope === "picked") {
+        return picked.has(o.uuid) || mats.some((m) => picked.has(m.uuid));
+      }
+      const hidden = new Set(
+        (channels?.materials?.() || []).filter((m) => m.hidden).map((m) => m.uuid)
+      );
+      // All or nothing per mesh: one carrying four materials with a single one
+      // hidden cannot be half exported without splitting its geometry.
+      return !mats.length || !mats.every((m) => hidden.has(m.uuid));
+    };
+
+    if (scope === "picked" && !picked.size) return fn();
 
     const touched = [];
     viewer.root.traverse((o) => {
       if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible) return;
-      // The *original* materials, because the ones on the mesh right now may be
-      // the channel view's stand-ins and carry different uuids.
-      const source = channels?.original?.get(o) ?? o.material;
-      const uuids = (Array.isArray(source) ? source : [source]).map((m) => m?.uuid);
-      if (uuids.length && uuids.every((u) => u && hidden.has(u))) {
+      if (!keep(o)) {
         touched.push(o);
         o.visible = false;
       }
     });
+    if (!touched.length) return fn();
     try {
       // Awaited, not returned. `finally` around a returned promise runs before
       // the promise settles, so the meshes would come back visible while the
@@ -1404,11 +1636,17 @@ export function createRetopo({
       for (const o of host.querySelectorAll("[data-scope]")) o.classList.toggle("active", o === b);
       scope = b.dataset.scope;
       const hidden = (channels?.materials?.() || []).filter((m) => m.hidden).length;
-      say2(scope === "visible"
-        ? hidden
-          ? `${hidden} matière${hidden > 1 ? "s" : ""} laissée${hidden > 1 ? "s" : ""} tranquille${hidden > 1 ? "s" : ""}`
-          : "Aucune matière masquée : la portée ne change rien"
-        : "Tout le modèle");
+      say2(
+        scope === "picked"
+          ? picked.size
+            ? `${picked.size} élément${picked.size > 1 ? "s" : ""} sélectionné${picked.size > 1 ? "s" : ""}`
+            : "Rien de sélectionné : la portée ne change rien"
+          : scope === "visible"
+            ? hidden
+              ? `${hidden} matière${hidden > 1 ? "s" : ""} laissée${hidden > 1 ? "s" : ""} tranquille${hidden > 1 ? "s" : ""}`
+              : "Aucune matière masquée : la portée ne change rien"
+            : "Tout le modèle"
+      );
     });
   }
 
@@ -1422,6 +1660,20 @@ export function createRetopo({
   });
 
   el.devScale.addEventListener("input", syncDevScale);
+  el.selClear.addEventListener("click", () => {
+    // Everything visible again, and nothing selected: the way back from any
+    // amount of isolating and hiding, in one button.
+    for (const mesh of readScene(viewer, channels)) {
+      mesh.node.visible = true;
+      for (const mat of mesh.materials) channels?.setMaterialHidden?.(mat.id, false);
+    }
+    picked.clear();
+    viewer.invalidate?.();
+    paintTree();
+    say2("Tout affiché");
+  });
+  el.selIsolate.addEventListener("click", isolate);
+
   el.showCage.addEventListener("change", () => {
     syncCage();
     say2(el.showCage.checked
@@ -1448,8 +1700,9 @@ export function createRetopo({
       // The layout outside this module has to know, because the library sizes
       // the viewport and a retopology cannot be judged in a preview strip.
       document.body.classList.add("retopo-open");
-      borrowMatter();
+      borrowPanes();
       dressScene();
+      paintTree();
       onOpenChange?.(true);
       syncViewport();
       refresh();
@@ -1460,7 +1713,7 @@ export function createRetopo({
     hide() {
       open = false;
       host.classList.remove("open");
-      returnMatter();
+      returnPanes();
       document.body.classList.remove("retopo-open");
       onOpenChange?.(false);
     },
