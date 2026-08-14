@@ -65,7 +65,7 @@ expensive.
 
 | plancton wanted | Albedo has | Where |
 | --- | :---: | --- |
-| A materials tab, one row per material | [x] | Matières pane, `#materials` |
+| A materials tab, one row per material | [x] | The Scène tree, and the Matière pane for the one selected |
 | Every texture slot listed one at a time | [x] | `MAP_SLOTS`, ten slots, not five |
 | The source of each texture, named | [x] | `texture.name` |
 | Import an external texture into a slot | [x] | `replaceMap()` in `src/viewer/materials.js` |
@@ -393,11 +393,12 @@ Decisions taken:
 > through and only its own panels take them back. Verified: a click at the centre
 > of the window reaches the viewer, a click on the panel reaches the panel.
 >
-> **One panel on the right edge at a time.** Retopo is a state of the viewer
-> rather than a second viewer, so it and the inspector close each other.
-> Verified in both directions. With the library open and peeking, the chrome
-> confines itself to the preview strip: three surfaces at once would be one too
-> many, and the third would be showing the same model as the second.
+> **The mode no longer owns a panel at all.** It had one, with seven tabs, two of
+> which were Albedo's own panes borrowed for the duration and handed back on
+> close. That gave a single model three competing navigations and, wherever the
+> borrowing met the borrower, a tab strip nested inside a tab strip. See "One
+> panel, shared" below: the mode now fills one pane of the application's single
+> panel and keeps only the chrome that is genuinely its own.
 
 - [x] Its own icon in the top right cluster, beside Bibliothèque and Inspecteur.
 - [x] The mode's module and stylesheet are a lazy chunk, fetched on first open.
@@ -595,9 +596,12 @@ Decisions taken:
       every mesh has been seen, so counting while building rows in one traverse
       undercounts everything but the last mesh to use it.
 - [x] **Isolate and hide per material**, which already existed and is now load
-      bearing: it is the selection mechanism the scope control reads.
-- [~] **Decimate restricted to the selection.** Hide a material in the Matières
-      tab, choose "Matières visibles", and the run leaves it alone.
+      bearing: it is what the "Visible" scope reads.
+- [~] **Decimate restricted to the selection.** Two scopes, answering two
+      different questions from the Scène tab. "Visible" is subtractive: hide what
+      you want left alone. "Sélection" is additive: pick what you want touched.
+      Both end in the same place, a set of meshes marked not-visible for the
+      length of the export.
 
   > **Two traps in it, both found by reading rather than running.** Hiding swaps
   > a material for one that writes neither colour nor depth, which is right for
@@ -616,15 +620,107 @@ Decisions taken:
 - [ ] Merge a restricted result back into one mesh. Today the untouched parts and
       the decimated ones are two objects in one scene, which exports as one file
       but is not the same thing as a merged mesh.
-- [ ] Ctrl-click to add to the selection, on top of `pick()`.
+- [x] Ctrl-click to add to the selection. It came free with there being one
+      selection: `src/selection.js` takes the modifier, and the tree, the
+      material list and the viewport pick all go through it.
 
 ### Phase 7: paying the rent [ ]
 - [ ] Export the result. GLB exists; OBJ is worth adding for one concrete reason,
       it stores quads natively and glTF cannot.
 - [x] Rewrite the README size claim. It said 3.7 MB, the shipped binary was
       already 4.43 MB before any of this, and it is 5.47 MB now.
-- [ ] `docs/FORMATS.md` and `docs/CONTROLS.md` updated for the new tab and its
-      keys.
+- [x] `docs/FORMATS.md` and `docs/CONTROLS.md` updated for the mode, its
+      companion files and, now, the shared panel that replaced its own.
+
+---
+
+## One panel, shared
+
+The interface was scattered and it was reported several times. This is what was
+wrong, what was done, and what was deliberately not done.
+
+### The diagnosis
+
+Three navigations for one model: the inspector's icon strip, Retopo's seven tabs,
+and the icon bar over the viewport. They overlapped in part. Retopo *borrowed*
+Albedo's panes into its own tabs, which produced a tab strip inside a tab strip
+wherever the two met.
+
+The cause underneath: **panel visibility was attached to modes** rather than to
+what is being looked at. But "which materials are in this model" does not change
+according to whether you are inspecting or decimating, so it should never have
+had two answers in two places.
+
+There were also three competing notions of selection: `selectedMaterial` in
+`main.js`, `hiddenMaterials` in `channels.js`, and `picked` in `retopo/index.js`.
+
+### What was done [x]
+
+- [x] **One right panel, one tab row, always in the same place.** No mode owns a
+      surface. The tabs are Scène, Vue, Matière, Retopo, Caméra, Décor, Effets,
+      Photo, Objet.
+- [x] **The tabs are permanent, not modal.** The mesh → material → map tree left
+      Retopo for the Scène tab. The material's four numbers left Retopo's own tab
+      for Matière, next to the maps they affect. The view controls were always
+      Albedo's; Retopo stopped borrowing them and reads the same state instead.
+- [x] **The borrowing machinery is gone**, along with `borrow`, `giveBack` and the
+      `div.pane[data-pane="render"]` selector that had its own trap written next
+      to it.
+- [x] **Retopo's seven tabs became one pane in sections**, with Bilan first and
+      hidden until it has something to say.
+- [x] **A mode now changes exactly three things**: which tab opens first, which
+      action bar shows at the bottom, and whether the comparison curtain is live.
+- [x] **`src/selection.js`**, one set read by the tree, the material pane, the
+      viewport pick and the scope control. Ctrl-click adds, which closes the
+      "Ctrl-click to add to the selection" item from phase 6 as a side effect of
+      there being one selection to add to.
+- [x] **Retopo and the inspector stopped closing each other**, because there is
+      now nothing for them to fight over.
+
+The old `Scène` pane, which held the edit handles, the pivot, the orientation and
+the devices, is now `Objet`. The name was needed for the thing that actually
+shows the scene.
+
+### Refused, with the reason
+
+- **Folding `hiddenMaterials` into the selection.** It looks like a third
+  selection and it is not: it says what is *drawn*. That is exactly what lets the
+  scope control offer "everything", "what is visible" and "what is selected" as
+  three different answers, and merging them would collapse two of the three —
+  hiding a surface would select it, and selecting one would hide the rest. The
+  two states stay apart. What they now share is one tree that edits both, so they
+  can no longer drift by being changed in two places that never look at each
+  other. This is the same argument that already rejected "a second selection for
+  per material scope", pointed the other way.
+- **Loading the tree at startup.** It would have been simpler than a lazy module
+  for something the Scène tab needs on its first click. It draws a render per row
+  through the renderer, and this executable is also the Explorer thumbnail
+  provider, one process per file. Measured after the change: zero occurrences of
+  the tree or the mode in the 113,318 byte startup bundle, the tree in a chunk of
+  8,248 bytes of JavaScript and 2,696 of CSS, the mode in 43,274 and 9,472.
+- **Keeping Retopo's tab in the bar while the mode is shut.** A tab that opens a
+  pane full of controls driving a mode that is not running is a tab that lies. It
+  appears with the mode and goes with it, and the panel falls back to the
+  remembered pane rather than to nothing.
+
+### What the two checks caught, again
+
+- **A rename that fired on the wrong side.** `scene` used to name the editing
+  pane and now names the tree, so a migration table mapped it to `object`. Put
+  inside `showPane` rather than beside the preference it was for, it silently
+  redirected every *live* call: the Scène tab did nothing at all when clicked, no
+  error, no console line. Found by clicking it.
+- **A class name that already existed.** The new tree used `.tree`, which
+  `style.css` had held since long before for the monospace text outline in the
+  Objet pane: `white-space: pre` and a monospace font over the whole thing. Found
+  by reading the stylesheet the page actually served rather than the one on disk.
+- **Transitions never advance in the automation panel.** The panel does not
+  compose images, so `#inspector`'s 0.22 second slide stays pinned at its start
+  value for ever and every geometry reading is of a panel that appears to be off
+  screen. Measuring after disabling transitions is what turned a phantom layout
+  bug into a correct measurement: panel at x 942, right edge 1266 in a 1280 pixel
+  window, and zero overlap against the top bar, the action bar and the mode
+  buttons.
 
 ---
 
@@ -727,6 +823,23 @@ repository; this is what these items mean once the engine lives in Albedo.
 
 ### Lessons that each cost a debugging session
 
+- **A migration belongs beside the thing it migrates, not in the middle of the
+  road.** A table mapping old pane names to new ones sat inside `showPane`, where
+  it caught every live call as well as the saved preference it was written for.
+  `scene` had been renamed to `object`, so the new Scène tab silently opened
+  Objet and clicking it did nothing at all: no error, no console line, the tab
+  simply inert. It now runs once, on the preference, at the one place a stale
+  name can actually arrive.
+- **A new class name is a claim that no one else took it.** The scene tree used
+  `.tree`, which `style.css` had held for years for the monospace text outline —
+  `white-space: pre` and a monospace font, applied to the whole new tree. Reading
+  the stylesheet the page *serves* rather than the file on disk is what found it.
+- **Nothing animated can be measured in the automation panel.** It does not
+  compose images, so a CSS transition never advances: `#inspector`'s slide stayed
+  pinned at its starting transform for ever, and every geometry reading said the
+  panel was off screen. Half an hour went into a layout bug that did not exist.
+  Disable transitions before measuring, the same way `ResizeObserver` has to be
+  doubled by an explicit call.
 - **An unverified text replacement is a change you only think you made.** Twice in
   one session a scripted edit missed its anchor and did nothing, silently. Once it
   left this document claiming four finished things were still to do. Once it

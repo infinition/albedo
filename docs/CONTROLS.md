@@ -36,9 +36,40 @@ Albedo shares one camera between two distinct navigation modes:
 
 ---
 
+## The panel
+
+There is one panel, on the right edge, with one row of tabs, and every mode
+shares it. A mode does not own a surface: it decides which tab opens first, which
+action bar shows underneath, and whether the comparison curtain is live. Nothing
+else.
+
+| Tab | What it holds |
+| --- | --- |
+| Scène | The tree: meshes, their materials, each material's maps. Select and hide at every level |
+| Vue | The eleven channels, wireframe, grid, bounding box, skeleton, exposure, cross section |
+| Matière | The selected material: its maps, its four numbers, its presets, replace and restore |
+| Retopo | Method, cleanup, maps, atlas and report. Present only while the mode is open |
+| Caméra, Décor, Effets, Photo | Unchanged |
+| Objet | Edit handles, parts, pivot, orientation, devices, Windows integration |
+
+The tabs are permanent because they are attached to what is being looked at
+rather than to what you are doing to it: the list of materials in a model is the
+same list whether you are inspecting it or decimating it, so it does not deserve
+two answers in two navigations.
+
+**One selection, read by everything.** Clicking a surface in the viewport, a row
+in the tree, or a name in the Matière pane all write the same thing, and the
+Retopo scope control reads it. Ctrl-click adds to it. Clicking the only selected
+thing again clears it.
+
+**Hiding is not selecting**, and the two are deliberately kept apart: hiding says
+what is *drawn*, which is what lets the scope control offer "everything", "what
+is visible" and "what is selected" as three different answers. Both are edited in
+the same tree, so they can no longer drift.
+
 ## Retopo Mode
 
-Retopo is a third mode beside the inspector and the library, opened from the same
+Retopo is a mode beside the inspector and the library, opened from the same
 cluster of buttons at the top right. It is chrome *around* the viewport rather
 than a screen in front of it: the model stays visible and interactive throughout,
 because you cannot judge a retopology without looking at it.
@@ -70,11 +101,21 @@ in one camera and one set of pixels. **Ghost** draws the result solid with the
 source translucent over it, which is the view that answers "did the low poly sink
 inside the original surface".
 
-### The panel
+### The pane
 
-Six tabs. Méthode carries the triangle budget and the deviation ceiling, Nettoyage
-the creases and the smoothing, Cartes and Atlas the bake, Matières the material
-list borrowed from the inspector, and Bilan the report and the deviation scale.
+One pane in the shared panel, in sections: Bilan, Méthode, Nettoyage, Cartes,
+Atlas. Méthode carries the triangle budget, the deviation ceiling and the scope;
+Nettoyage the creases and the smoothing; Cartes and Atlas the bake.
+
+**Bilan is first and it is absent until there is something in it.** This was one
+long column once and that was wrong twice over: you had to scroll past the whole
+bake to reach the result, and an error written at the bottom of it was invisible,
+so a run that failed looked exactly like a button that did nothing. A report
+brings its own section forward, and the pane with it.
+
+The material list and the view controls are not here. They are the Matière and
+Vue tabs, which are the same tabs the inspector uses, because they were never
+questions about retopology in the first place.
 
 ### The action bar
 
