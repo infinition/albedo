@@ -696,7 +696,40 @@ Clicking a model in the library replaced the scene without a word. Now there is
 one tab per open model, all resident, and switching is a detach and an attach
 rather than a load, so an unsaved edit survives a trip to another tab and back.
 
-One of them is a **preview**: selecting cards in the library reuses that single
+### What a tab shows [x]
+
+**An eye marks a preview.** The italic name said it already, but italics are a
+difference you only notice once you know to look for one, and the whole point of
+the preview tab is that you are not thinking about tabs while you click through a
+folder. The glyph is Albedo's own, the same one the texture rows use for "this is
+shown". Paler than the name beside it, because it is a state and not a control,
+and full strength on the active tab, the one place the distinction changes what
+your next click does.
+
+**A snapshot stands in for the name on inactive tabs.** A truncated file name is
+the worst of both worlds: it takes the room a name needs and delivers none of
+what a name is for. Half an asset library begins with the same twenty characters,
+so the strip ends up reading `A_10-meter_secti…` four times over.
+
+The picture is taken from the live canvas rather than rendered afresh, so a tab
+shows *what you were looking at* when you left it: your angle, your channel, your
+framing. A synthetic three quarter view would be prettier and would lie about
+which tab is which the moment you turn a model around.
+
+The name stays on the active tab, and that is a deliberate half measure. Icons
+everywhere would save more and cost too much: two variants of one model are
+indistinguishable as pictures, which is exactly the case where several tabs are
+open. Measured at **190 pixels with the name against 26 without**, so seven
+inactive tabs now fit where one named tab did.
+
+> Two things without which it does not work. The canvas is read in the same
+> synchronous block as the render: without `preserveDrawingBuffer` the browser
+> may discard the buffer at the next paint, and asking for it permanently would
+> tax every frame of every session to serve a forty pixel square taken three
+> times an hour. And the name is *hidden* rather than absent, so a tab keeps its
+> width when it becomes active and the strip does not jump under the cursor.
+
+One of them is a **preview**: selecting cards in the library reuses that single
 tab instead of opening one per curiosity, and it stops being a preview the moment
 looking becomes working. Opening the retopology mode is one of those moments.
 
