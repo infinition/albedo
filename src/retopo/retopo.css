@@ -37,15 +37,16 @@
   --rt-blur: blur(8px);
 
   /*
-   * How wide the panel is, declared once.
+   * How much room the shared panel takes on the right, declared once.
    *
    * The column above the model has to stop where the panel starts, so the number
    * appeared in two places and promptly disagreed with itself: the panel shrank
-   * to 320 under a container query and the column went on reserving 360, then
-   * the whole toolbar slid under the panel. One variable, two readers.
+   * under a container query and the column went on reserving the old figure,
+   * then the whole toolbar slid underneath it. One variable, two readers — and
+   * now it follows `#inspector`'s width rather than a panel of this mode's own,
+   * because there is no longer a panel of this mode's own.
    */
-  --rt-panel-w: 360px;
-  --rt-edge: 12px;
+  --rt-panel-w: 324px;
 }
 #retopo.open { opacity: 1; }
 /*
@@ -58,19 +59,12 @@
  * `pointer-events: none` from the host. Every icon in it was inert, which looks
  * exactly like a handler that was never attached.
  */
-#retopo.open .rt-panel,
 #retopo.open .rt-bar,
 #retopo.open .rt-top { pointer-events: auto; }
 
 /*
- * Retopo is a state of the viewer, not a second one, so it never shares the
- * right edge with the inspector: opening either closes the other, and the rule
- * below is only the visual half of that.
- *
  * With the library open the viewport is the preview strip it leaves on the
  * right, so the chrome follows it there rather than drawing across the grid.
- * Three surfaces at once would be one too many, and the third would be showing
- * the same model as the second.
  */
 body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
 
@@ -91,116 +85,50 @@ body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
 body.peeking.retopo-open { --peek: 50%; }
 
 /*
- * The inspector is gone while Retopo is open, guaranteed here rather than
- * trusted to a call.
+ * The panel stops where the action bar starts.
  *
- * `toggleInspector(false)` already runs when the mode opens, but its own icon
- * strip was still showing through above the panel: one missed path, one repaint
- * racing the other, and two panels are stacked with their two navigations
- * arguing about which tab you are on. A rule tied to the same class that opens
- * the mode cannot be raced.
- *
- * Its render pane is not lost with it — that pane has been moved into the Vue
- * tab by then, and moving a node out of a hidden parent keeps it visible.
+ * That bar is the mode's own and it is centred at the bottom of the window, so
+ * with a full height panel beside it the two overlap on a short window. The bar
+ * measures itself and publishes its height on the document root; the panel reads
+ * it. Reserving a guess is how a panel ends up sitting on its own buttons when
+ * the bar wraps onto three rows in a narrow window.
  */
-body.retopo-open #inspector { display: none; }
-
-
-/* --- the panel ----------------------------------------------------------- */
-
-.rt-panel {
-  position: absolute;
-  /*
-   * Below Albedo's own top right cluster, exactly as the column on the left
-   * passes under the top left one.
-   *
-   * At `--rt-edge` the panel landed square on top of the library, viewer, menu
-   * and fullscreen buttons, so opening the mode was a one way door: the only way
-   * out was the Fermer button at the far bottom of the panel. A mode you cannot
-   * leave by the control you entered it with is a trap, and this one was
-   * invisible because the buttons were still there, just underneath.
-   */
-  top: calc(var(--gap, 14px) + 48px);
-  right: var(--rt-edge);
-  /* The bar measures itself and publishes the number; see index.js. */
-  bottom: calc(var(--gap, 14px) + var(--rt-bar-h, 54px) + 10px);
-  width: var(--rt-panel-w);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  border-radius: 10px;
-  background: var(--rt-skin);
-  backdrop-filter: var(--rt-blur);
-  border: 1px solid var(--line, #2a2e35);
+body.retopo-open #inspector {
+  bottom: calc(var(--gap) + var(--rt-bar-h, 54px) + 10px);
 }
+
+
+/* --- the mode's pane, inside the shared panel ---------------------------- */
+
 /*
- * Four tabs, not one long column.
+ * The parameters live in one pane of the application's single panel now, beside
+ * Vue and Matière, rather than behind seven tabs of the mode's own. What is left
+ * here is the handful of shapes that pane uses and no other does.
  *
- * It was one long column first and that was wrong twice over: you had to scroll
- * past the whole bake to reach the result, and an error written at the bottom of
- * it was invisible, so a run that failed looked exactly like a button that did
- * nothing. The tab strip does not scroll; only the page under it does.
+ * A range in a flex column is given the width it has rather than asked for its
+ * own. Without this the sliders push the pane four pixels past its own right
+ * edge, which is what the older panes still do.
  */
-.rt-tabs {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--line, #2a2e35) 45%, transparent);
-  flex: none;
-}
-.rt-tab {
-  appearance: none;
-  border: 0;
-  border-radius: 6px;
-  padding: 7px 4px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--dim, #8b929c);
-  background: transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rt-tab:hover { color: var(--fg, #e6e9ef); }
-.rt-tab.active {
-  color: var(--fg, #e6e9ef);
-  background: color-mix(in srgb, var(--panel, #16181c) 90%, white 8%);
-}
-
-/* Only the page scrolls. The strip and the bar stay put. */
-.rt-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.rt-page { display: none; flex-direction: column; gap: 8px; }
-.rt-page.active { display: flex; }
+#pane-retopo input[type="range"] { width: 100%; min-width: 0; box-sizing: border-box; }
 
 .rt-err { color: var(--bad, #ff8b7a); }
 
-/* The panel is a column, so a range is given the width it has rather than
-   asked for its own. Without this the three sliders push the panel four pixels
-   past its own right edge, which is what the inspector panes still do. */
-.rt-panel input[type="range"] { width: 100%; min-width: 0; box-sizing: border-box; }
-
-.rt-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.rt-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; margin-top: 8px; }
 .rt-field > span { display: flex; justify-content: space-between; gap: 8px; }
-.rt-field .rt-num { color: var(--dim, #8b929c); font-variant-numeric: tabular-nums; }
+.rt-field .rt-num { color: var(--muted, #8b929c); font-variant-numeric: tabular-nums; }
 
-.rt-check { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.rt-check { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
 
 .rt-hint {
-  margin: 0;
+  margin: 6px 0 0;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--dim, #8b929c);
+  color: var(--muted, #8b929c);
 }
 
 /* A heading inside a block, for a group that is not worth its own block. */
 .rt-sub {
-  margin: 10px 0 2px;
+  margin: 12px 0 2px;
   font-size: 11px;
   color: var(--fg, #e6e9ef);
   opacity: 0.75;
@@ -217,7 +145,6 @@ body.retopo-open #inspector { display: none; }
 [data-el="aoTools"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   transition: opacity 0.15s ease;
 }
 .rt-off {
@@ -334,11 +261,27 @@ body.retopo-open #inspector { display: none; }
   position: absolute;
   top: calc(var(--gap, 14px) + 48px);
   left: var(--gap, 14px);
-  right: calc(var(--rt-panel-w) + var(--gap, 14px) + var(--rt-edge));
+  /* Room for the shared panel only when it is actually out; see below. */
+  right: var(--gap, 14px);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
+}
+body.inspector .rt-stack {
+  right: calc(var(--rt-panel-w) + 2 * var(--gap, 14px));
+}
+
+/*
+ * The action bar is centred on the space the model has, not on the window.
+ *
+ * It is `left: 50%` of a host that spans the whole viewport, which was right
+ * while the mode hid the panel and is wrong now that the two are on screen
+ * together: the bar drifted under the panel's left edge. Shifting it by half the
+ * panel keeps it centred on what it acts upon.
+ */
+body.inspector #retopo .rt-bar {
+  left: calc(50% - (var(--rt-panel-w) + var(--gap, 14px)) / 2);
 }
 
 .rt-top {
@@ -554,44 +497,39 @@ body.retopo-open #inspector { display: none; }
   .rt-tgroup { flex-wrap: nowrap; }
 }
 
+/*
+ * The shortcut column reserves room for the shared panel, and only while that
+ * panel is out.
+ *
+ * `.rt-stack` is a descendant of `#retopo`, which is what makes the container
+ * query above it work at all: a container query never applies to the element
+ * that declares the container, only below it. That is worth stating because a
+ * rule written for `#retopo` inside `@container retopo` fails silently.
+ *
+ * The panel's own behaviour in a narrow window is `#inspector`'s business now
+ * and lives in `style.css`, which is right: it belongs to one panel serving
+ * every mode, not to whichever mode happens to be open in front of it.
+ */
 @container retopo (max-width: 760px) {
-  .rt-panel, .rt-stack { --rt-panel-w: 320px; }
+  .rt-stack { --rt-panel-w: 288px; }
 }
 
 /*
- * Under 560 there is no arrangement that shows the panel and the model at once,
- * so the panel takes the width and the model shows between uses of it. Better an
- * honest full width column than a 200 pixel one with every label clipped.
+ * Under 560 the panel takes the width and the model shows between uses of it,
+ * so the column above the model stops reserving room for a panel that is no
+ * longer beside it.
  */
 @container retopo (max-width: 560px) {
-  /*
-   * The panel becomes a drawer along the bottom instead of a column down the
-   * side.
-   *
-   * Full width down the side was the first attempt and it covered the toolbar
-   * and the model both, which turns the mode into the screen in front of the
-   * viewport that its own header promises it will never be. Bottom drawer keeps
-   * the arrangement honest: controls at the top, model in the middle, settings
-   * at the bottom, all three visible at once.
-   */
-  .rt-panel, .rt-stack { --rt-panel-w: 0px; }
-  .rt-panel {
-    top: auto;
-    left: var(--rt-edge);
-    right: var(--rt-edge);
-    bottom: calc(var(--gap, 14px) + var(--rt-bar-h, 54px) + 10px);
-    width: auto;
-    max-height: 46%;
-  }
+  .rt-stack { --rt-panel-w: 0px; }
   .rt-bar {
     flex-wrap: wrap;
     justify-content: center;
     row-gap: 6px;
-    max-width: calc(100% - 2 * var(--rt-edge));
+    max-width: calc(100% - 2 * var(--gap, 14px));
   }
   .rt-bar button { flex: 1 1 auto; padding: 0 12px; }
   /* The note is the first thing to go: it is a nicety, and the errors it would
-     carry have their own line inside the panel. */
+     carry have their own line at the top of the pane. */
   .rt-note { display: none; }
 }
 
@@ -634,176 +572,3 @@ body.retopo-open #inspector { display: none; }
   text-transform: uppercase;
   color: var(--dim, #8b929c);
 }
-
-/* --- the outliner --------------------------------------------------------
- *
- * Meshes, their materials, and each material's maps.
- *
- * A flat list answers "what is in this file", which is an inspection question. A
- * retopology asks "which part am I about to spend a budget on", and a model with
- * one material across nine meshes looks identical in a flat list to one with
- * nine materials on one mesh while being nothing alike to a decimator. The
- * indent is the answer.
- */
-.rt-tree {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-height: 42vh;
-  overflow-y: auto;
-  margin: 2px 0 4px;
-}
-.rt-node { display: flex; flex-direction: column; gap: 1px; }
-
-.rt-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-}
-.rt-row:hover { background: rgb(255 255 255 / 0.05); }
-/* Depth by indent *and* by size, because indent alone stops being legible after
-   two levels in a 320 pixel column. */
-.rt-mesh { font-weight: 600; }
-.rt-mat { margin-left: 14px; }
-.rt-map { margin-left: 28px; font-size: 11px; cursor: default; color: var(--dim, #8b929c); }
-.rt-map:hover { background: transparent; }
-
-.rt-row.picked {
-  background: color-mix(in srgb, var(--accent, #7cc4ff) 20%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #7cc4ff) 45%, transparent);
-}
-/* Hidden things stay on screen, dimmed. Removing them from the list would make
-   the list disagree with the model about what exists. */
-.rt-row.muted { opacity: 0.42; }
-
-.rt-glyph { color: var(--dim, #8b929c); font-size: 11px; flex: none; }
-.rt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rt-row .rt-num { color: var(--dim, #8b929c); font-variant-numeric: tabular-nums; flex: none; }
-
-.rt-eye {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--dim, #8b929c);
-  font-size: 12px;
-  line-height: 1;
-  padding: 2px 3px;
-  border-radius: 4px;
-  cursor: pointer;
-  flex: none;
-}
-.rt-eye:hover { color: var(--fg, #e6e9ef); background: rgb(255 255 255 / 0.08); }
-.rt-eye.off { color: var(--accent, #7cc4ff); }
-
-.rt-tree .mat-chip { width: 18px; height: 18px; border-radius: 4px; }
-.rt-tree .mat-chip.small { width: 14px; height: 14px; border-radius: 3px; }
-
-/* The count and the two actions that operate on it, above the tree. */
-.rt-selbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--dim, #8b929c);
-}
-.rt-selbar > span { flex: 1; }
-.rt-mini {
-  appearance: none;
-  border: 1px solid var(--line, #2a2e35);
-  background: transparent;
-  color: var(--fg, #e6e9ef);
-  font: inherit;
-  font-size: 11px;
-  padding: 3px 9px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.rt-mini:hover:not(:disabled) { background: rgb(255 255 255 / 0.06); }
-.rt-mini:disabled { opacity: 0.35; cursor: default; }
-
-/* --- the tree, folded ------------------------------------------------------
- *
- * Carets and guide lines, because indent alone stops carrying depth after two
- * levels in a narrow column: at three levels the eye loses which material a map
- * belongs to, which is the one relationship the tree exists to show.
- */
-.rt-caret {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--dim, #8b929c);
-  font-size: 9px;
-  line-height: 1;
-  width: 14px;
-  padding: 0;
-  flex: none;
-  cursor: pointer;
-  text-align: left;
-}
-.rt-caret.empty { cursor: default; }
-.rt-caret:hover:not(.empty) { color: var(--fg, #e6e9ef); }
-
-/*
- * The guide line runs down the left of every nested row, drawn on the row rather
- * than as a separate element so it cannot drift out of step with what it guides.
- */
-.rt-mat, .rt-map { position: relative; }
-.rt-mat::before, .rt-map::before {
-  content: "";
-  position: absolute;
-  left: -7px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--line, #2a2e35);
-}
-.rt-map::before { left: -7px; }
-.rt-mat::after, .rt-map::after {
-  content: "";
-  position: absolute;
-  left: -7px;
-  top: 50%;
-  width: 6px;
-  height: 1px;
-  background: var(--line, #2a2e35);
-}
-
-/* Replace a texture, on the row of the texture it replaces. */
-.rt-swap {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--dim, #8b929c);
-  font-size: 12px;
-  line-height: 1;
-  padding: 2px 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  flex: none;
-}
-.rt-swap:hover { color: var(--accent, #7cc4ff); background: rgb(255 255 255 / 0.08); }
-
-/*
- * A mesh's own portrait, in place of the glyph that used to say only "this row
- * is a mesh" — a thing the indent already said.
- *
- * Transparent background on purpose: the render has no ground and no backdrop,
- * so the part floats on the row and reads as a silhouette rather than as a
- * picture in a frame. No border for the same reason; a box around it would make
- * it a thumbnail of something else instead of the thing itself.
- */
-.rt-face {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  image-rendering: auto;
-}
-.rt-mat .rt-face { width: 20px; height: 20px; }

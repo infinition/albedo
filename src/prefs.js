@@ -14,8 +14,8 @@ const KEY = "albedo.settings";
 const SAVE_DELAY = 400;
 
 export const DEFAULTS = {
-  /** Which inspector pane was open. */
-  pane: "render",
+  /** Which pane of the shared panel was open. */
+  pane: "view",
   /** Cross section: axis, or nothing for a whole model. */
   clipAxis: null,
   clipAt: 0.5,

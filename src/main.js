@@ -16,6 +16,7 @@ import {
 import { createPrefs } from "./prefs.js";
 import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
+import { selection } from "./selection.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -276,7 +277,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     const stats = viewer.setModel(object, animations, label || "");
     nav.calibrate(viewer.boxHelper.box);
     channels.reset();
-    selectedMaterial = null;
+    selection.clear();
     channels.setWireframe($("opt-wireframe").checked);
     applyChannel(currentChannel);
     $("opt-skeleton").checked = viewer.skeletons.visible;
@@ -307,6 +308,9 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     viewer.setClipping({});
     $("tree").textContent = viewer.sceneTree();
     paintMaterialList();
+    // A different model: different portraits, different branches, and nothing
+    // worth keeping open from the last one.
+    tree?.reset();
     $("empty").classList.add("hidden");
     buildAnimationUi(animations);
     if (info?.warnings?.length) console.warn("[albedo]", info.warnings);
@@ -486,37 +490,51 @@ function setRenderMode(mode) {
   paintMaterialList();
 }
 
-/** Which material the inspector has open, by uuid. */
-let selectedMaterial = null;
-
 /**
- * Choose a material, from the panel or from the model.
+ * Choose a material, from the panel, from the tree or from the model.
  *
- * Both routes end here so the two can never disagree about what is selected:
- * clicking a surface ticks its row, and clicking its row rings the surface.
+ * Every route ends in the one selection so they can never disagree: clicking a
+ * surface ticks its row in the tree, and clicking that row rings the surface.
  * @param {string|null} uuid
+ * @param {boolean} add ctrl-click, which adds instead of replacing
  */
-function selectMaterial(uuid) {
-  const next = uuid && uuid !== selectedMaterial ? uuid : null;
-  if (next === selectedMaterial) return;
-  selectedMaterial = next;
-  paintMaterialList();
+function selectMaterial(uuid, add = false) {
+  selection.choose(uuid, "material", add);
   // With the handles out, picking is aiming them rather than asking about
   // matter, so the pane stays put and the gizmo moves to what was just chosen.
   if (editMode) {
     setEditMode(editMode);
     return;
   }
-  // Picking a surface is a question about its matter, so show the answer
-  if (next) showPane("matter");
+  // Picking a surface is a question about its matter, so show the answer —
+  // unless the panel is already showing a pane that says something about the
+  // selection, in which case moving it under the pointer is the surprise.
+  if (selection.material && !SELECTION_PANES.has(currentPane())) showPane("matter");
 }
 
+/** Panes that already answer a question about what is selected. */
+const SELECTION_PANES = new Set(["matter", "scene", "retopo", "object"]);
+
+/**
+ * Everything that has to be repainted when the selection moves.
+ *
+ * One subscription rather than a call after each of the dozen places that
+ * change it: the list that forgets to repaint is the one nobody notices until a
+ * row stays lit on a material that is no longer chosen.
+ */
+selection.subscribe(() => {
+  paintMaterialList();
+  paintTree();
+  retopo?.onSelection?.();
+});
+
 function highlightSelection() {
-  if (!selectedMaterial || !viewer.current) {
+  const uuid = selection.material;
+  if (!uuid || !viewer.current) {
     viewer.highlight(null);
     return;
   }
-  viewer.highlight(channels.usersOf(selectedMaterial).meshes);
+  viewer.highlight(channels.usersOf(uuid).meshes);
 }
 
 /** Ask for an image file, through the shell when there is one. */
@@ -716,6 +734,35 @@ function textureBlock(uuid) {
     box.appendChild(field);
   };
 
+  /*
+   * The four numbers that decide whether a surface can be read at all.
+   *
+   * They were in Retopo's own panel, on a tab of its own, which is one of the
+   * places the interface had split in two: the maps were listed here and the
+   * strength of those maps was set somewhere else, in a panel that only existed
+   * while a mode was open. One material, one place.
+   *
+   * Turning the normal down to nothing is the point of the third one: it is how
+   * you find out whether the shape you are judging is geometry or a picture of
+   * geometry, and that is the question that decides a triangle budget.
+   */
+  const NUMBERS = [
+    ["Métal", "metalness", 0, 1, 0.01],
+    ["Rugosité", "roughness", 0, 1, 0.01],
+    ["Normale", "normalScale", 0, 2, 0.05],
+    ["Émissif", "emissiveIntensity", 0, 4, 0.05],
+  ];
+  for (const [label, key, min, max, step] of NUMBERS) {
+    if (!(key in material) || material[key] === undefined || material[key] === null) continue;
+    // normalScale is a Vector2 where the others are numbers, so it is read and
+    // written through the one axis that matters rather than assumed to be one.
+    const vector = key === "normalScale";
+    slider(label, vector ? material[key].x : material[key], min, max, step, (v) => {
+      if (vector) material[key].set(v, v);
+      else material[key] = v;
+    });
+  }
+
   // Only the settings this material actually has: an occlusion strength means
   // nothing without an occlusion map.
   if (material.aoMap) {
@@ -738,9 +785,6 @@ function textureBlock(uuid) {
     });
     slider("Épaisseur", material.thickness ?? 0, 0, span / 2, span / 200, (v) => {
       material.thickness = v;
-    });
-    slider("Rugosité", material.roughness ?? 0.5, 0, 1, 0.01, (v) => {
-      material.roughness = v;
     });
   }
 
@@ -770,8 +814,9 @@ function textureBlock(uuid) {
         span: bounds.isEmpty() ? 1 : bounds.max.distanceTo(bounds.min),
       });
       channels.swapMaterial(uuid, next);
-      selectedMaterial = next.uuid;
-      paintMaterialList();
+      // The substitute takes the selection with it, so the panel goes on showing
+      // the surface you were working on rather than emptying itself.
+      selection.set([[next.uuid, "material"]]);
     });
     group.appendChild(b);
   }
@@ -787,8 +832,8 @@ function textureBlock(uuid) {
     revert.textContent = "Rétablir le matériau du fichier";
     revert.addEventListener("click", () => {
       const original = channels.restoreMaterial(uuid);
-      if (original) selectedMaterial = original.uuid;
-      paintMaterialList();
+      if (original) selection.set([[original.uuid, "material"]]);
+      else paintMaterialList();
     });
     back.appendChild(revert);
     box.appendChild(back);
@@ -833,9 +878,9 @@ function paintMaterialList() {
     label.className = "mat-name";
     label.textContent = defect ? `${name} ⚠` : name;
     label.classList.toggle("warn", !!defect);
-    label.classList.toggle("selected", uuid === selectedMaterial);
+    label.classList.toggle("selected", selection.has(uuid));
     label.title = defect ? `${name} : ${defect}` : textured ? `${name} (texturé)` : name;
-    label.addEventListener("click", () => selectMaterial(uuid));
+    label.addEventListener("click", (e) => selectMaterial(uuid, e.ctrlKey || e.metaKey));
 
     /*
      * A square of the material itself, before its name.
@@ -918,7 +963,7 @@ function paintMaterialList() {
 
     row.append(chip, label, count, group);
     holder.appendChild(row);
-    if (uuid === selectedMaterial) holder.appendChild(textureBlock(uuid));
+    if (uuid === selection.material) holder.appendChild(textureBlock(uuid));
   }
   highlightSelection();
 }
@@ -1213,32 +1258,99 @@ $("shot-save").addEventListener("click", async () => {
   }
 });
 
-// --- inspector tabs -------------------------------------------------------
+// --- the shared panel -----------------------------------------------------
 
 /**
- * One subject at a time.
+ * One subject at a time, and one navigation for every mode.
  *
- * Eight sections stacked in a narrow column meant scrolling past the camera to
- * reach the stand. The panes hold exactly the same controls; only one is on
- * screen, and which one is remembered.
+ * The panes are attached to what is being looked at rather than to the mode
+ * doing the looking: the list of materials in a model does not change according
+ * to whether you are inspecting it or decimating it, so it is one tab and not
+ * one per mode. A mode chooses which tab opens first and which action bar shows
+ * underneath; it no longer owns a panel.
  */
-function showPane(name, remember = true) {
-  // The preview is a render; it is only worth making while it is on screen
-  if (name === "photo") paintShotPreview();
+
+/**
+ * A saved pane name from before the panel became shared.
+ *
+ * Applied to the preference and nowhere else. Putting it inside `showPane` was a
+ * quiet disaster: `scene` used to name the editing pane and now names the tree,
+ * so every live call asking for the tree was silently redirected to Objet and
+ * the Scène tab did nothing at all when clicked.
+ */
+const migratePane = (name) => ({ render: "view", scene: "object" })[name] || name;
+
+/** Work only done while its own pane is on screen. */
+const PANE_WAKE = {
+  // The preview is a render; it is only worth making while it is visible.
+  photo: () => paintShotPreview(),
   // Same reasoning, cheaper subject: the shell registration is two registry
   // reads across the bridge, and nobody needs the answer until they are looking
   // at the panel that shows it.
-  if (name === "scene") refreshShellState();
+  object: () => refreshShellState(),
+  // The tree draws a portrait per mesh through the renderer, so its module is
+  // fetched on the first click and never at startup.
+  scene: () => wakeTree(),
+};
+
+function showPane(name, remember = true) {
+  // A pane that is not there cannot be shown, and a saved preference naming one
+  // must not leave the panel blank with every tab unlit.
+  if (!document.querySelector(`div.pane[data-pane="${name}"]`)) name = "view";
+  PANE_WAKE[name]?.();
   for (const tab of document.querySelectorAll(".tab")) {
     tab.classList.toggle("active", tab.dataset.pane === name);
   }
   for (const pane of document.querySelectorAll(".pane")) {
     pane.classList.toggle("active", pane.dataset.pane === name);
   }
-  if (remember) prefs.set("pane", name);
+  // Retopo is not remembered: reopening the application into a mode's tab while
+  // the mode itself is shut would show controls that drive nothing.
+  if (remember && name !== "retopo") prefs.set("pane", name);
 }
 for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => showPane(tab.dataset.pane));
+}
+
+/** Which pane is on screen right now. */
+const currentPane = () =>
+  document.querySelector("div.pane.active")?.dataset.pane || "view";
+
+/**
+ * The scene tree, fetched the first time its tab is looked at.
+ *
+ * A module and a stylesheet rather than markup in the page, for the reason that
+ * outranks the rest: this executable is also the Explorer thumbnail provider,
+ * one process per file, and the tree renders a portrait per row. A headless run
+ * never calls `applyPrefs`, so it never reaches this.
+ */
+let tree = null;
+let treeArriving = null;
+
+function wakeTree() {
+  if (tree || treeArriving) return;
+  treeArriving = import("./ui/tree.js")
+    .then(({ createTree }) => {
+      tree = createTree({
+        host: $("scene-tree"),
+        viewer,
+        channels,
+        // Reused rather than reimplemented: picking a file, reading it and making
+        // the incoming texture inherit the outgoing one's wrapping and transform
+        // is an afternoon of work that already exists and is already debugged.
+        swapTexture,
+        onNotice: toast,
+      });
+    })
+    .catch((e) => console.error("[albedo] arbre de scène :", e))
+    .finally(() => {
+      treeArriving = null;
+    });
+}
+
+/** Repaint the tree, if it has ever been opened. */
+function paintTree() {
+  tree?.paint();
 }
 
 // --- camera ---------------------------------------------------------------
@@ -1580,7 +1692,7 @@ function neutralLook() {
 /** Put the saved settings back, without writing them out again as we go. */
 function applyPrefs() {
   const p = prefs.all();
-  showPane(p.pane, false);
+  showPane(migratePane(p.pane), false);
   $("shot-alpha").checked = p.shotAlpha;
   $("shot-grid").checked = p.shotGrid;
   $("shot-stand").checked = p.shotStand;
@@ -1821,7 +1933,7 @@ if (tauri) {
     // where to undo it. Once, on the first launch of a machine that had none.
     tauri.event.listen("shell-enabled", () => {
       refreshShellState();
-      toast("Vignettes 3D activées dans l'explorateur · Scène pour les retirer", 4000);
+      toast("Vignettes 3D activées dans l'explorateur · Objet pour les retirer", 4000);
     });
   }
 }
@@ -1841,9 +1953,23 @@ else {
   applyPrefs();
 }
 
-// Dev hook: drive the app from the console while building the UI
+// Dev hook: drive the app from the console while building the UI.
+//
+// The exhaustive click test in `docs/RETOPO.md` runs through this: it has to be
+// able to open a model, open the mode and reach the panes without a shell, and
+// clicking everything is the check that catches the regressions reading the code
+// never does.
 if (import.meta.env && import.meta.env.DEV) {
-  window.__albedo = { viewer, channels, nav, open, applyChannel, prefs };
+  window.__albedo = {
+    viewer, channels, nav, open, applyChannel, prefs,
+    selection, showPane, toggleRetopo,
+    get retopo() {
+      return retopo;
+    },
+    get tree() {
+      return tree;
+    },
+  };
 }
 
 // --- HUD, shortcuts -------------------------------------------------------
@@ -1891,13 +2017,15 @@ async function toggleLibrary() {
 $("btn-library").addEventListener("click", toggleLibrary);
 
 /**
- * Retopology, a third mode beside the inspector and the library.
+ * Retopology: a mode, sharing the one panel with every other mode.
  *
- * Not a pane inside the inspector: the tool has a triangle budget, three guards,
- * a bake with six knobs and a per material selection to come, and none of that
- * belongs in a 324 pixel column. Its module and stylesheet are one lazy chunk,
- * fetched on the first open and never at startup, which counts for more here
- * than elsewhere: this executable is also the Explorer thumbnail provider, one
+ * It owned a panel of its own once, with seven tabs, two of which were Albedo's
+ * panes borrowed for the duration. That gave a single model three competing
+ * navigations. Now it fills one pane of the shared panel and keeps two things
+ * that are genuinely its own: the shortcut bar over the viewport and the action
+ * bar underneath. Its module and stylesheet are still one lazy chunk, fetched on
+ * the first open and never at startup, which counts for more here than
+ * elsewhere: this executable is also the Explorer thumbnail provider, one
  * process per file.
  */
 async function toggleRetopo() {
@@ -1915,39 +2043,38 @@ async function toggleRetopo() {
     // When the model came off disk as glTF the engine opens that file itself,
     // rather than being handed a forty megabyte re-export across the bridge.
     sourcePath: () => openedPath,
-    // Reused rather than reimplemented: picking a file, reading it, and making
-    // the incoming texture inherit the outgoing one's wrapping and transform is
-    // an afternoon of work that already exists and is already debugged.
-    swapTexture,
     // For the scope control: it reads which materials are hidden, and it needs
     // the originals to match uuids against the channel view's stand-ins.
     channels,
     // The view controls in the mode's top bar drive the same channel state the
-    // inspector does, so the two can never disagree about what is on screen.
+    // Vue pane does, so the two can never disagree about what is on screen.
     applyChannel,
     setWireframe: (on) => {
       $("opt-wireframe").checked = on;
       channels.setWireframe(on);
     },
-    // The right edge holds one panel at a time. Retopo is a state of the viewer
-    // rather than a second viewer, so it never sits beside the inspector: the
-    // two would overlap, and the third surface would be showing the same model
-    // as the second.
+    // A mode does not own a panel any more. What it gets is the right to say
+    // which tab of the shared one comes forward, which is how a report reaches
+    // the eye without a second surface being invented to carry it.
+    showPane,
     onOpenChange: (on) => {
-      if (on) hud.toggleInspector(false);
       $("btn-retopo").classList.toggle("active", on);
       $("btn-retopo").setAttribute("aria-pressed", String(on));
+      if (on) {
+        // Opening the mode opens the panel on the mode's own tab. The panel is
+        // shared, so this is a change of subject rather than a second surface.
+        hud.toggleInspector(true);
+        showPane("retopo");
+      } else if (currentPane() === "retopo") {
+        // The tab is going away with the mode, so the panel is sent back to
+        // whichever pane was remembered rather than left showing nothing.
+        showPane(migratePane(prefs.get("pane")));
+      }
     },
   });
   retopo.show();
 }
 $("btn-retopo").addEventListener("click", toggleRetopo);
-// The other half of the same rule, and it does not care which handler runs
-// first: retopo can only be open while the inspector is closed, so a click on
-// the inspector button is always a click that opens it.
-$("btn-inspector").addEventListener("click", () => {
-  if (retopo?.open) retopo.hide();
-});
 
 
 // --- post-processing ------------------------------------------------------
@@ -2471,8 +2598,25 @@ function editTarget() {
   // A chosen object wins: with several files in the scene, moving one of them
   // is the whole point, and it is a more useful answer than a surface.
   if (selectedPart && viewer.parts.includes(selectedPart)) return selectedPart.object;
-  const meshes = selectedMaterial ? channels.usersOf(selectedMaterial).meshes : [];
+  // A mesh chosen in the tree is the most direct answer there is: it names one
+  // object rather than a material that may be spread over eight of them.
+  const picked = selection.meshes();
+  if (picked.length === 1) {
+    const node = meshByUuid(picked[0]);
+    if (node) return node;
+  }
+  const uuid = selection.material;
+  const meshes = uuid ? channels.usersOf(uuid).meshes : [];
   return meshes.length === 1 ? meshes[0] : viewer.root;
+}
+
+/** The mesh carrying a uuid, or null once the model that held it is gone. */
+function meshByUuid(uuid) {
+  let found = null;
+  viewer.root?.traverse((o) => {
+    if (!found && o.uuid === uuid) found = o;
+  });
+  return found;
 }
 
 function editTargetName() {

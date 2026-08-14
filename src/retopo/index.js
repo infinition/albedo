@@ -1,24 +1,30 @@
 import * as THREE from "three";
 import { buildCage } from "./cage.js";
-import { readScene, thumbnail, toggleMap } from "./outline.js";
-import { forgetPortraits, portrait } from "./portrait.js";
 import { ICONS } from "./icons.js";
 import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
+import { selection } from "../selection.js";
 import "./retopo.css";
 
 /**
  * The Retopo mode.
  *
- * A third mode beside the inspector and the library, and not a pane inside the
- * inspector: the tool has a triangle budget, three guards, a bake with eight
- * knobs and a per material selection to come, and none of that fits a 324 pixel
- * column. It is chrome around the viewport rather than a screen in front of it,
- * because you cannot judge a retopology without looking at it.
+ * It used to own a panel: seven tabs of its own on the right edge, two of which
+ * were Albedo's panes borrowed for the duration and put back on close. That gave
+ * one model three competing navigations — the inspector's icon strip, this tab
+ * row, and the icon bar over the viewport — and a tab strip nested inside a tab
+ * strip wherever the two met.
  *
- * The panel is four tabs and not one long column. It was one long column first
- * and that was wrong twice over: you had to scroll past the bake to reach the
- * result, and an error message written at the bottom of it was invisible, so a
- * run that failed looked exactly like a button that did nothing.
+ * The cause was that panel visibility was tied to *modes* rather than to what is
+ * being looked at. "Which materials are in this model" does not change according
+ * to whether you are inspecting or decimating, so it does not deserve two
+ * answers. Now there is one panel and one tab row for the whole application, and
+ * a mode decides only three things: which tab opens first, which action bar
+ * shows underneath, and whether the comparison curtain is live.
+ *
+ * What is left here is the mode itself: the engine's parameters in one pane of
+ * that shared panel, the icon bar of shortcuts over the viewport, and the action
+ * bar. The scene tree moved to `src/ui/tree.js`, the material numbers to the
+ * Matière pane, and the view controls were always Albedo's own.
  *
  * This module, its stylesheet and the exporter it reaches for are one lazy
  * chunk. Nothing here is parsed until the mode is opened for the first time,
@@ -26,6 +32,14 @@ import "./retopo.css";
  * provider, one process per file.
  */
 
+/**
+ * The chrome around the viewport: the shortcut bar, the curtain and the actions.
+ *
+ * Everything in here is either glanced at constantly while judging a result or
+ * done constantly while iterating on one. A control you have to open a panel for
+ * is a control you stop using, which is the whole argument for the bar existing
+ * beside a panel that holds the same settings in full.
+ */
 const SHELL = `
 <div class="rt-stack">
 <div class="rt-top" data-el="top">
@@ -83,222 +97,6 @@ const SHELL = `
 
 <div class="rt-split" data-el="splitLine" hidden><i></i></div>
 
-<div class="rt-panel" data-el="panel">
-  <nav class="rt-tabs" role="tablist">
-    <button class="rt-tab active" type="button" data-tab="method" role="tab">Méthode</button>
-    <button class="rt-tab" type="button" data-tab="clean" role="tab">Nettoyage</button>
-    <button class="rt-tab" type="button" data-tab="maps" role="tab">Cartes</button>
-    <button class="rt-tab" type="button" data-tab="atlas" role="tab">Atlas</button>
-    <button class="rt-tab" type="button" data-tab="view" role="tab">Vue</button>
-    <button class="rt-tab" type="button" data-tab="matter" role="tab">Matières</button>
-    <button class="rt-tab" type="button" data-tab="result" role="tab">Bilan</button>
-  </nav>
-
-  <div class="rt-body">
-
-  <section class="rt-page active" data-tab="method">
-    <div class="segment" role="group" aria-label="Méthode">
-      <button class="seg active" type="button" data-el="mDecimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
-      <button class="seg" type="button" data-el="mIsotropic" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
-    </div>
-    <label class="rt-field">
-      <span>Triangles <span class="rt-num" data-el="targetValue">—</span></span>
-      <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
-    </label>
-    <p class="rt-hint" data-el="methodHint"></p>
-
-    <p class="rt-sub">Déviation maximum</p>
-    <label class="rt-field">
-      <span>Plafond <span class="rt-num" data-el="maxErrorValue">aucun</span></span>
-      <input type="range" data-el="maxError" min="0" max="50" step="1" value="0" />
-    </label>
-    <p class="rt-hint">La deuxième condition d'arrêt, et celle qui compte quand
-      on cherche une qualité plutôt qu'un budget : la décimation s'arrête quand
-      la prochaine fusion déplacerait la surface de plus que ça. C'est la
-      différence entre « fais-en 5 000 triangles » et « fais-le aussi petit que
-      possible sans que ça se voie ». À zéro, seul le budget décide.</p>
-
-    <p class="rt-sub">Portée</p>
-    <div class="segment" role="group" aria-label="Portée">
-      <button class="seg active" type="button" data-scope="all" title="Tout le modèle">Tout</button>
-      <button class="seg" type="button" data-scope="visible" title="Seulement ce qui n'est pas masqué dans l'onglet Matières">Visible</button>
-      <button class="seg" type="button" data-scope="picked" title="Seulement ce qui est sélectionné dans l'arbre">Sélection</button>
-    </div>
-    <p class="rt-hint" data-el="scopeHint">Masque une matière dans l'onglet
-      Matières et choisis « Matières visibles » pour la laisser tranquille. Le
-      masquage qui existe déjà sert de sélection, plutôt qu'une seconde
-      sélection qui dirait la même chose ailleurs.</p>
-
-    <p class="rt-sub">Quads</p>
-    <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
-    <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
-      fichier comme un masque de diagonale, un entier par triangle.</p>
-  </section>
-
-  <section class="rt-page" data-tab="clean">
-    <label class="rt-check"><input type="checkbox" data-el="holes" /><span>Combler les trous d'abord</span></label>
-    <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span>Épingler les bords ouverts</span></label>
-    <label class="rt-field">
-      <span>Angle de pli <span class="rt-num" data-el="angleValue">40°</span></span>
-      <input type="range" data-el="angle" min="5" max="90" step="1" value="40" />
-    </label>
-    <label class="rt-field">
-      <span>Coût d'une couture <span class="rt-num" data-el="seamValue">4</span></span>
-      <input type="range" data-el="seam" min="0" max="20" step="1" value="4" />
-    </label>
-    <p class="rt-hint">Une arête plus pliée que l'angle compte comme un pli et
-      résiste. Le coût d'une couture protège les bords d'UV, dont la rupture se
-      voit dans la texture bien avant de se voir dans la forme.</p>
-
-    <p class="rt-sub">Lissage</p>
-    <label class="rt-field">
-      <span>Passes <span class="rt-num" data-el="relaxValue">0</span></span>
-      <input type="range" data-el="relax" min="0" max="10" step="1" value="0" />
-    </label>
-    <label class="rt-field">
-      <span>Force <span class="rt-num" data-el="relaxStrengthValue">0.50</span></span>
-      <input type="range" data-el="relaxStrength" min="0.05" max="1" step="0.05" value="0.5" />
-    </label>
-    <label class="rt-field">
-      <span>Angle de pli du lissage <span class="rt-num" data-el="relaxAngleValue">75°</span></span>
-      <input type="range" data-el="relaxAngle" min="20" max="150" step="5" value="75" />
-    </label>
-    <p class="rt-hint">Chaque passe est reprojetée sur la source, sinon une sphère
-      dégonfle un peu à chaque fois. Cet angle n'est pas celui du dessus, et c'est
-      voulu : un maillage réduit cinquante fois est facetté partout, donc l'angle
-      qui veut dire « pli » pour un décimateur veut dire « tout le modèle » pour
-      un lisseur.</p>
-  </section>
-
-  <section class="rt-page" data-tab="maps">
-    <p class="rt-hint">Le maillage réduit porte encore la disposition d'UV de
-      l'original, et passé un certain point cette disposition ne décrit plus la
-      surface sur laquelle elle est posée. L'interrupteur est en bas, à côté du
-      bouton dont il change le coût.</p>
-
-    <div data-el="bakeTools">
-      <label class="rt-field">
-        <span>Taille de l'atlas <span class="rt-num" data-el="mapSizeValue">2048</span></span>
-        <input type="range" data-el="mapSize" min="8" max="13" step="1" value="11" />
-      </label>
-
-      <p class="rt-sub">Cartes produites</p>
-      <label class="rt-check"><input type="checkbox" checked disabled /><span>Couleur de base</span></label>
-      <label class="rt-check"><input type="checkbox" data-el="mMR" checked /><span>Métal et rugosité</span></label>
-      <label class="rt-check"><input type="checkbox" data-el="mNormal" checked /><span>Normale</span></label>
-      <label class="rt-check"><input type="checkbox" data-el="mEmissive" checked /><span>Émissif</span></label>
-      <label class="rt-check"><input type="checkbox" data-el="mAo" /><span>Occlusion ambiante</span></label>
-      <p class="rt-hint">La couleur de base seule ne suffit pas : sans métal ni
-        rugosité, tout le résultat hérite d'une seule paire de scalaires, et une
-        boucle en laiton sur un manche en bois revient en bois mat. L'émissif est
-        abandonné tout seul quand rien n'émet.</p>
-
-      <div data-el="aoTools">
-        <label class="rt-field">
-          <span>Rayons par texel <span class="rt-num" data-el="aoSamplesValue">16</span></span>
-          <input type="range" data-el="aoSamples" min="4" max="128" step="4" value="16" />
-        </label>
-        <label class="rt-field">
-          <span>Portée de l'occlusion <span class="rt-num" data-el="aoDistanceValue">0.15</span></span>
-          <input type="range" data-el="aoDistance" min="0.01" max="1" step="0.01" value="0.15" />
-        </label>
-        <p class="rt-hint">Courte, seuls les creux s'assombrissent ; longue, toute
-          la silhouette s'ombre elle-même. La séquence de tirage est déterministe,
-          donc comparer deux réglages n'est pas une devinette.</p>
-      </div>
-    </div>
-  </section>
-
-  <section class="rt-page" data-tab="atlas">
-    <div data-el="atlasTools">
-      <p class="rt-sub">Cage</p>
-      <label class="rt-check"><input type="checkbox" data-el="showCage" /><span>Dessiner la cage</span></label>
-      <p class="rt-hint">Une distance de cage ne veut rien dire tant qu'on n'a pas
-        vu la coque qu'elle décrit : trop courte, les rayons manquent ce qui
-        dépasse du maillage réduit ; trop longue, ils vont chercher la pièce d'à
-        côté et cuisent un chambranle sur une porte.</p>
-      <label class="rt-field">
-        <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.020</span></span>
-        <input type="range" data-el="cageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
-      </label>
-      <label class="rt-field">
-        <span>Vers l'intérieur <span class="rt-num" data-el="cageInValue">0.020</span></span>
-        <input type="range" data-el="cageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
-      </label>
-      <p class="rt-hint">Trop courte, le rayon rate ce qui dépasse du maillage
-        réduit ; trop longue, il traverse un vide et touche la pièce d'à côté.</p>
-
-      <p class="rt-sub">Atlas</p>
-      <label class="rt-field">
-        <span>Écart entre îlots <span class="rt-num" data-el="gutterValue">4</span></span>
-        <input type="range" data-el="gutter" min="0" max="32" step="1" value="4" />
-      </label>
-      <label class="rt-field">
-        <span>Bavure hors des îlots <span class="rt-num" data-el="bleedValue">8</span></span>
-        <input type="range" data-el="bleed" min="0" max="32" step="1" value="8" />
-      </label>
-      <label class="rt-field">
-        <span>Angle de rupture d'îlot <span class="rt-num" data-el="islandValue">50°</span></span>
-        <input type="range" data-el="island" min="10" max="120" step="1" value="50" />
-      </label>
-      <p class="rt-hint">Ce sont deux choses différentes et les deux comptent :
-        l'écart est du vide entre les îlots pour qu'aucun niveau de mip ne les
-        mélange, la bavure est de la couleur peinte au-delà de chaque bord pour
-        que le filtrage n'aille jamais chercher le fond.</p>
-    </div>
-  </section>
-
-  <section class="rt-page" data-tab="view">
-    <p class="rt-hint">Le volet Vue d'Albedo, tel quel : les onze canaux, le fil
-      de fer, la grille, la boîte englobante, le squelette, l'exposition et la
-      coupe. La barre du haut n'en montre que les plus utilisés ; tout est ici.</p>
-    <div data-el="viewHost"></div>
-  </section>
-
-  <section class="rt-page" data-tab="matter">
-    <div class="rt-selbar">
-      <span data-el="selCount">Rien de sélectionné</span>
-      <button type="button" class="rt-mini" data-el="selClear">Tout</button>
-      <button type="button" class="rt-mini" data-el="selIsolate">Isoler</button>
-    </div>
-    <p class="rt-hint">Clic pour sélectionner, ctrl-clic pour ajouter. L'œil
-      masque, et ce qui est masqué est ce que la portée « Matières visibles »
-      laisse tranquille.</p>
-    <div class="rt-tree" data-el="tree"></div>
-
-    <div data-el="props" hidden>
-      <p class="rt-sub">Matière · <span data-el="propName"></span></p>
-      <div data-el="propRows"></div>
-      <p class="rt-hint">Descendre la normale à zéro est la façon de savoir si la
-        forme qu'on juge est de la géométrie ou une image de géométrie. C'est la
-        question qui décide d'un budget de triangles.</p>
-    </div>
-
-  </section>
-
-  <section class="rt-page" data-tab="result">
-    <div data-el="devTools" class="rt-off">
-      <p class="rt-sub">Échelle de l'écart</p>
-      <label class="rt-field">
-        <span>Rouge à <span class="rt-num" data-el="devScaleValue">—</span></span>
-        <input type="range" data-el="devScale" min="0.1" max="4" step="0.1" value="1" />
-      </label>
-      <p class="rt-hint">Multiplicateur sur le pire écart du calcul, pas une
-        distance absolue : « de combien ça a bougé » ne veut dire quelque chose
-        que rapporté à ce que ça pouvait bouger. À 1 la couleur la plus chaude
-        tombe exactement sur le pire sommet ; en dessous la rampe sature et les
-        zones seulement mauvaises rejoignent les pires, ce qui est la façon de
-        les trouver.</p>
-    </div>
-
-    <p class="rt-hint" data-el="report">Rien encore.</p>
-    <p class="rt-hint rt-err" data-el="err" hidden></p>
-    <p class="rt-hint" data-el="sourceNote"></p>
-  </section>
-
-  </div>
-</div>
-
 <div class="rt-bar" data-el="bar">
   <label class="rt-switch" title="Reprojeter les textures de la source sur le résultat">
     <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
@@ -313,6 +111,193 @@ const SHELL = `
   <button class="wide" type="button" data-el="close">Fermer</button>
   <div class="rt-progress"><i data-el="fill"></i></div>
 </div>
+`;
+
+/**
+ * The mode's own pane, in the shared panel.
+ *
+ * Sections stacked in one column, the way every other pane in this application
+ * is built, rather than a second tab row inside a tab row.
+ *
+ * **Bilan comes first, and that ordering is load bearing.** This was one long
+ * column once and it was wrong twice over: you had to scroll past the whole bake
+ * to reach the result, and an error written at the bottom of it was invisible,
+ * so a run that failed looked exactly like a button that did nothing. The report
+ * is what you look at the instant a run ends, so it sits where the eye already
+ * is — and it is not there at all until there is something to say, so an
+ * untouched model opens on Méthode, which is where you would start anyway.
+ */
+const PANEL = `
+<section data-el="resultSection" hidden>
+  <h2>Bilan</h2>
+  <p class="rt-hint rt-err" data-el="err" hidden></p>
+  <div data-el="report"></div>
+  <div data-el="devTools" class="rt-off">
+    <p class="rt-sub">Échelle de l'écart</p>
+    <label class="rt-field">
+      <span>Rouge à <span class="rt-num" data-el="devScaleValue">—</span></span>
+      <input type="range" data-el="devScale" min="0.1" max="4" step="0.1" value="1" />
+    </label>
+    <p class="rt-hint">Multiplicateur sur le pire écart du calcul, pas une
+      distance absolue : « de combien ça a bougé » ne veut dire quelque chose
+      que rapporté à ce que ça pouvait bouger. À 1 la couleur la plus chaude
+      tombe exactement sur le pire sommet ; en dessous la rampe sature et les
+      zones seulement mauvaises rejoignent les pires, ce qui est la façon de
+      les trouver.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Méthode</h2>
+  <div class="segment" role="group" aria-label="Méthode">
+    <button class="seg active" type="button" data-el="mDecimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
+    <button class="seg" type="button" data-el="mIsotropic" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
+  </div>
+  <label class="rt-field">
+    <span>Triangles <span class="rt-num" data-el="targetValue">—</span></span>
+    <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
+  </label>
+  <p class="rt-hint" data-el="methodHint"></p>
+
+  <p class="rt-sub">Déviation maximum</p>
+  <label class="rt-field">
+    <span>Plafond <span class="rt-num" data-el="maxErrorValue">aucun</span></span>
+    <input type="range" data-el="maxError" min="0" max="50" step="1" value="0" />
+  </label>
+  <p class="rt-hint">La deuxième condition d'arrêt, et celle qui compte quand
+    on cherche une qualité plutôt qu'un budget : la décimation s'arrête quand
+    la prochaine fusion déplacerait la surface de plus que ça. C'est la
+    différence entre « fais-en 5 000 triangles » et « fais-le aussi petit que
+    possible sans que ça se voie ». À zéro, seul le budget décide.</p>
+
+  <p class="rt-sub">Portée</p>
+  <div class="segment" role="group" aria-label="Portée">
+    <button class="seg active" type="button" data-scope="all" title="Tout le modèle">Tout</button>
+    <button class="seg" type="button" data-scope="visible" title="Seulement ce qui n'est pas masqué dans l'onglet Scène">Visible</button>
+    <button class="seg" type="button" data-scope="picked" title="Seulement ce qui est sélectionné dans l'onglet Scène">Sélection</button>
+  </div>
+  <p class="rt-hint" data-el="scopeHint"></p>
+
+  <p class="rt-sub">Quads</p>
+  <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
+  <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
+    fichier comme un masque de diagonale, un entier par triangle.</p>
+</section>
+
+<section>
+  <h2>Nettoyage</h2>
+  <label class="rt-check"><input type="checkbox" data-el="holes" /><span>Combler les trous d'abord</span></label>
+  <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span>Épingler les bords ouverts</span></label>
+  <label class="rt-field">
+    <span>Angle de pli <span class="rt-num" data-el="angleValue">40°</span></span>
+    <input type="range" data-el="angle" min="5" max="90" step="1" value="40" />
+  </label>
+  <label class="rt-field">
+    <span>Coût d'une couture <span class="rt-num" data-el="seamValue">4</span></span>
+    <input type="range" data-el="seam" min="0" max="20" step="1" value="4" />
+  </label>
+  <p class="rt-hint">Une arête plus pliée que l'angle compte comme un pli et
+    résiste. Le coût d'une couture protège les bords d'UV, dont la rupture se
+    voit dans la texture bien avant de se voir dans la forme.</p>
+
+  <p class="rt-sub">Lissage</p>
+  <label class="rt-field">
+    <span>Passes <span class="rt-num" data-el="relaxValue">0</span></span>
+    <input type="range" data-el="relax" min="0" max="10" step="1" value="0" />
+  </label>
+  <label class="rt-field">
+    <span>Force <span class="rt-num" data-el="relaxStrengthValue">0.50</span></span>
+    <input type="range" data-el="relaxStrength" min="0.05" max="1" step="0.05" value="0.5" />
+  </label>
+  <label class="rt-field">
+    <span>Angle de pli du lissage <span class="rt-num" data-el="relaxAngleValue">75°</span></span>
+    <input type="range" data-el="relaxAngle" min="20" max="150" step="5" value="75" />
+  </label>
+  <p class="rt-hint">Chaque passe est reprojetée sur la source, sinon une sphère
+    dégonfle un peu à chaque fois. Cet angle n'est pas celui du dessus, et c'est
+    voulu : un maillage réduit cinquante fois est facetté partout, donc l'angle
+    qui veut dire « pli » pour un décimateur veut dire « tout le modèle » pour
+    un lisseur.</p>
+</section>
+
+<section>
+  <h2>Cartes</h2>
+  <p class="rt-hint">Le maillage réduit porte encore la disposition d'UV de
+    l'original, et passé un certain point cette disposition ne décrit plus la
+    surface sur laquelle elle est posée. L'interrupteur est dans la barre du
+    bas, à côté du bouton dont il change le coût.</p>
+
+  <div data-el="bakeTools">
+    <label class="rt-field">
+      <span>Taille de l'atlas <span class="rt-num" data-el="mapSizeValue">2048</span></span>
+      <input type="range" data-el="mapSize" min="8" max="13" step="1" value="11" />
+    </label>
+
+    <p class="rt-sub">Cartes produites</p>
+    <label class="rt-check"><input type="checkbox" checked disabled /><span>Couleur de base</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mMR" checked /><span>Métal et rugosité</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mNormal" checked /><span>Normale</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mEmissive" checked /><span>Émissif</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mAo" /><span>Occlusion ambiante</span></label>
+    <p class="rt-hint">La couleur de base seule ne suffit pas : sans métal ni
+      rugosité, tout le résultat hérite d'une seule paire de scalaires, et une
+      boucle en laiton sur un manche en bois revient en bois mat. L'émissif est
+      abandonné tout seul quand rien n'émet.</p>
+
+    <div data-el="aoTools">
+      <label class="rt-field">
+        <span>Rayons par texel <span class="rt-num" data-el="aoSamplesValue">16</span></span>
+        <input type="range" data-el="aoSamples" min="4" max="128" step="4" value="16" />
+      </label>
+      <label class="rt-field">
+        <span>Portée de l'occlusion <span class="rt-num" data-el="aoDistanceValue">0.15</span></span>
+        <input type="range" data-el="aoDistance" min="0.01" max="1" step="0.01" value="0.15" />
+      </label>
+      <p class="rt-hint">Courte, seuls les creux s'assombrissent ; longue, toute
+        la silhouette s'ombre elle-même. La séquence de tirage est déterministe,
+        donc comparer deux réglages n'est pas une devinette.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Atlas</h2>
+  <div data-el="atlasTools">
+    <p class="rt-sub">Cage</p>
+    <label class="rt-check"><input type="checkbox" data-el="showCage" /><span>Dessiner la cage</span></label>
+    <p class="rt-hint">Une distance de cage ne veut rien dire tant qu'on n'a pas
+      vu la coque qu'elle décrit : trop courte, les rayons manquent ce qui
+      dépasse du maillage réduit ; trop longue, ils vont chercher la pièce d'à
+      côté et cuisent un chambranle sur une porte.</p>
+    <label class="rt-field">
+      <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.020</span></span>
+      <input type="range" data-el="cageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
+    </label>
+    <label class="rt-field">
+      <span>Vers l'intérieur <span class="rt-num" data-el="cageInValue">0.020</span></span>
+      <input type="range" data-el="cageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
+    </label>
+
+    <p class="rt-sub">Atlas</p>
+    <label class="rt-field">
+      <span>Écart entre îlots <span class="rt-num" data-el="gutterValue">4</span></span>
+      <input type="range" data-el="gutter" min="0" max="32" step="1" value="4" />
+    </label>
+    <label class="rt-field">
+      <span>Bavure hors des îlots <span class="rt-num" data-el="bleedValue">8</span></span>
+      <input type="range" data-el="bleed" min="0" max="32" step="1" value="8" />
+    </label>
+    <label class="rt-field">
+      <span>Angle de rupture d'îlot <span class="rt-num" data-el="islandValue">50°</span></span>
+      <input type="range" data-el="island" min="10" max="120" step="1" value="50" />
+    </label>
+    <p class="rt-hint">Ce sont deux choses différentes et les deux comptent :
+      l'écart est du vide entre les îlots pour qu'aucun niveau de mip ne les
+      mélange, la bavure est de la couleur peinte au-delà de chaque bord pour
+      que le filtrage n'aille jamais chercher le fond.</p>
+  </div>
+  <p class="rt-hint" data-el="sourceNote"></p>
+</section>
 `;
 
 /** Triangles actually drawn, which is not the same as vertices. */
@@ -342,15 +327,29 @@ export function createRetopo({
   applyChannel,
   setWireframe,
   channels,
-  swapTexture,
+  showPane,
 }) {
   const host = document.createElement("div");
   host.id = "retopo";
   host.innerHTML = SHELL;
   document.getElementById("app").appendChild(host);
 
+  /*
+   * The parameters go into the shared panel, beside Vue, Matière and the rest,
+   * rather than into a panel of this mode's own. The pane and its tab button are
+   * already in the page as empty shells; filling them is the only thing that
+   * ever needed to be lazy.
+   */
+  const pane = document.getElementById("pane-retopo");
+  pane.innerHTML = PANEL;
+  const tab = document.querySelector('.tab[data-pane="retopo"]');
+
+  // Two roots, one map. Nothing is named twice across them, and a lookup that
+  // silently found nothing is what the static audit exists to catch.
   const el = {};
-  for (const node of host.querySelectorAll("[data-el]")) el[node.dataset.el] = node;
+  for (const root of [host, pane]) {
+    for (const node of root.querySelectorAll("[data-el]")) el[node.dataset.el] = node;
+  }
 
   // The icons are set from the map rather than written inline in the template,
   // so the same glyph cannot end up drawn two slightly different ways in two
@@ -393,351 +392,6 @@ export function createRetopo({
       "prévisibles autour d'une articulation. C'est ce que veut un modèle qui va se " +
       "déformer ou se subdiviser, et c'est aussi ce dont l'appairage en quads a besoin.",
   };
-
-  // --- tabs ---------------------------------------------------------------
-
-  function showTab(name) {
-    for (const t of host.querySelectorAll(".rt-tab")) {
-      t.classList.toggle("active", t.dataset.tab === name);
-    }
-    for (const p of host.querySelectorAll(".rt-page")) {
-      p.classList.toggle("active", p.dataset.tab === name);
-    }
-  }
-  for (const t of host.querySelectorAll(".rt-tab")) {
-    t.addEventListener("click", () => showTab(t.dataset.tab));
-  }
-
-  // --- seeing the quads ---------------------------------------------------
-
-  /**
-   * Borrow Albedo's materials list rather than build a second one.
-   *
-   * The inspector already has a row per material, every texture slot listed one
-   * at a time, replacement and restore, and `replaceMap` already does the part
-   * that costs an afternoon: the incoming texture inherits flipY, wrapping,
-   * repeat, offset, centre and rotation from the one it replaces, because those
-   * belong to the model's UVs and not to the image.
-   *
-   * So the section is *moved* here while the mode is open and handed straight
-   * back on close. Not copied: a second list would need its own handlers, its
-   * own repaint on model change, and would drift from the first one within a
-   * week. Moving a node keeps its listeners, and the repaint that targets it by
-   * id keeps finding it because the id came along.
-   *
-   * The two can never both want it, since opening either mode closes the other.
-   */
-  const borrowed = new Map();
-
-  /**
-   * Move a node here and remember where it came from.
-   *
-   * `find` runs at return time as well as at borrow time, because the node has
-   * to be looked up again rather than held: the inspector repaints its own
-   * contents and a stale reference would put back something that is no longer
-   * the thing.
-   */
-  function borrow(key, find, host) {
-    const node = find();
-    if (!node || borrowed.has(key)) return;
-    borrowed.set(key, { parent: node.parentNode, next: node.nextSibling });
-    host.appendChild(node);
-  }
-
-  function giveBack(key, find) {
-    const node = find();
-    const home = borrowed.get(key);
-    if (!node || !home) return;
-    home.parent.insertBefore(node, home.next);
-    borrowed.delete(key);
-  }
-
-  // `div.pane`, not merely `[data-pane]`: the nav button that *selects* the pane
-  // carries the same attribute, and grabbing it moves the tab instead of the
-  // contents — which looks like the borrow silently doing nothing.
-  const findView = () => document.querySelector('div.pane[data-pane="render"]');
-
-  function borrowPanes() {
-    // The whole render pane, not a copy of its parts: eleven channels, the
-    // wireframe, the grid, the bounding box, the skeleton, the exposure and the
-    // clipping, with every handler and every repaint still pointed at it.
-    borrow("view", findView, el.viewHost);
-  }
-
-  function returnPanes() {
-    giveBack("view", findView);
-  }
-
-  /**
-   * What the run is allowed to touch, as ids rather than flags on the objects.
-   *
-   * The scene is rebuilt on every import, so a flag would either be lost with it
-   * or, worse, survive onto a different model.
-   */
-  const picked = new Set();
-
-  /**
-   * Which branches are open.
-   *
-   * Meshes start open and materials start closed, because the first question is
-   * always "what parts are there" and the maps only matter once you have chosen
-   * one. Kept as ids, and kept across repaints: a tree that snaps shut every time
-   * you toggle an eye is a tree you stop using.
-   */
-  const opened = new Set();
-  let treeSeen = false;
-
-  /** A caret that opens a branch, or a spacer that keeps the column straight. */
-  function caret(id, has) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "rt-caret" + (has ? "" : " empty");
-    b.textContent = has ? (opened.has(id) ? "▾" : "▸") : "";
-    if (has) {
-      b.title = opened.has(id) ? "Replier" : "Déplier";
-      b.addEventListener("click", (e) => {
-        e.stopPropagation();
-        opened.has(id) ? opened.delete(id) : opened.add(id);
-        paintTree();
-      });
-    }
-    return b;
-  }
-
-  function paintTree() {
-    const meshes = readScene(viewer, channels);
-    // First paint of a model opens every mesh, so the shape of the file is
-    // visible without a single click.
-    if (!treeSeen && meshes.length) {
-      forgetPortraits();
-      for (const m of meshes) opened.add(m.id);
-      treeSeen = true;
-    }
-    el.tree.textContent = "";
-
-    for (const mesh of meshes) {
-      const group = document.createElement("div");
-      group.className = "rt-node";
-
-      const row = document.createElement("div");
-      row.className = "rt-row rt-mesh" + (picked.has(mesh.id) ? " picked" : "");
-      row.appendChild(caret(mesh.id, mesh.materials.length > 0));
-      // The mesh draws itself. On a file whose parts are called Object_12 through
-      // Object_47 this is the only thing that tells one row from another.
-      const face = portrait(viewer.renderer, mesh.node);
-      row.insertAdjacentHTML("beforeend",
-        (face
-          ? `<span class="rt-face" style="background-image:url(${face})"></span>`
-          : `<span class="rt-glyph">▦</span>`) +
-        `<span class="rt-name">${mesh.name}</span>` +
-        `<span class="rt-num">${fr(mesh.triangles)}</span>`);
-      row.title = `${mesh.name} — ${fr(mesh.triangles)} triangles`;
-      row.addEventListener("click", (e) => choose(mesh.id, e.ctrlKey || e.metaKey));
-
-      const eye = document.createElement("button");
-      eye.type = "button";
-      eye.className = "rt-eye" + (mesh.visible ? "" : " off");
-      eye.title = mesh.visible ? "Masquer ce maillage" : "Afficher ce maillage";
-      eye.textContent = mesh.visible ? "◉" : "◌";
-      eye.addEventListener("click", (e) => {
-        e.stopPropagation();
-        mesh.node.visible = !mesh.node.visible;
-        say2(`${mesh.name} ${mesh.node.visible ? "affiché" : "masqué"}`);
-        viewer.invalidate?.();
-        paintTree();
-      });
-      row.appendChild(eye);
-      group.appendChild(row);
-
-      if (!opened.has(mesh.id)) {
-        el.tree.appendChild(group);
-        continue;
-      }
-
-      for (const mat of mesh.materials) {
-        const mrow = document.createElement("div");
-        mrow.className =
-          "rt-row rt-mat" + (picked.has(mat.id) ? " picked" : "") + (mat.hidden ? " muted" : "");
-        // The material's own portrait: this mesh with every other material
-        // ghosted out, which says *where on the part* it sits. A colour swatch
-        // says "this one is blue"; that is a different and lesser fact.
-        const shown = mesh.materials.indexOf(mat);
-        const face2 = portrait(viewer.renderer, mesh.node, mesh.materials.length > 1 ? shown : -1);
-        const url = face2 || thumbnail(mat.material.map);
-        mrow.appendChild(caret(mat.id, mat.maps.length > 0));
-        mrow.insertAdjacentHTML("beforeend",
-          `<span class="${face2 ? "rt-face" : "mat-chip"}"${
-            url
-              ? ` style="background-image:url(${url})"`
-              : ` style="background:${mat.material.color ? "#" + mat.material.color.getHexString() : "#3a3f48"}"`
-          }></span>` +
-          `<span class="rt-name">${mat.name}</span>` +
-          `<span class="rt-num">${fr(mat.triangles)}</span>`);
-        mrow.title = `${mat.name} — ${fr(mat.triangles)} triangles`;
-        mrow.addEventListener("click", (e) => choose(mat.id, e.ctrlKey || e.metaKey));
-
-        const meye = document.createElement("button");
-        meye.type = "button";
-        meye.className = "rt-eye" + (mat.hidden ? " off" : "");
-        meye.title = mat.hidden ? "Afficher cette matière" : "Masquer cette matière";
-        meye.textContent = mat.hidden ? "◌" : "◉";
-        meye.addEventListener("click", (e) => {
-          e.stopPropagation();
-          channels?.setMaterialHidden?.(mat.id, !mat.hidden);
-          say2(`${mat.name} ${mat.hidden ? "affichée" : "masquée"}`);
-          viewer.invalidate?.();
-          paintTree();
-        });
-        mrow.appendChild(meye);
-        group.appendChild(mrow);
-
-        if (!opened.has(mat.id)) continue;
-
-        for (const map of mat.maps) {
-          const krow = document.createElement("div");
-          krow.className = "rt-row rt-map" + (map.hidden ? " muted" : "");
-          const kurl = thumbnail(map.texture, 18);
-          krow.innerHTML =
-            `<span class="mat-chip small"${kurl ? ` style="background-image:url(${kurl})"` : ""}></span>` +
-            `<span class="rt-name">${map.label}</span>`;
-          const keye = document.createElement("button");
-          keye.type = "button";
-          keye.className = "rt-eye" + (map.hidden ? " off" : "");
-          keye.textContent = map.hidden ? "◌" : "◉";
-          keye.title = map.hidden ? "Rebrancher cette carte" : "Débrancher cette carte";
-          keye.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const off = toggleMap(mat.material, map.slot);
-            say2(`${map.label} ${off ? "débranchée" : "rebranchée"}`);
-            viewer.invalidate?.();
-            paintTree();
-          });
-
-          // Replacing lives on the row of the map it replaces, rather than in a
-          // second list somewhere else that says the same things about the same
-          // slots. One place per idea.
-          const swap = document.createElement("button");
-          swap.type = "button";
-          swap.className = "rt-swap";
-          swap.textContent = "⇄";
-          swap.title = `Remplacer ${map.label}`;
-          swap.addEventListener("click", (e) => {
-            e.stopPropagation();
-            swapTexture?.(mat.id, map.slot);
-          });
-
-          const size = document.createElement("span");
-          size.className = "rt-num";
-          const img = map.texture?.image;
-          size.textContent = img?.width ? `${img.width}×${img.height}` : "";
-
-          krow.append(size, swap, keye);
-          group.appendChild(krow);
-        }
-      }
-      el.tree.appendChild(group);
-    }
-    paintSelection();
-    paintProperties(meshes);
-  }
-
-  /**
-   * The selected material, and the four numbers that actually change how it
-   * looks.
-   *
-   * Not a full material editor: the point here is the one thing a retopology
-   * needs, which is being able to turn a normal map's strength down to nothing
-   * and see whether the shape you are judging is geometry or a picture of
-   * geometry. Metalness and roughness come along because they are the two that
-   * make a surface unreadable when they are wrong, and a surface you cannot read
-   * is one you cannot judge.
-   */
-  function paintProperties(meshes) {
-    const mat = meshes
-      .flatMap((m) => m.materials)
-      .find((m) => picked.has(m.id))?.material;
-    el.props.hidden = !mat;
-    if (!mat) return;
-
-    el.propName.textContent = mat.name || "(sans nom)";
-    const rows = [
-      ["Métal", "metalness", 0, 1, 0.01],
-      ["Rugosité", "roughness", 0, 1, 0.01],
-      ["Normale", "normalScale", 0, 2, 0.05],
-      ["Émissif", "emissiveIntensity", 0, 4, 0.05],
-    ].filter(([, key]) => key in mat && mat[key] !== undefined && mat[key] !== null);
-
-    el.propRows.textContent = "";
-    for (const [label, key, min, max, step] of rows) {
-      const field = document.createElement("label");
-      field.className = "rt-field";
-      const head = document.createElement("span");
-      // normalScale is a Vector2 and the others are numbers, so the value is
-      // read and written through the one axis that matters rather than assuming.
-      const get = () => (key === "normalScale" ? mat[key].x : mat[key]);
-      head.innerHTML = `<span>${label}</span><span class="rt-num">${get().toFixed(2)}</span>`;
-      const input = document.createElement("input");
-      input.type = "range";
-      input.min = min;
-      input.max = max;
-      input.step = step;
-      input.value = get();
-      input.addEventListener("input", () => {
-        const v = Number(input.value);
-        if (key === "normalScale") mat[key].set(v, v);
-        else mat[key] = v;
-        head.lastChild.textContent = v.toFixed(2);
-        viewer.invalidate?.();
-      });
-      field.append(head, input);
-      el.propRows.appendChild(field);
-    }
-  }
-
-  function choose(id, add) {
-    if (!add) {
-      const alone = picked.size === 1 && picked.has(id);
-      picked.clear();
-      if (!alone) picked.add(id);
-    } else if (picked.has(id)) {
-      picked.delete(id);
-    } else {
-      picked.add(id);
-    }
-    paintTree();
-  }
-
-  function paintSelection() {
-    el.selCount.textContent = picked.size
-      ? `${picked.size} sélectionné${picked.size > 1 ? "s" : ""}`
-      : "Rien de sélectionné";
-    el.selIsolate.disabled = picked.size === 0;
-  }
-
-  /**
-   * Hide everything that is not selected.
-   *
-   * The fastest way to answer "is this the part I think it is", and the fastest
-   * way to set up a restricted run: isolate, look, decimate the visible.
-   */
-  function isolate() {
-    if (!picked.size) return;
-    const meshes = readScene(viewer, channels);
-    let hidden = 0;
-    for (const mesh of meshes) {
-      const keepMesh = picked.has(mesh.id) || mesh.materials.some((m) => picked.has(m.id));
-      mesh.node.visible = keepMesh;
-      if (!keepMesh) hidden++;
-      for (const mat of mesh.materials) {
-        // A material is kept when it is picked itself, or when its whole mesh is.
-        const keep = picked.has(mesh.id) || picked.has(mat.id);
-        channels?.setMaterialHidden?.(mat.id, !keep);
-      }
-    }
-    say2(`Isolé : ${hidden} maillage${hidden > 1 ? "s" : ""} masqué${hidden > 1 ? "s" : ""}`);
-    viewer.invalidate?.();
-    paintTree();
-  }
 
   /** The drawn bake cage, rebuilt with each result. */
   let cage = null;
@@ -918,15 +572,19 @@ export function createRetopo({
   }
 
   /*
-   * The bar follows the borrowed pane.
+   * The bar follows the Vue pane, which is the same state said twice.
    *
-   * Both are now ways of picking the same thing, and the one you are not looking
-   * at is the one that goes stale. Rather than route the pane's clicks through
-   * this module, the bar simply re-reads which channel Albedo says is active
-   * after any click inside the pane: one source of truth, and no assumption
-   * about how the inspector chooses to mark it.
+   * The bar shows the handful of channels reached for constantly while judging a
+   * result; the pane shows all eleven. They are two ways of picking one thing,
+   * and the one you are not looking at is the one that goes stale. Rather than
+   * route the pane's clicks through this module, the bar re-reads which channel
+   * Albedo says is active after any click in the grid: one source of truth, and
+   * no assumption about how the panel chooses to mark it.
+   *
+   * The grid is looked up now rather than held, because it is rebuilt from
+   * `CHANNELS` at startup and this module arrives long after.
    */
-  el.viewHost.addEventListener("click", () => {
+  document.getElementById("channels")?.addEventListener("click", () => {
     const live = document.querySelector("#channels .active")?.dataset.id;
     if (!live) return;
     // A data view is this module's own and no channel button can mean it, so
@@ -1217,7 +875,10 @@ export function createRetopo({
    */
   function measureBar() {
     const h = Math.ceil(el.bar.getBoundingClientRect().height);
-    if (h > 0) host.style.setProperty("--rt-bar-h", `${h}px`);
+    // On the document root rather than on the host, because the reader is now
+    // `#inspector`, which is not a descendant of this mode's host: a custom
+    // property set on the host would never reach it.
+    if (h > 0) document.documentElement.style.setProperty("--rt-bar-h", `${h}px`);
   }
   if (typeof ResizeObserver === "function") {
     new ResizeObserver(measureBar).observe(el.bar);
@@ -1488,9 +1149,23 @@ export function createRetopo({
       (atlas.length
         ? `<p class="rt-stats-head">Atlas</p><div class="rt-stats">${paint(atlas)}</div>`
         : "");
-    showTab("result");
+    showReport();
   }
 
+  /**
+   * Bring the report forward.
+   *
+   * The section is absent until there is something in it, so an untouched model
+   * opens the pane on Méthode, which is where anyone would start. Once a run has
+   * happened it is the first thing in the column, because it is the first thing
+   * you look at, and it takes the pane with it: a result written into a panel
+   * showing another subject is a result nobody reads.
+   */
+  function showReport() {
+    el.resultSection.hidden = false;
+    showPane?.("retopo");
+    el.resultSection.scrollIntoView({ block: "nearest" });
+  }
 
   /** The bar, the fill and the note, in one place so they cannot disagree. */
   function say(text, fraction) {
@@ -1504,8 +1179,8 @@ export function createRetopo({
    *
    * It used to be written into the report at the bottom of a long scrolling
    * panel, where a run that failed looked exactly like a button that did
-   * nothing. Now it goes to the bar, to a toast, to its own line on the Résultat
-   * tab, to that tab being brought forward, and to the console.
+   * nothing. Now it goes to the bar, to a toast, to its own line at the top of
+   * the Bilan block, to that block being brought forward, and to the console.
    */
   function fail(e) {
     const text = String(e?.message || e);
@@ -1520,7 +1195,7 @@ export function createRetopo({
     console.error("[retopo]", e);
     el.err.textContent = text;
     el.err.hidden = false;
-    showTab("result");
+    showReport();
     say("");
     toast?.("La retopologie a échoué", 2600);
   }
@@ -1565,7 +1240,7 @@ export function createRetopo({
       const source = channels?.original?.get(o) ?? o.material;
       const mats = (Array.isArray(source) ? source : [source]).filter(Boolean);
       if (scope === "picked") {
-        return picked.has(o.uuid) || mats.some((m) => picked.has(m.uuid));
+        return selection.has(o.uuid) || mats.some((m) => selection.has(m.uuid));
       }
       const hidden = new Set(
         (channels?.materials?.() || []).filter((m) => m.hidden).map((m) => m.uuid)
@@ -1575,7 +1250,7 @@ export function createRetopo({
       return !mats.length || !mats.every((m) => hidden.has(m.uuid));
     };
 
-    if (scope === "picked" && !picked.size) return fn();
+    if (scope === "picked" && !selection.size) return fn();
 
     const touched = [];
     viewer.root.traverse((o) => {
@@ -1760,22 +1435,36 @@ export function createRetopo({
    * under the cursor, and there is nothing to hunt for while a long decimation
    * is grinding.
    */
-  for (const b of host.querySelectorAll("[data-scope]")) {
+  /*
+   * What the chosen scope currently amounts to, written down rather than
+   * announced once and gone.
+   *
+   * It used to be a toast fired on the click, which is the wrong place for it:
+   * the selection and the hiding both live in another tab now, so the number
+   * this control depends on moves while you are not looking at this control. A
+   * line under the segment that follows both is the only version that cannot be
+   * out of date.
+   */
+  function paintScope() {
+    const hidden = (channels?.materials?.() || []).filter((m) => m.hidden).length;
+    const n = selection.size;
+    el.scopeHint.textContent =
+      scope === "picked"
+        ? n
+          ? `${n} élément${n > 1 ? "s" : ""} sélectionné${n > 1 ? "s" : ""} dans l'onglet Scène.`
+          : "Rien de sélectionné dans l'onglet Scène : la portée ne change rien."
+        : scope === "visible"
+          ? hidden
+            ? `${hidden} matière${hidden > 1 ? "s" : ""} masquée${hidden > 1 ? "s" : ""}, laissée${hidden > 1 ? "s" : ""} tranquille.`
+            : "Aucune matière masquée : la portée ne change rien."
+          : "Tout le modèle, sans exception.";
+  }
+
+  for (const b of pane.querySelectorAll("[data-scope]")) {
     b.addEventListener("click", () => {
-      for (const o of host.querySelectorAll("[data-scope]")) o.classList.toggle("active", o === b);
+      for (const o of pane.querySelectorAll("[data-scope]")) o.classList.toggle("active", o === b);
       scope = b.dataset.scope;
-      const hidden = (channels?.materials?.() || []).filter((m) => m.hidden).length;
-      say2(
-        scope === "picked"
-          ? picked.size
-            ? `${picked.size} élément${picked.size > 1 ? "s" : ""} sélectionné${picked.size > 1 ? "s" : ""}`
-            : "Rien de sélectionné : la portée ne change rien"
-          : scope === "visible"
-            ? hidden
-              ? `${hidden} matière${hidden > 1 ? "s" : ""} laissée${hidden > 1 ? "s" : ""} tranquille${hidden > 1 ? "s" : ""}`
-              : "Aucune matière masquée : la portée ne change rien"
-            : "Tout le modèle"
-      );
+      paintScope();
     });
   }
 
@@ -1789,19 +1478,6 @@ export function createRetopo({
   });
 
   el.devScale.addEventListener("input", syncDevScale);
-  el.selClear.addEventListener("click", () => {
-    // Everything visible again, and nothing selected: the way back from any
-    // amount of isolating and hiding, in one button.
-    for (const mesh of readScene(viewer, channels)) {
-      mesh.node.visible = true;
-      for (const mat of mesh.materials) channels?.setMaterialHidden?.(mat.id, false);
-    }
-    picked.clear();
-    viewer.invalidate?.();
-    paintTree();
-    say2("Tout affiché");
-  });
-  el.selIsolate.addEventListener("click", isolate);
 
   el.showCage.addEventListener("change", () => {
     syncCage();
@@ -1818,6 +1494,7 @@ export function createRetopo({
   el.rebake.addEventListener("click", rebake);
   el.close.addEventListener("click", () => api.hide());
   setMethod("decimate");
+  paintScope();
 
   const api = {
     get open() {
@@ -1829,9 +1506,11 @@ export function createRetopo({
       // The layout outside this module has to know, because the library sizes
       // the viewport and a retopology cannot be judged in a preview strip.
       document.body.classList.add("retopo-open");
-      borrowPanes();
+      // The tab exists only while the mode does. A tab that opens a pane full of
+      // controls driving a mode that is shut is a tab that lies.
+      if (tab) tab.hidden = false;
       dressScene();
-      paintTree();
+      paintScope();
       onOpenChange?.(true);
       syncViewport();
       refresh();
@@ -1842,14 +1521,16 @@ export function createRetopo({
     hide() {
       open = false;
       host.classList.remove("open");
-      returnPanes();
       document.body.classList.remove("retopo-open");
+      if (tab) tab.hidden = true;
       onOpenChange?.(false);
     },
     toggle() {
       open ? api.hide() : api.show();
     },
     refresh,
+    /** The shared selection moved: only the scope line depends on it. */
+    onSelection: paintScope,
   };
   return api;
 }

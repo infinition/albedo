@@ -93,12 +93,28 @@
 
       <!-- Inspector --------------------------------------------------------->
       <aside id="inspector" aria-hidden="true">
-        <nav id="tabs" class="tabs" role="tablist" aria-label="Sections de l'inspecteur">
-          <button class="tab active" type="button" data-pane="render" title="Rendu" aria-label="Rendu">
+        <!--
+          One tab bar, always in the same place, whatever mode is on.
+
+          The panes are attached to what you are looking at rather than to a
+          mode: "which materials are in this model" is the same question whether
+          you are inspecting it or decimating it, so it does not deserve two
+          answers in two navigations. Retopo is the only tab that comes and goes,
+          because its contents do not exist until the mode is opened for the
+          first time — this executable is also the Explorer thumbnail provider.
+        -->
+        <nav id="tabs" class="tabs" role="tablist" aria-label="Sections du panneau">
+          <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
+          </button>
+          <button class="tab active" type="button" data-pane="view" title="Vue" aria-label="Vue">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="matter" title="Matières" aria-label="Matières">
+          <button class="tab" type="button" data-pane="matter" title="Matière" aria-label="Matière">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M7 15a7 7 0 0 1 8-6" /></svg>
+          </button>
+          <button class="tab" type="button" data-pane="retopo" title="Retopo" aria-label="Retopo" hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
           </button>
           <button class="tab" type="button" data-pane="camera" title="Caméra" aria-label="Caméra">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4v8l6 4" /></svg>
@@ -112,12 +128,24 @@
           <button class="tab" type="button" data-pane="photo" title="Photo" aria-label="Photo">
             <svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
-          <button class="tab" type="button" data-pane="scene" title="Scène" aria-label="Scène">
-            <svg viewBox="0 0 24 24"><path d="M4 6h16M8 12h12M12 18h8M4 12h.01M8 18h.01" /></svg>
+          <button class="tab" type="button" data-pane="object" title="Objet" aria-label="Objet">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /><path d="M10 7l2-2 2 2M10 17l2 2 2-2M7 10l-2 2 2 2M17 10l2 2-2 2" /></svg>
           </button>
         </nav>
 
-        <div class="pane active" data-pane="render">
+        <!--
+          The scene tree, and the only pane whose contents are fetched rather
+          than written here: it draws a portrait per mesh through the renderer,
+          which is work no thumbnail process should ever start.
+        -->
+        <div class="pane" data-pane="scene">
+          <div id="scene-tree"></div>
+        </div>
+
+        <!-- Filled by the Retopo module on its first open, and never before. -->
+        <div class="pane" data-pane="retopo" id="pane-retopo"></div>
+
+        <div class="pane active" data-pane="view">
         <section>
           <h2>Canaux</h2>
           <div class="grid" id="channels"></div>
@@ -396,7 +424,7 @@
         </section>
         </div>
 
-        <div class="pane" data-pane="scene">
+        <div class="pane" data-pane="object">
         <section>
           <h2>Édition</h2>
           <div class="segment" role="group" aria-label="Outil de transformation">
