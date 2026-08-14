@@ -556,7 +556,10 @@ window.addEventListener("resize", () => {
  */
 for (const b of document.querySelectorAll("[data-vb-ch]")) {
   b.addEventListener("click", () => {
-    applyChannel(b.dataset.vbCh);
+    // Clay is a click away from Peint and a click back: the neutral gray is a
+    // look you pass through to reach the painted texture, not a place to stay.
+    const id = b.dataset.vbCh === "clay" && currentChannel === "clay" ? "unlit" : b.dataset.vbCh;
+    applyChannel(id);
     paintViewbar();
   });
 }

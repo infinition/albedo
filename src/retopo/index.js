@@ -105,15 +105,17 @@ const BAR_LAYERS = `
 const BAR_SCENE = `
 <div class="tb-group">
   <span class="tb-label">Scène</span>
-  <div class="tb-plate" role="radiogroup" aria-label="Ce qui est dans la scène">
-    <button class="tb-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
-    <button class="tb-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
-    <button class="tb-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
-    <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
-    <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
+  <div class="tb-row">
+    <div class="tb-plate" role="radiogroup" aria-label="Ce qui est dans la scène">
+      <button class="tb-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
+      <button class="tb-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
+      <button class="tb-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
+      <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
+      <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
+    </div>
+    <button class="tb-i tb-t" type="button" data-el="peek" data-icon="peek" aria-pressed="false"
+            title="Maintenir pour voir la source, relâcher pour le résultat (X)"></button>
   </div>
-  <button class="tb-i tb-t" type="button" data-el="peek" data-icon="peek" aria-pressed="false"
-          title="Maintenir pour voir la source, relâcher pour le résultat (X)"></button>
 </div>
 `;
 
