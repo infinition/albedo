@@ -464,6 +464,14 @@ Decisions taken:
       triangles carry two bits, which is 2,705 quads over 63 % of the surface,
       the two numbers the engine reported on its own. 20,390 edges instead of
       25,800.
+- [x] **Undo and redo over results.** A twenty second computation you cannot take
+      back is a computation you stop experimenting with, which is the opposite of
+      what a panel full of sliders is for. The history holds *paths*, not meshes:
+      `removePart` disposes the geometry and textures it removes, and it is right
+      to, so keeping every result resident to make redo cheap would mean holding
+      a dozen copies of a model in memory to avoid re-reading a file still
+      sitting in the work directory. A new run truncates anything ahead of the
+      cursor rather than leaving a redo that jumps to an unrelated result.
 - [ ] Do the same for a result with no pairing, where the wire toggle still falls
       back to Albedo's generic wireframe. It is the right fallback, but the two
       paths look different for a reason no one will remember.

@@ -270,6 +270,9 @@ const SHELL = `
   <label class="rt-switch" title="Reprojeter les textures de la source sur le résultat">
     <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
   </label>
+  <button type="button" data-el="undo" title="Annuler le dernier résultat" disabled>↶</button>
+  <button type="button" data-el="redo" title="Refaire" disabled>↷</button>
+  <span class="rt-note" data-el="history"></span>
   <button class="wide" type="button" data-el="run">Décimer</button>
   <button class="wide" type="button" data-el="rebake" disabled
           title="Refaire seulement les cartes, sans retoucher la géométrie">Cuire</button>
@@ -324,6 +327,21 @@ export function createRetopo({
   let scope = "all";
   /** The two files the last run left behind, so a bake can be redone alone. */
   let lastRun = null;
+
+  /**
+   * Results, in order, so a run can be taken back.
+   *
+   * A twenty second computation you cannot undo is a computation you stop
+   * experimenting with, which is the opposite of what a tool full of sliders is
+   * for. The history holds paths rather than meshes because `removePart`
+   * disposes the geometry and textures it took out, and it is right to: keeping
+   * every result resident to make redo cheap would mean holding a dozen copies
+   * of a model in memory to save re-reading a file that is still sitting in the
+   * work directory.
+   */
+  let history = [];
+  /** Index of the result currently in the scene, or -1 for the bare source. */
+  let cursor = -1;
 
   const METHOD_HINT = {
     decimate:
@@ -696,6 +714,7 @@ export function createRetopo({
       : source === 0
         ? "Ouvre un modèle d'abord"
         : "";
+    paintHistory();
     el.rebake.disabled = !lastRun || running || !tauri;
     el.rebake.title = lastRun
       ? "Refaire seulement les cartes, sans retoucher la géométrie"
@@ -990,6 +1009,11 @@ export function createRetopo({
       // Both files stay named, so the bake can be redone on its own without
       // touching the geometry again.
       lastRun = { high: input, low: dirs.output };
+      // Anything ahead of the cursor is a branch nobody took; a new run replaces
+      // it rather than leaving a redo that would jump to an unrelated result.
+      history = history.slice(0, cursor + 1);
+      history.push({ path: dirs.output, high: input, report: r });
+      cursor = history.length - 1;
       await dressResult(viewer.parts.at(-1)?.object, dirs.output);
       reportOn(r);
 
@@ -1076,6 +1100,9 @@ export function createRetopo({
       scope = b.dataset.scope;
     });
   }
+
+  el.undo.addEventListener("click", () => step(-1));
+  el.redo.addEventListener("click", () => step(1));
 
   el.showCage.addEventListener("change", syncCage);
   el.cageOut.addEventListener("input", syncCage);
