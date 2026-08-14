@@ -108,7 +108,20 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
     tri += count / 3;
     // Vertices are counted in the *engine's* numbering, not the expanded one, so
     // a second mesh starts where the first one's own vertices ended.
-    vert += before ? Math.max(...source) + 1 : count;
+    /*
+     * A loop, and not `Math.max(...source)`.
+     *
+     * The spread turns every entry of the index buffer into a separate function
+     * argument, so a nine hundred thousand triangle mesh calls `Math.max` with
+     * 2.7 million of them and overflows the stack. It works on every small model
+     * you test with and dies on the first real one, which is the worst shape a
+     * bug can have.
+     */
+    let highest = 0;
+    for (let i = 0; i < source.length; i++) {
+      if (source[i] > highest) highest = source[i];
+    }
+    vert += before ? highest + 1 : count;
   });
   return tri;
 }

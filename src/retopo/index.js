@@ -500,7 +500,14 @@ export function createRetopo({
     // The scale is set from the run's own worst deviation, so the ramp spans the
     // data instead of an arbitrary range: a model that barely moved should still
     // show where it moved most.
-    devMax = dev?.length ? Math.max(...dev) : 0;
+    // Also a loop, and for the same reason: deviation is one float per vertex,
+    // so spreading it hands `Math.max` an argument per vertex of the result.
+    devMax = 0;
+    if (dev) {
+      for (let i = 0; i < dev.length; i++) {
+        if (dev[i] > devMax) devMax = dev[i];
+      }
+    }
     syncDevScale();
     applyWire(object, wireU, mask, charts, dev);
     // The source gets the same treatment, with no mask: without it the curtain
