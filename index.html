@@ -112,6 +112,14 @@
                       title="Fil de fer par-dessus la surface (W)">
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg>
               </button>
+              <!-- Lines only, no surface. The overlay beside it answers "is the
+                   silhouette still right"; this one answers "what is behind
+                   this", which no amount of shading can. Its colour comes from
+                   the material itself, so it follows whatever channel is on. -->
+              <button class="icon" id="vb-wire-only" type="button" aria-pressed="false"
+                      title="Fil de fer seul, sans les faces">
+                <svg viewBox="0 0 24 24"><path d="M12 2.5 21 7v10l-9 4.5L3 17V7z"/><path d="M12 2.5v19M3 7l9 4.5L21 7M3 17l9-4.5 9 4.5"/></svg>
+              </button>
               <button class="icon" id="vb-wire-dark" type="button" aria-pressed="false" hidden
                       title="Traits sombres plutôt que clairs">
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" stroke="none" opacity="0.85"/><path d="M12 3v18M3 12h18" stroke="#15171b"/></svg>

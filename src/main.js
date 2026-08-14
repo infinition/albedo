@@ -553,6 +553,33 @@ $("vb-wire").addEventListener("click", async () => {
   paintViewbar();
 });
 
+/*
+ * Lines only, the classic `material.wireframe`.
+ *
+ * It was taken out because it competed with the overlay and won by destroying
+ * the surface. It has its own question though, and the overlay cannot answer it:
+ * the overlay says whether the silhouette survived, this one says what is
+ * *behind* the near face. Both, side by side, rather than one pretending to be
+ * the other.
+ *
+ * The colour is free. A wireframe material draws in its own colour, and under an
+ * inspection channel the material is that channel's stand-in, so the lines come
+ * out in albedo, or in normals, without a line of code asking them to.
+ */
+$("vb-wire-only").addEventListener("click", () => {
+  const on = $("vb-wire-only").getAttribute("aria-pressed") !== "true";
+  $("vb-wire-only").setAttribute("aria-pressed", String(on));
+  $("vb-wire-only").classList.toggle("active", on);
+  viewer.root.traverse((o) => {
+    if (!o.isMesh && !o.isSkinnedMesh) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (m && "wireframe" in m) m.wireframe = on;
+    }
+  });
+  viewer.invalidate();
+  toast(on ? "Fil de fer seul" : "Faces rendues");
+});
+
 $("vb-wire-dark").addEventListener("click", async () => {
   const dark = $("vb-wire-dark").getAttribute("aria-pressed") !== "true";
   $("opt-wire-dark").checked = dark;
