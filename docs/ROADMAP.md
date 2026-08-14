@@ -127,6 +127,7 @@ invisible is the reusable part.
 | A dead band down the right edge | `#inspector` is a child of `#stage`, so shrinking the stage to stop the canvas at the panel moved the panel left by the same amount |
 | The canvas drawn behind the library | Same cause, other axis: the preview strip is width plus a right anchor, and the panel moved the anchor without narrowing the width |
 | The Scène comparison buttons in the bar did nothing | The group lives in a detached `held` div until the mode opens and moves to the shared bar as the same nodes. The listener loop queried `host` (`#retopo`), which never contains them, so no listener ever attached. A button with no listener throws nothing, and the active highlight would have had to re-find the buttons in the bar at click time either way |
+| "Fil de fer seul" vanished on every channel but the one it was clicked on | The button wrote `material.wireframe` on the materials then current. A channel change handed out fresh stand-ins with the property at its default, so the lines reappeared only when the original surfaced again. The state now lives in the overlay as a uniform, where the channel system cannot lose it, and it takes the same light or dark colour as the overlay |
 
 ### Measurement Pitfalls, Verified
 

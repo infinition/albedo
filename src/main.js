@@ -554,29 +554,19 @@ $("vb-wire").addEventListener("click", async () => {
 });
 
 /*
- * Lines only, the classic `material.wireframe`.
+ * Lines only, as a mode of the overlay.
  *
- * It was taken out because it competed with the overlay and won by destroying
- * the surface. It has its own question though, and the overlay cannot answer it:
- * the overlay says whether the silhouette survived, this one says what is
- * *behind* the near face. Both, side by side, rather than one pretending to be
- * the other.
- *
- * The colour is free. A wireframe material draws in its own colour, and under an
- * inspection channel the material is that channel's stand-in, so the lines come
- * out in albedo, or in normals, without a line of code asking them to.
+ * It used to be `material.wireframe`, which replaced the surface with lines and
+ * so fought the overlay and vanished on any channel that handed out a fresh
+ * stand-in: on in the shaded view, off in the next channel over. As an overlay
+ * uniform it survives every channel and takes the light or dark colour, and the
+ * master switch (W) turns the whole thing off and back on in whatever style was
+ * armed.
  */
+let wireOnlyOn = false;
 $("vb-wire-only").addEventListener("click", () => {
   const on = $("vb-wire-only").getAttribute("aria-pressed") !== "true";
-  $("vb-wire-only").setAttribute("aria-pressed", String(on));
-  $("vb-wire-only").classList.toggle("active", on);
-  viewer.root.traverse((o) => {
-    if (!o.isMesh && !o.isSkinnedMesh) return;
-    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-      if (m && "wireframe" in m) m.wireframe = on;
-    }
-  });
-  viewer.invalidate();
+  setWireOnly(on);
   toast(on ? "Fil de fer seul" : "Faces rendues");
 });
 
@@ -587,6 +577,29 @@ $("vb-wire-dark").addEventListener("click", async () => {
   viewer.invalidate();
   paintViewbar();
 });
+
+/**
+ * Lines only, through the overlay.
+ *
+ * "Only lines" implies lines: turning it on brings the master switch up with
+ * it. The style is remembered rather than owned by the master, so W turns the
+ * whole wire off and back on in whatever style was armed. The state lives here,
+ * so the bar can repaint it, rather than on the materials, which is what made
+ * the old version leak from one channel to the next.
+ */
+async function setWireOnly(on, remember = true) {
+  wireOnlyOn = on;
+  $("vb-wire-only").setAttribute("aria-pressed", String(on));
+  $("vb-wire-only").classList.toggle("active", on);
+  if (on && !$("opt-wireframe").checked) await setWireframe(true, remember);
+  // The uniform lives on the overlay, so the overlay has to exist before it can
+  // be set: on a restore where the master is on but the overlay was never woken,
+  // `channels.setWireOnly` would silently find no wire and set nothing.
+  if (on) await wakeWire();
+  channels.setWireOnly(on);
+  if (remember) prefs.set("wireOnly", on);
+  paintViewbar();
+}
 
 /**
  * Read the bar's state back from the controls it drives.
@@ -675,6 +688,12 @@ function paintViewbar() {
   const dark = $("opt-wire-dark").checked;
   $("vb-wire-dark").setAttribute("aria-pressed", String(dark));
   $("vb-wire-dark").classList.toggle("active", dark);
+  // The lines only mode is the overlay's other half, lit only while the master
+  // is on: the button says what is actually drawing, and the armed style comes
+  // back with the master (W) instead of being forgotten.
+  const only = wireOnlyOn && on;
+  $("vb-wire-only").setAttribute("aria-pressed", String(only));
+  $("vb-wire-only").classList.toggle("active", only);
 }
 
 viewer.alsoKeep = () => {
@@ -1783,6 +1802,7 @@ async function setWireframe(on, remember = true) {
   channels.setWireframe(on);
   retopo?.onWireframe?.(on);
   if (remember) prefs.set("wireframe", on);
+  paintViewbar();
 }
 
 $("opt-wireframe").addEventListener("change", (e) => setWireframe(e.target.checked));
@@ -2512,6 +2532,7 @@ function applyPrefs() {
   viewer.setSkeleton(p.skeleton);
   $("opt-wire-dark").checked = p.wireDark;
   setWireframe(p.wireframe, false);
+  setWireOnly(p.wireOnly, false);
   $("opt-exposure").value = String(p.exposure);
   viewer.setExposure(p.exposure);
   $("opt-fov").value = String(p.fov);

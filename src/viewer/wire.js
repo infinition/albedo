@@ -145,6 +145,10 @@ export function makeWireUniforms() {
     uDevScale: { value: 1 },
     uXray: { value: 0 },
     uWire: { value: 0 },
+    // Lines only: the surface goes away and only the edges stay. A mode of the
+    // same overlay, sharing its colour and its master switch, rather than the
+    // old `material.wireframe` that replaced the surface.
+    uWireOnly: { value: 0 },
     // Near black rather than black: a pure 0 reads as a hole against a dark
     // surface, where a hair of light still says "line".
     uWireColor: { value: new THREE.Color(0.03, 0.03, 0.04) },
@@ -193,6 +197,7 @@ varying vec3 vRtNormal;
 const FRAG_HEAD = /* glsl */ `
 uniform float uWire;
 uniform vec3 uWireColor;
+uniform float uWireOnly;
 uniform float uQuads;
 uniform float uSplit;
 uniform float uSide;
@@ -311,7 +316,16 @@ if (uWire > 0.0) {
     if ((m & 1) == 0) a.z = 1.0;
   }
   float edge = 1.0 - min(min(a.x, a.y), a.z);
-  gl_FragColor.rgb = mix(gl_FragColor.rgb, uWireColor, edge * uWire * 0.85);
+  if (uWireOnly > 0.5) {
+    // Lines only: throw the surface away and keep the edge, in the same colour
+    // as the overlay. Discarding rather than fading keeps this a mode of the
+    // one system rather than a second kind of material, and the line comes out
+    // in the light or dark choice the master switch already makes.
+    if (edge < 0.35) discard;
+    gl_FragColor = vec4(uWireColor, 1.0);
+  } else {
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, uWireColor, edge * uWire * 0.85);
+  }
 }
 `;
 

@@ -29,6 +29,8 @@ export const DEFAULTS = {
   bounds: false,
   skeleton: false,
   wireframe: false,
+  /** Only the lines, no surface: a mode of the same overlay. */
+  wireOnly: false,
   /** Dark lines rather than light ones: neither works on every model. */
   wireDark: false,
   exposure: 1,

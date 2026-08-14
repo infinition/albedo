@@ -501,4 +501,17 @@ export class ChannelView {
     if (this.wire) this.wire.uniforms.uWire.value = on ? 1 : 0;
     this.viewer.invalidate();
   }
+
+  /**
+   * Draw the edges and nothing else.
+   *
+   * The other half of the same overlay: the surface goes away, only the lines
+   * stay, in the colour the master switch already chose. As a uniform rather
+   * than `material.wireframe` it survives a channel change, which a property on
+   * the current material never did.
+   */
+  setWireOnly(on) {
+    if (this.wire) this.wire.uniforms.uWireOnly.value = on ? 1 : 0;
+    this.viewer.invalidate();
+  }
 }
