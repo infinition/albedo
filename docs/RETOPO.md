@@ -110,11 +110,13 @@ discovered late.
   over the shaded surface in one pass with no second geometry.
 - **The bake cage as a shell.** [x] Pushed along its own normals in the vertex
   shader, translucent, live under the slider.
-- **The deviation heatmap.** [ ] Per vertex distance from the source, measured
-  through the BVH. Still the largest of the three, and now the only one left: the
-  other two needed a mask and a uniform, this one needs a number *per vertex* out
-  of the engine, a transport for it, and a scale control beside it. The engine
-  computes the number already; nothing carries it across.
+- **The deviation heatmap.** [x] Per vertex distance from the source, through the
+  BVH. The engine had been writing it beside every result from the start and
+  nothing was reading it. Measured on the test model: 5,254 vertices, worst
+  0.004327, mean 0.000620, 99 % of them moved at all.
+
+**All three are done.** The cost of the integration, named at the top of this
+document before any of it was written, has been paid in full.
 
 Everything else in plancton's viewer is either already in Albedo and better
 (eleven unlit inspection channels against one unlit mode) or is a three.js
