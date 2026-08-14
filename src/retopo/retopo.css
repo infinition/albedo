@@ -96,7 +96,17 @@ body.peeking.retopo-open { --peek: 50%; }
 
 .rt-panel {
   position: absolute;
-  top: var(--rt-edge);
+  /*
+   * Below Albedo's own top right cluster, exactly as the column on the left
+   * passes under the top left one.
+   *
+   * At `--rt-edge` the panel landed square on top of the library, viewer, menu
+   * and fullscreen buttons, so opening the mode was a one way door: the only way
+   * out was the Fermer button at the far bottom of the panel. A mode you cannot
+   * leave by the control you entered it with is a trap, and this one was
+   * invisible because the buttons were still there, just underneath.
+   */
+  top: calc(var(--gap, 14px) + 48px);
   right: var(--rt-edge);
   /* The bar measures itself and publishes the number; see index.js. */
   bottom: calc(var(--gap, 14px) + var(--rt-bar-h, 54px) + 10px);
