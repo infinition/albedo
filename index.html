@@ -132,22 +132,24 @@
         -->
         <div class="ov ov-view" id="viewbar">
           <div class="tb-group">
-            <span class="tb-label" data-i18n="bar.couleur">Couleur</span>
             <!--
-              One toggle and one plate. The toggle is the look (smooth or one flat
-              colour per face), which is a property of the lit surface rather than
-              a channel; the plate is which channel is on, exactly one lit.
+              A row carries the name and the look toggle on one line, then the
+              plate below: the look (smooth or one flat colour per face) is a
+              property of the lit surface, the plate is which channel is on.
 
               "Handpainted" and "Unlit" were two names for this list's second
               entry and they are gone: what the button does is show the texture
               with no light on it, which is what a hand painted model is authored
               to look like, so it says Peint once.
             -->
-            <button class="tb-i tb-t" id="vb-flat" type="button" aria-pressed="false"
-                    data-i18n-title="bar.flat"
-                    title="Ombrage simple : une teinte par face, pour lire la topologie">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.4 13.6 5.4 8 8.4 2.4 5.4z" fill="currentColor" opacity="0.45"/><path d="M8 8.4 13.6 5.4 13.6 11.4 8 14.4z" fill="currentColor" opacity="0.25"/><path d="M8 8.4 2.4 5.4 2.4 11.4 8 14.4z" fill="currentColor" opacity="0.7"/></svg>
-            </button>
+            <div class="tb-row">
+              <span class="tb-label" data-i18n="bar.couleur">Couleur</span>
+              <button class="tb-i tb-t" id="vb-flat" type="button" aria-pressed="false"
+                      data-i18n-title="bar.flat"
+                      title="Ombrage simple : une teinte par face, pour lire la topologie">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.4 13.6 5.4 8 8.4 2.4 5.4z" fill="currentColor" opacity="0.45"/><path d="M8 8.4 13.6 5.4 13.6 11.4 8 14.4z" fill="currentColor" opacity="0.25"/><path d="M8 8.4 2.4 5.4 2.4 11.4 8 14.4z" fill="currentColor" opacity="0.7"/></svg>
+              </button>
+            </div>
             <div class="tb-plate" id="vb-colour" role="radiogroup" aria-label="Canal de couleur">
               <button class="tb-i active" type="button" data-vb-ch="shaded"
                       data-i18n-title="ch.shaded"
@@ -178,6 +180,10 @@
                       data-i18n-title="ch.uv"
                       title="Damier d'UV : où la texture s'étire et où elle se répète">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1"/><rect x="2.6" y="2.6" width="5.4" height="5.4" fill="#7cc4ff" stroke="none" opacity="0.75"/><rect x="8" y="8" width="5.4" height="5.4" fill="#7cc4ff" stroke="none" opacity="0.75"/></svg>
+              </button>
+              <button class="tb-i" type="button" data-vb-ch="clay" data-i18n-title="ch.clay"
+                      title="Argile : gris neutre, pour mieux lire le fil de fer">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.4" fill="#b3b3b3" stroke="#b3b3b3"/><path d="M8 2.6a5.4 5.4 0 0 0 0 10.8" fill="#d6d6d6" stroke="none" opacity="0.7"/></svg>
               </button>
               <!-- Retopo appends the atlas islands and the deviation heat map here. -->
             </div>

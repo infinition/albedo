@@ -20,6 +20,7 @@ export const CHANNELS = [
   { id: "opacity", label: "Alpha" },
   { id: "normalGeom", label: "Normales géo" },
   { id: "uv", label: "UV" },
+  { id: "clay", label: "Argile" },
 ];
 
 const MAP_OF = {
@@ -424,6 +425,18 @@ export class ChannelView {
       // No tone mapping: the point of this mode is the texture as authored.
       out.toneMapped = false;
       return out;
+    }
+    if (channel === "clay") {
+      // The retopology look: a neutral gray, matte, lit like the model, so the
+      // wireframe reads against a surface that says nothing about itself. Not an
+      // inspection channel: the light stays, which is what makes it a surface.
+      return new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x9b9b9b),
+        roughness: 0.95,
+        metalness: 0,
+        side: mat.side,
+        flatShading: this.flat,
+      });
     }
     if (channel === "normalGeom") {
       return new THREE.MeshNormalMaterial({ side: mat.side, flatShading: this.flat });

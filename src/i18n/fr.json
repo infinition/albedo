@@ -11,6 +11,7 @@
   "ch.normalMap": "Carte de normales : le relief peint dans la texture",
   "ch.normalGeom": "Normales de géométrie : le relief du maillage lui-même",
   "ch.uv": "Damier d'UV : où la texture s'étire et où elle se répète",
+  "ch.clay": "Argile : gris neutre, pour mieux lire le fil de fer",
   "bar.wire": "Fil de fer par-dessus la surface (W)",
   "bar.wireOnly": "Fil de fer seul, sans les faces : voir la structure au travers",
   "bar.wireDark": "Traits sombres plutôt que clairs, pour un modèle clair",

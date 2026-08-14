@@ -11,6 +11,7 @@
   "ch.normalMap": "Normal map: the relief painted in the texture",
   "ch.normalGeom": "Geometry normals: the relief of the mesh itself",
   "ch.uv": "UV checker: where the texture stretches and repeats",
+  "ch.clay": "Clay: neutral gray, to read the wireframe better",
   "bar.wire": "Wireframe over the surface (W)",
   "bar.wireOnly": "Wire only, no faces: see the structure through",
   "bar.wireDark": "Dark rather than light lines, for a light model",
