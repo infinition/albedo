@@ -504,6 +504,43 @@ body.inspector .ov-br { opacity: 0; }
    the left cluster, which is what lets a panel own the right edge outright
    instead of starting forty eight pixels down to dodge them. */
 .ov-tr:empty { display: none; }
+
+/* --- the view toolbar ----------------------------------------------------
+ *
+ * One bar for "how am I looking at this", under the mode buttons.
+ *
+ * The camera controls used to float bottom left on their own plate, the
+ * wireframe hid in a panel, and Retopo carried a third bar. Three places for one
+ * question. Grouped and labelled, because a row of unlabelled icons is a row you
+ * have to hover to read, and this bar is meant to be aimed at rather than
+ * studied.
+ */
+.ov-view {
+  top: calc(var(--gap) + 48px);
+  left: var(--gap);
+  align-items: flex-end;
+  gap: 12px;
+  padding: 7px 10px;
+}
+.vb-group { display: flex; flex-direction: column; gap: 3px; }
+.vb-row { display: flex; align-items: center; gap: 4px; }
+.vb-label {
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-left: 2px;
+}
+.ov-view .seg { font-size: 11px; padding: 4px 9px; }
+.ov-view .icon { width: 26px; height: 26px; }
+.ov-view .icon svg { width: 14px; height: 14px; }
+/* A layer that is on gets an outline rather than a fill, so "one of these" and
+   "any of these" never look the same even when both are lit. */
+.ov-view .icon.active {
+  color: var(--fg);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
 .ov-tr, .ov-br { transition: right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s; }
 
 #inspector::-webkit-scrollbar { width: 8px; }

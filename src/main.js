@@ -527,6 +527,67 @@ window.addEventListener("resize", () => {
   }, 140);
 });
 
+/*
+ * The view toolbar relays; it does not reimplement.
+ *
+ * Every control here already exists and already works: `applyChannel`, the lazy
+ * wireframe controller, the two checkboxes in the panel. A second implementation
+ * of any of them would be a second thing to keep in step, and the one you are
+ * not looking at is always the one that has drifted. So the bar forwards, and
+ * reads its own state back from what it forwarded to.
+ */
+for (const b of document.querySelectorAll("[data-vb-ch]")) {
+  b.addEventListener("click", () => {
+    applyChannel(b.dataset.vbCh);
+    paintViewbar();
+  });
+}
+
+$("vb-wire").addEventListener("click", async () => {
+  const on = $("vb-wire").getAttribute("aria-pressed") !== "true";
+  // Through the panel's own checkbox, so the two can never disagree about
+  // whether the lines are on.
+  $("opt-wireframe").checked = on;
+  await setWireframe(on);
+  paintViewbar();
+});
+
+$("vb-wire-dark").addEventListener("click", async () => {
+  const dark = $("vb-wire-dark").getAttribute("aria-pressed") !== "true";
+  $("opt-wire-dark").checked = dark;
+  (await wakeWire())?.setColour(!dark);
+  viewer.invalidate();
+  paintViewbar();
+});
+
+/**
+ * Read the bar's state back from the controls it drives.
+ *
+ * The active channel is read off the panel's own list rather than from
+ * `currentChannel`, and that is not a style choice. `currentChannel` is a `let`
+ * declared several hundred lines below, so reading it from a call made while the
+ * module is still evaluating throws on the temporal dead zone, and that throw
+ * *aborts the rest of the module*: every declaration after it never happens and
+ * the application comes up half built, with no clue on screen as to why.
+ * Reading the DOM has no such ordering, and the panel is the source of truth
+ * anyway.
+ */
+function paintViewbar() {
+  const live = document.querySelector("#channels .active")?.dataset.id;
+  for (const b of document.querySelectorAll("[data-vb-ch]")) {
+    b.classList.toggle("active", b.dataset.vbCh === live);
+  }
+  const on = $("opt-wireframe").checked;
+  $("vb-wire").setAttribute("aria-pressed", String(on));
+  $("vb-wire").classList.toggle("active", on);
+  // The light or dark choice only exists while there are lines to colour, so it
+  // appears with them rather than sitting inert two thirds of the time.
+  $("vb-wire-dark").hidden = !on;
+  const dark = $("opt-wire-dark").checked;
+  $("vb-wire-dark").setAttribute("aria-pressed", String(dark));
+  $("vb-wire-dark").classList.toggle("active", dark);
+}
+
 viewer.alsoKeep = () => {
   const keep = new Set();
   for (const doc of documents) {
@@ -981,6 +1042,8 @@ async function renderThumbnail({ path, size }) {
 
 let currentChannel = "shaded";
 function applyChannel(id) {
+  // The bar follows from here, the one place a channel actually changes.
+  queueMicrotask(paintViewbar);
   currentChannel = id;
   channels.apply(id);
   for (const b of $("channels").children) b.classList.toggle("active", b.dataset.id === id);
@@ -2682,6 +2745,9 @@ async function toggleRetopo() {
     // the eye without a second surface being invented to carry it.
     showPane,
     onOpenChange: (on) => {
+      // Retopo brings its own, richer bar. Two stacked would be the very thing
+      // this one was made to end.
+      $("viewbar").hidden = on;
       $("btn-retopo").classList.toggle("active", on);
       $("btn-retopo").setAttribute("aria-pressed", String(on));
       if (on) {

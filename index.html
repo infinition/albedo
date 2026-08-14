@@ -80,19 +80,59 @@
         <div class="ov ov-tr">
         </div>
 
-        <div class="ov ov-bl">
-          <!-- One button, not two modes. Orbiting is what a viewer does; being
-               let off the leash is a thing you switch on, not another place to
-               be. (V, or Échap to come back) -->
-          <button id="nav-free" class="seg" type="button" aria-pressed="false"
-                  title="Se détacher du centre : pivoter sur place, avancer, reculer (V)">Libre</button>
-          <button id="btn-frame" class="icon" type="button" title="Recadrer (F)">
-            <svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" /><circle cx="12" cy="12" r="3" /></svg>
-          </button>
-          <button id="btn-turntable" class="icon" type="button" title="Rotation continue (T)" aria-pressed="false">
-            <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" /></svg>
-          </button>
-          <span id="devices" class="devices"></span>
+        <!--
+          One toolbar, under the mode buttons, for the things you do *to the
+          view* rather than to the file.
+
+          The camera controls used to float in the bottom left corner, on their
+          own little plate, while the wireframe hid in a panel and Retopo carried
+          a third bar of its own. Three places to look for "how am I looking at
+          this". They are one question, so they are one bar, and Retopo enriches
+          it rather than replacing it.
+        -->
+        <div class="ov ov-view" id="viewbar">
+          <div class="vb-group">
+            <span class="vb-label">Couleur</span>
+            <div class="segment" role="radiogroup" aria-label="Canal">
+              <button class="seg active" type="button" data-vb-ch="shaded" title="Rendu physique">PBR</button>
+              <button class="seg" type="button" data-vb-ch="unlit" title="Peint, sans éclairage">Peint</button>
+              <button class="seg" type="button" data-vb-ch="albedo" title="Couleur de base seule">Albedo</button>
+              <button class="seg" type="button" data-vb-ch="normalMap" title="Carte de normale">Normale</button>
+              <button class="seg" type="button" data-vb-ch="uv" title="Damier d'UV">UV</button>
+            </div>
+          </div>
+
+          <div class="vb-group">
+            <span class="vb-label">Calques</span>
+            <div class="vb-row">
+              <button class="icon" id="vb-wire" type="button" aria-pressed="false"
+                      title="Fil de fer par-dessus la surface (W)">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg>
+              </button>
+              <button class="icon" id="vb-wire-dark" type="button" aria-pressed="false" hidden
+                      title="Traits sombres plutôt que clairs">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" stroke="none" opacity="0.85"/><path d="M12 3v18M3 12h18" stroke="#15171b"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="vb-group">
+            <span class="vb-label">Caméra</span>
+            <div class="vb-row">
+              <!-- One button, not two modes. Orbiting is what a viewer does; being
+                   let off the leash is a thing you switch on, not another place to
+                   be. (V, or Échap to come back) -->
+              <button id="nav-free" class="seg" type="button" aria-pressed="false"
+                      title="Se détacher du centre : pivoter sur place, avancer, reculer (V)">Libre</button>
+              <button id="btn-frame" class="icon" type="button" title="Recadrer (F)">
+                <svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" /><circle cx="12" cy="12" r="3" /></svg>
+              </button>
+              <button id="btn-turntable" class="icon" type="button" title="Rotation continue (T)" aria-pressed="false">
+                <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" /></svg>
+              </button>
+              <span id="devices" class="devices"></span>
+            </div>
+          </div>
         </div>
 
         <div class="ov ov-br">
