@@ -3878,9 +3878,10 @@ let keyLayout = null;
  */
 function detectLayout(e) {
   // The first press of W or A says it all: on AZERTY the keycap W prints z and
-  // the keycap A prints q, the exact mirror of QWERTY.
-  if (e.code === "KeyW") keyLayout = e.key === "z" ? "azerty" : "qwerty";
-  else if (e.code === "KeyA") keyLayout = e.key === "q" ? "azerty" : "qwerty";
+  // the keycap A prints q, the exact mirror of QWERTY. Lowercased, so a held
+  // shift key does not turn a z into evidence for qwerty.
+  if (e.code === "KeyW") keyLayout = e.key.toLowerCase() === "z" ? "azerty" : "qwerty";
+  else if (e.code === "KeyA") keyLayout = e.key.toLowerCase() === "q" ? "azerty" : "qwerty";
   return keyLayout || ((navigator.language || "").toLowerCase().startsWith("fr") ? "azerty" : "qwerty");
 }
 
