@@ -1145,13 +1145,26 @@ function applyChannel(id) {
   currentChannel = id;
   channels.apply(id);
   for (const b of $("channels").children) b.classList.toggle("active", b.dataset.id === id);
-  // The viewport toggle and the inspector list are two views of one state.
-  $("mode-pbr").classList.toggle("active", id === "shaded");
-  $("mode-unlit").classList.toggle("active", id === "unlit");
 }
 
-$("mode-pbr").addEventListener("click", () => setRenderMode("shaded"));
-$("mode-unlit").addEventListener("click", () => setRenderMode("unlit"));
+/*
+ * There is no PBR / Unlit pair here any more, and its removal is the fix for a
+ * failure that looked like nothing at all.
+ *
+ * The two buttons were the same choice the Couleur group in the view bar makes
+ * with seven. One of them had already been deleted from `index.html`, leaving
+ * these four lines pointing at an element that does not exist, so
+ * `$("mode-pbr").addEventListener` threw *while the module was still being
+ * evaluated*. A module that throws at the top level stops there: everything
+ * below this line was simply never run, which is every listener in the second
+ * half of this file. Open a file, the library, Retopo, any keyboard shortcut,
+ * the drop handler -- none of them were ever attached. The window came up
+ * looking complete and no button in it did anything.
+ *
+ * Nothing on screen said so, and clicking every button in the page reports
+ * nothing either, because a button with no listener throws no error. The one
+ * place it was visible was the console, on the very first line.
+ */
 const toggleUnlit = () => setRenderMode(currentChannel === "unlit" ? "shaded" : "unlit");
 
 /**
