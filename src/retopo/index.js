@@ -842,9 +842,14 @@ export function createRetopo({
     viewer.invalidate?.();
   }
 
-  for (const b of host.querySelectorAll("[data-ab]")) {
+  // The comparison group lives in `held` until the mode opens, then moves to
+  // the shared bar as the same nodes. Listeners go on while they are in `held`;
+  // the active highlight re-finds them in `bar`, where they are at click time.
+  // Querying `host` for either found nothing at all, which is how a row of
+  // buttons that did nothing used to ship.
+  for (const b of held.querySelectorAll("[data-ab]")) {
     b.addEventListener("click", () => {
-      for (const o of host.querySelectorAll("[data-ab]")) o.classList.toggle("active", o === b);
+      for (const o of bar.querySelectorAll("[data-ab]")) o.classList.toggle("active", o === b);
       setAB(b.dataset.ab);
       const parts = viewer.parts || [];
       // On a model with no result yet, four of the five modes are the same
