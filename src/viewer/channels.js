@@ -91,6 +91,36 @@ export class ChannelView {
     this.built = new Map(); // uuid|channel -> material, so toggling is cheap
     this.mode = "shaded";
     this.wireframe = false;
+    /**
+     * The wireframe overlay, once someone has asked for one.
+     *
+     * Null until then, and that is the whole point: the overlay un-indexes every
+     * geometry it touches, which triples the vertex buffer, and it arrives in a
+     * chunk that is not fetched at startup. A viewer showing one model must not
+     * pay for lines nobody asked to see.
+     *
+     * It lives here rather than in whichever panel offers the switch, because
+     * this class is the one place that decides which material a mesh actually
+     * draws with. That is the lesson the first version cost: the overlay was
+     * applied to the model's own materials from outside, and every inspection
+     * channel silently replaced them with unpatched stand-ins, so the wireframe
+     * vanished on ten of the eleven channels and nothing anywhere said why.
+     */
+    this.wire = null;
+  }
+
+  /**
+   * Hand over the overlay, once its module has been fetched.
+   * @param {{ patch: (material: any) => void, uniforms: object }} wire
+   */
+  useWire(wire) {
+    this.wire = wire;
+  }
+
+  /** Every material this class hands out goes through here. */
+  dress(material) {
+    this.wire?.patch(material);
+    return material;
   }
 
   reset() {
@@ -377,21 +407,24 @@ export class ChannelView {
           blank = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
           this.built.set(key, blank);
         }
+        // Not dressed: a material that writes neither colour nor depth has
+        // nothing to draw lines over, and patching it would put a wireframe on
+        // the one thing the user asked to stop seeing.
         return blank;
       }
       const channel = this.channelFor(m, mode);
-      if (channel === "shaded") {
-        this.setWireframeOn(m, this.wireframe);
-        return m;
-      }
+      if (channel === "shaded") return this.dress(m);
       const key = `${m.uuid}|${channel}`;
       let built = this.built.get(key);
       if (!built) {
         built = this.build(m, channel);
         this.built.set(key, built);
       }
-      built.wireframe = this.wireframe;
-      return built;
+      // Dressed on every pass rather than only on the one that built it: the
+      // overlay can arrive after a stand-in was cached, and a cached material
+      // that never gets patched is exactly how the wireframe used to disappear
+      // on ten channels out of eleven.
+      return this.dress(built);
     };
 
     this.viewer.root.traverse((o) => {
@@ -403,17 +436,23 @@ export class ChannelView {
     this.viewer.invalidate();
   }
 
-  setWireframeOn(material, on) {
-    for (const m of Array.isArray(material) ? material : [material]) {
-      if (m && "wireframe" in m) m.wireframe = on;
-    }
-  }
-
+  /**
+   * Draw the edges, or stop.
+   *
+   * One switch for the whole application. There were two: this one, which set
+   * `material.wireframe` and therefore *replaced* the surface with lines, and
+   * the mode's own shader overlay which drew them *over* the shading. Two
+   * controls in two places for one idea, and they could both be on at once, in
+   * which case the crude one won by destroying the surface the other was drawing
+   * on. Only the overlay survives, because losing the shading is losing the
+   * thing you opened a wireframe to judge.
+   *
+   * Does nothing until `useWire` has been called, which is what makes the
+   * overlay's cost conditional on wanting it.
+   */
   setWireframe(on) {
     this.wireframe = on;
-    this.viewer.root.traverse((o) => {
-      if (o.isMesh || o.isSkinnedMesh) this.setWireframeOn(o.material, on);
-    });
+    if (this.wire) this.wire.uniforms.uWire.value = on ? 1 : 0;
     this.viewer.invalidate();
   }
 }

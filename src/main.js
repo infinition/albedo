@@ -278,7 +278,8 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     nav.calibrate(viewer.boxHelper.box);
     channels.reset();
     selection.clear();
-    channels.setWireframe($("opt-wireframe").checked);
+    // A new model needs its own geometry prepared before it can draw lines.
+    await setWireframe($("opt-wireframe").checked, false);
     applyChannel(currentChannel);
     $("opt-skeleton").checked = viewer.skeletons.visible;
 
@@ -988,9 +989,91 @@ applyChannel("shaded");
 
 // Every display choice is remembered: a viewer that forgets the grid is off
 // makes the user turn it off again at each launch.
-$("opt-wireframe").addEventListener("change", (e) => {
-  channels.setWireframe(e.target.checked);
-  prefs.set("wireframe", e.target.checked);
+/**
+ * The wireframe overlay, fetched the first time anyone asks for lines.
+ *
+ * Lazy for a reason that is not only startup weight: preparing a geometry for
+ * the overlay un-indexes it, which triples its vertex buffer and cannot be
+ * undone. A session that never switches the wireframe on never pays either
+ * cost, and the module is not in the startup bundle at all — which matters here
+ * more than usual, this executable also being the Explorer thumbnail provider.
+ */
+let wire = null;
+let wireArriving = null;
+
+async function wakeWire() {
+  if (wire) return wire;
+  if (wireArriving) return wireArriving;
+  wireArriving = import("./viewer/wire.js")
+    .then((m) => {
+      const uniforms = m.makeWireUniforms();
+      wire = {
+        uniforms,
+        patch: (material) => m.patchWire(material, uniforms),
+        // Idempotent: a geometry already carrying the attributes is left alone,
+        // so a result's quad mask survives the switch being flicked.
+        prepare: (object) => m.prepareWire(object),
+        setColour: (light) => m.setWireColor(uniforms, light),
+        // Geometry and materials in one call, with the data a run produced.
+        // Retopo is the only caller that has any: the mask, the chart ids and
+        // the per vertex deviation all come out of the engine.
+        apply: (object, mask, charts, dev) =>
+          m.applyWire(object, uniforms, mask, charts, dev),
+        setSide: m.setSide,
+      };
+      wire.setColour(!$("opt-wire-dark").checked);
+      // The channel view is what decides which material a mesh draws with, so it
+      // is what has to know: otherwise every inspection channel hands out a
+      // stand-in nobody patched and the lines vanish without a word.
+      channels.useWire(wire);
+      return wire;
+    })
+    .finally(() => {
+      wireArriving = null;
+    });
+  return wireArriving;
+}
+
+/**
+ * Turn the lines on or off, from wherever the ask came from.
+ *
+ * One function, so the checkbox, the `W` key and Retopo's bar cannot disagree
+ * about what is on screen.
+ */
+/*
+ * Which ask is the current one.
+ *
+ * Switching *on* has to wait for a module and then prepare every geometry;
+ * switching *off* is an assignment. So two quick toggles finished out of order:
+ * the off ran to completion while the on was still awaiting, then the on's
+ * continuation resumed and turned the lines back on over a box that read
+ * unticked. A counter, checked after every await, is what makes the last ask win
+ * rather than the fastest one.
+ */
+let wireAsk = 0;
+
+async function setWireframe(on, remember = true) {
+  const ask = ++wireAsk;
+  $("opt-wireframe").checked = on;
+  $("opt-wire-dark-row").hidden = !on;
+  if (on) {
+    const w = await wakeWire();
+    if (ask !== wireAsk) return;
+    for (const part of viewer.parts || []) w.prepare(part.object);
+    // Re-hand the materials so the ones already on the meshes go through the
+    // patch. Without this the lines only appear after the next channel change.
+    channels.apply(currentChannel);
+  }
+  channels.setWireframe(on);
+  retopo?.onWireframe?.(on);
+  if (remember) prefs.set("wireframe", on);
+}
+
+$("opt-wireframe").addEventListener("change", (e) => setWireframe(e.target.checked));
+$("opt-wire-dark").addEventListener("change", (e) => {
+  wire?.setColour(!e.target.checked);
+  viewer.invalidate();
+  prefs.set("wireDark", e.target.checked);
 });
 $("opt-grid").addEventListener("change", (e) => {
   viewer.setGrid(e.target.checked);
@@ -1706,8 +1789,8 @@ function applyPrefs() {
   viewer.setBounds(p.bounds);
   $("opt-skeleton").checked = p.skeleton;
   viewer.setSkeleton(p.skeleton);
-  $("opt-wireframe").checked = p.wireframe;
-  channels.setWireframe(p.wireframe);
+  $("opt-wire-dark").checked = p.wireDark;
+  setWireframe(p.wireframe, false);
   $("opt-exposure").value = String(p.exposure);
   viewer.setExposure(p.exposure);
   $("opt-fov").value = String(p.fov);
@@ -2033,8 +2116,17 @@ async function toggleRetopo() {
     retopo.toggle();
     return;
   }
+  // The overlay comes first: the mode's curtain, its x-ray and its two data
+  // views are all the same patched shader the wireframe uses, so the mode
+  // cannot be built against a set of uniforms nobody else holds. Both are lazy
+  // chunks, so this is one extra fetch on the first open and none after.
+  const w = await wakeWire();
   const { createRetopo } = await import("./retopo/index.js");
   retopo = createRetopo({
+    wire: w,
+    // So the bar opens showing the state the rest of the application is in,
+    // rather than its own idea of it.
+    wireframeOn: () => $("opt-wireframe").checked,
     tauri,
     viewer,
     importPart,
@@ -2049,9 +2141,13 @@ async function toggleRetopo() {
     // The view controls in the mode's top bar drive the same channel state the
     // Vue pane does, so the two can never disagree about what is on screen.
     applyChannel,
-    setWireframe: (on) => {
-      $("opt-wireframe").checked = on;
-      channels.setWireframe(on);
+    // The bar mirrors the one switch rather than owning a second one.
+    setWireframe: (on) => setWireframe(on),
+    setWireDark: (dark) => {
+      $("opt-wire-dark").checked = dark;
+      wire?.setColour(!dark);
+      viewer.invalidate();
+      prefs.set("wireDark", dark);
     },
     // A mode does not own a panel any more. What it gets is the right to say
     // which tab of the shared one comes forward, which is how a report reaches
@@ -2772,6 +2868,10 @@ async function importPart(path) {
     selectedPart = entry;
     // The scene changed underneath the channel copies and the material list
     channels.reset();
+    // An imported object arrives with plain indexed geometry, so it needs the
+    // overlay's attributes before it can draw a single line. Without this a
+    // retopology result came in mute while everything around it drew edges.
+    if ($("opt-wireframe").checked) await setWireframe(true, false);
     applyChannel(currentChannel);
     paintParts();
     paintMaterialList();
@@ -2995,9 +3095,9 @@ window.addEventListener("keydown", (e) => {
       break;
     case "KeyW":
       if (!e.ctrlKey && nav.mode === "orbit") {
-        $("opt-wireframe").checked = !$("opt-wireframe").checked;
-        channels.setWireframe($("opt-wireframe").checked);
-        toast($("opt-wireframe").checked ? "Fil de fer" : "Fil de fer coupé");
+        const on = !$("opt-wireframe").checked;
+        setWireframe(on);
+        toast(on ? "Fil de fer" : "Fil de fer coupé");
       }
       break;
     default:

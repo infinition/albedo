@@ -29,6 +29,8 @@ export const DEFAULTS = {
   bounds: false,
   skeleton: false,
   wireframe: false,
+  /** Dark lines rather than light ones: neither works on every model. */
+  wireDark: false,
   exposure: 1,
   fov: 45,
   projection: "perspective",

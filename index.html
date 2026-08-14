@@ -153,7 +153,16 @@
 
         <section>
           <h2>Affichage</h2>
-          <label class="check"><input type="checkbox" id="opt-wireframe" /><span>Wireframe</span></label>
+          <!--
+            One wireframe, here, for the whole application. There were two: this
+            switch, which set three.js's own `material.wireframe` and therefore
+            *replaced* the surface with lines, and Retopo's shader overlay which
+            drew them over the shading. Only the overlay survives — losing the
+            shading is losing the thing you opened a wireframe to judge — and the
+            bar in Retopo mirrors this switch rather than owning a second one.
+          -->
+          <label class="check"><input type="checkbox" id="opt-wireframe" /><span>Fil de fer (W)</span></label>
+          <label class="check" id="opt-wire-dark-row"><input type="checkbox" id="opt-wire-dark" /><span>Traits sombres</span></label>
           <label class="check"><input type="checkbox" id="opt-grid" checked /><span>Grille</span></label>
           <label class="check"><input type="checkbox" id="opt-bounds" /><span>Boîte englobante</span></label>
           <label class="check"><input type="checkbox" id="opt-skeleton" /><span>Squelette</span></label>

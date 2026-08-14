@@ -1,7 +1,14 @@
 import * as THREE from "three";
 import { buildCage } from "./cage.js";
 import { ICONS } from "./icons.js";
-import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
+/*
+ * No import of the overlay here.
+ *
+ * It is `src/viewer/wire.js` now, because it is a capability of the viewer and
+ * not of this mode: the wireframe switch in the Vue pane drives the same shader.
+ * The host hands over the one live set of uniforms, so this mode and that switch
+ * cannot end up driving two different copies of the same state.
+ */
 import { selection } from "../selection.js";
 import "./retopo.css";
 
@@ -328,6 +335,9 @@ export function createRetopo({
   setWireframe,
   channels,
   showPane,
+  wire,
+  setWireDark,
+  wireframeOn,
 }) {
   const host = document.createElement("div");
   host.id = "retopo";
@@ -431,8 +441,10 @@ export function createRetopo({
     viewer.invalidate?.();
   }
 
-  /** Shared by every patched material, so a toggle is an assignment. */
-  const wireU = makeWireUniforms();
+  /** The host's uniforms, shared by every patched material in the application. */
+  const wireU = wire.uniforms;
+  const { setSide } = wire;
+  const applyWire = (object, _u, mask, charts, dev) => wire.apply(object, mask, charts, dev);
   /** True once a result carrying a pairing has been prepared. */
   let hasQuads = false;
   /** The worst deviation of the current result, in model units. */
@@ -608,22 +620,24 @@ export function createRetopo({
     node.classList.toggle("active", on);
   };
 
+  /*
+   * The bar's wire button is a shortcut to the application's one wireframe, not
+   * a second wireframe.
+   *
+   * It asks the host, and the host asks back through `onWireframe`, so pressing
+   * `W`, ticking the box in the Vue pane and clicking here all end in the same
+   * place and all three show the same state afterwards.
+   */
   el.wire.addEventListener("click", () => {
     const on = el.wire.getAttribute("aria-pressed") !== "true";
-    toggle(el.wire, on);
-    wireU.uWire.value = on ? 1 : 0;
-    // The light-or-dark choice only exists while there are lines to colour, so
-    // it appears with them instead of sitting there inert two thirds of the time.
-    el.wireFlip.hidden = !on;
-    viewer.invalidate?.();
+    setWireframe?.(on);
     say2(on ? (hasQuads ? "Fil de fer, quads compris" : "Fil de fer") : "Fil de fer coupé");
   });
 
   el.wireFlip.addEventListener("click", () => {
     const dark = el.wireFlip.getAttribute("aria-pressed") !== "true";
     toggle(el.wireFlip, dark);
-    setWireColor(wireU, !dark);
-    viewer.invalidate?.();
+    setWireDark?.(dark);
   });
 
   el.flat.addEventListener("click", () => {
@@ -708,16 +722,6 @@ export function createRetopo({
     });
     viewer.invalidate?.();
   });
-
-  for (const b of host.querySelectorAll("[data-wire]")) {
-    b.addEventListener("click", () => {
-      for (const o of host.querySelectorAll("[data-wire]")) o.classList.toggle("active", o === b);
-      const mode = b.dataset.wire;
-      wireU.uWire.value = mode === "off" ? 0 : 1;
-      setWireColor(wireU, mode === "light");
-      viewer.invalidate?.();
-    });
-  }
 
   /*
    * Flat shading, which is not a stylistic choice here.
@@ -1578,6 +1582,7 @@ export function createRetopo({
       if (tab) tab.hidden = false;
       dressScene();
       paintScope();
+      api.onWireframe(!!wireframeOn?.());
       onOpenChange?.(true);
       syncViewport();
       refresh();
@@ -1598,6 +1603,16 @@ export function createRetopo({
     refresh,
     /** The shared selection moved: only the scope line depends on it. */
     onSelection: paintScope,
+    /**
+     * The one wireframe changed, from wherever. The bar shows it.
+     *
+     * The light-or-dark choice only exists while there are lines to colour, so
+     * it appears with them rather than sitting inert two thirds of the time.
+     */
+    onWireframe(on) {
+      toggle(el.wire, on);
+      el.wireFlip.hidden = !on;
+    },
   };
   return api;
 }

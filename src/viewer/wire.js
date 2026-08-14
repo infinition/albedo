@@ -37,12 +37,29 @@ const ALL_EDGES = 7;
  * which is the order the engine wrote it in.
  */
 export function prepareWire(object, mask = null, charts = null, dev = null) {
+  // Whether this call brings data worth overwriting what is already there.
+  const carries = !!(mask || charts || dev);
   let tri = 0;
   let vert = 0;
   object.traverse((n) => {
     if (!n.isMesh && !n.isSkinnedMesh) return;
     let g = n.geometry;
     if (!g?.attributes?.position) return;
+
+    /*
+     * A geometry already prepared is left alone unless there is new data.
+     *
+     * Switching the wireframe on walks the scene with no mask, and a result mesh
+     * in that scene already carries the pairing the engine wrote. Rebuilding its
+     * attributes from nothing replaced a real quad mask with "every edge is
+     * real", so the quads a run had just reported stopped being visible and the
+     * only way back was another run.
+     */
+    if (!carries && g.attributes.aBary) {
+      tri += g.attributes.position.count / 3;
+      vert += g.attributes.position.count;
+      return;
+    }
 
     /*
      * The index is read *before* it is thrown away, and that ordering is the
@@ -231,14 +248,19 @@ const FRAG_SPLIT = /* glsl */ `
 `;
 
 /*
- * Injected after dithering, which is after tone mapping and after the colour
- * space conversion. That is deliberate: the line is a diagram drawn on top of a
- * photograph, not a surface in the scene, so it should come out the colour it
- * was asked for rather than the colour the exposure curve makes of it.
+ * Appended at the very end of `main`, which is after tone mapping and after the
+ * colour space conversion. That is deliberate: the line is a diagram drawn on
+ * top of a photograph, not a surface in the scene, so it should come out the
+ * colour it was asked for rather than the colour the exposure curve makes of it.
+ *
+ * It used to anchor on `#include <dithering_fragment>`, which is the last line
+ * of `main` in the lit and basic shaders and **does not exist at all** in
+ * `MeshNormalMaterial`. So the overlay silently did nothing on the normals
+ * channel: no error, no warning, just no lines. The end of `main` is the same
+ * place in the shaders that have the include and a place that exists in the ones
+ * that do not.
  */
 const FRAG_WIRE = /* glsl */ `
-#include <dithering_fragment>
-
 /*
  * The two data views replace the shaded colour but keep its lighting, which is
  * what makes them readable: a flat field of hues has no form in it, and you
@@ -281,6 +303,43 @@ if (uWire > 0.0) {
 `;
 
 /**
+ * Everything the fragment stage reads, written where `main` begins.
+ *
+ * All five, and that matters: three of them used to be *declared* in both stages
+ * and assigned in neither. A varying that is never written reads as whatever was
+ * left in the register, so the atlas view, the deviation heatmap and the x-ray
+ * were each drawing a plausible picture out of nothing. Nothing errors, nothing
+ * warns, and the output looks exactly like data.
+ *
+ * The normal is this module's own rather than three's `vNormal`, which is
+ * declared under `ifndef FLAT_SHADED` and would therefore stop the shader
+ * compiling the moment the flat toggle is switched on. It is the object normal
+ * through `normalMatrix`, so it ignores skinning and morphs: good enough for a
+ * facing term used to shade a diagram, and wrong for anything else, which is why
+ * it is not used for anything else.
+ */
+const VERT_MAIN = /* glsl */ `
+  vBary = aBary;
+  vEdges = aEdges;
+  vChart = aChart;
+  vDev = aDev;
+  vRtNormal = normalMatrix * normal;
+`;
+
+/**
+ * Put a block at the end of `main`, whatever shader it is.
+ *
+ * Returns null rather than the source unchanged when there is no `main` to
+ * append to, so the caller can say so instead of shipping a material that
+ * quietly draws nothing.
+ */
+function appendToMain(source) {
+  const end = source.lastIndexOf("}");
+  if (end < 0) return null;
+  return `${source.slice(0, end)}\n${FRAG_WIRE}\n}${source.slice(end + 1)}`;
+}
+
+/**
  * Teach one material to draw the overlay. Safe to call twice.
  */
 export function patchWire(material, uniforms) {
@@ -293,18 +352,23 @@ export function patchWire(material, uniforms) {
       shader.uniforms.uSide = m.userData.uSide;
       shader.vertexShader = VERT_HEAD + shader.vertexShader.replace(
         "void main() {",
-        "void main() {\n  vBary = aBary;\n  vEdges = aEdges;"
+        "void main() {" + VERT_MAIN
       );
-      shader.fragmentShader = FRAG_HEAD + shader.fragmentShader
+      const lit = appendToMain(
         // The curtain discards before any lighting runs. Shading a fragment and
         // then throwing it away is the same picture for more work.
-        .replace("void main() {", "void main() {" + FRAG_SPLIT)
-        .replace("#include <dithering_fragment>", FRAG_WIRE);
+        shader.fragmentShader.replace("void main() {", "void main() {" + FRAG_SPLIT)
+      );
+      if (!lit) {
+        console.warn("[albedo] fil de fer : aucun main() dans", m.type);
+        return;
+      }
+      shader.fragmentShader = FRAG_HEAD + lit;
     };
     // Without this every patched material shares one compiled program with
     // every unpatched one, and the overlay appears on things that never asked
     // for it.
-    m.customProgramCacheKey = () => "retopo-wire";
+    m.customProgramCacheKey = () => "albedo-wire";
     m.needsUpdate = true;
   }
 }
