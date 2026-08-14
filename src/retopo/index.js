@@ -246,6 +246,20 @@ const SHELL = `
   </section>
 
   <section class="rt-page" data-tab="result">
+    <div data-el="devTools" class="rt-off">
+      <p class="rt-sub">Échelle de l'écart</p>
+      <label class="rt-field">
+        <span>Rouge à <span class="rt-num" data-el="devScaleValue">—</span></span>
+        <input type="range" data-el="devScale" min="0.1" max="4" step="0.1" value="1" />
+      </label>
+      <p class="rt-hint">Multiplicateur sur le pire écart du calcul, pas une
+        distance absolue : « de combien ça a bougé » ne veut dire quelque chose
+        que rapporté à ce que ça pouvait bouger. À 1 la couleur la plus chaude
+        tombe exactement sur le pire sommet ; en dessous la rampe sature et les
+        zones seulement mauvaises rejoignent les pires, ce qui est la façon de
+        les trouver.</p>
+    </div>
+
     <p class="rt-hint" data-el="report">Rien encore.</p>
     <p class="rt-hint rt-err" data-el="err" hidden></p>
     <p class="rt-hint" data-el="sourceNote"></p>
@@ -421,6 +435,26 @@ export function createRetopo({
   const wireU = makeWireUniforms();
   /** True once a result carrying a pairing has been prepared. */
   let hasQuads = false;
+  /** The worst deviation of the current result, in model units. */
+  let devMax = 0;
+
+  /**
+   * The heat ramp's top end.
+   *
+   * The slider is a multiplier on the run's own worst value rather than an
+   * absolute distance, because "how far did it move" only means something
+   * against how far it could have. At 1 the hottest colour sits exactly on the
+   * worst vertex; below 1 the ramp saturates and the merely-bad areas join the
+   * worst ones, which is how you find them.
+   */
+  function syncDevScale() {
+    const f = Number(el.devScale.value);
+    wireU.uDevScale.value = devMax > 0 ? f / devMax : 0;
+    el.devScaleValue.textContent = devMax > 0
+      ? `${(devMax / f).toPrecision(3)} unité`
+      : "—";
+    viewer.invalidate?.();
+  }
 
   /**
    * Teach the result's materials to draw their own edges.
@@ -433,17 +467,30 @@ export function createRetopo({
    */
   async function dressResult(object, path) {
     if (!object) return;
-    let mask = null;
-    if (tauri) {
+    const read = async (kind) => {
+      if (!tauri) return null;
       try {
-        mask = await tauri.core.invoke("retopo_quad_mask", { output: path });
+        return await tauri.core.invoke("retopo_sidecar", { output: path, kind });
       } catch {
-        mask = null;
+        return null;
       }
-    }
+    };
+    // Three files, read together, because the three views they feed are all
+    // switched on from the same row of icons and a missing one has to disable
+    // its icon rather than paint zeros.
+    const [mask, charts, dev] = await Promise.all([read("quads"), read("charts"), read("dev")]);
+
     hasQuads = !!mask?.length;
     wireU.uQuads.value = hasQuads ? 1 : 0;
-    applyWire(object, wireU, mask);
+    el.btnCharts.disabled = !charts?.length;
+    el.btnDeviation.disabled = !dev?.length;
+    el.devTools.classList.toggle("rt-off", !dev?.length);
+    // The scale is set from the run's own worst deviation, so the ramp spans the
+    // data instead of an arbitrary range: a model that barely moved should still
+    // show where it moved most.
+    devMax = dev?.length ? Math.max(...dev) : 0;
+    syncDevScale();
+    applyWire(object, wireU, mask, charts, dev);
     // The source gets the same treatment, with no mask: without it the curtain
     // has nothing to cut on its own side and the left half stays empty.
     const src = viewer.parts?.[0]?.object;
@@ -466,9 +513,49 @@ export function createRetopo({
   for (const b of host.querySelectorAll("[data-ch]")) {
     b.addEventListener("click", () => {
       for (const o of host.querySelectorAll("[data-ch]")) o.classList.toggle("active", o === b);
+      for (const o of host.querySelectorAll("[data-view]")) o.classList.remove("active");
+      // Picking one of Albedo's channels means leaving the data views, which are
+      // overrides drawn on top of whatever channel is underneath.
+      wireU.uView.value = 0;
       applyChannel?.(b.dataset.ch);
+      viewer.invalidate?.();
     });
   }
+
+  for (const b of host.querySelectorAll("[data-view]")) {
+    b.addEventListener("click", () => {
+      const on = !b.classList.contains("active");
+      for (const o of host.querySelectorAll("[data-view]")) o.classList.toggle("active", on && o === b);
+      wireU.uView.value = on ? (b.dataset.view === "charts" ? 1 : 2) : 0;
+      viewer.invalidate?.();
+    });
+  }
+
+  el.xray.addEventListener("click", () => {
+    const on = el.xray.getAttribute("aria-pressed") !== "true";
+    el.xray.setAttribute("aria-pressed", String(on));
+    el.xray.classList.toggle("active", on);
+    wireU.uXray.value = on ? 1 : 0;
+    // Transparency has to be turned on at the material for the alpha the shader
+    // writes to mean anything at all.
+    viewer.root.traverse((n) => {
+      if (!n.isMesh && !n.isSkinnedMesh) return;
+      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
+        if (!m || !m.userData?.wirePatched) continue;
+        if (on) {
+          m.userData.xrayWas ??= { transparent: m.transparent, depthWrite: m.depthWrite };
+          m.transparent = true;
+          m.depthWrite = false;
+        } else if (m.userData.xrayWas) {
+          m.transparent = m.userData.xrayWas.transparent;
+          m.depthWrite = m.userData.xrayWas.depthWrite;
+          delete m.userData.xrayWas;
+        }
+        m.needsUpdate = true;
+      }
+    });
+    viewer.invalidate?.();
+  });
 
   for (const b of host.querySelectorAll("[data-wire]")) {
     b.addEventListener("click", () => {
@@ -1138,6 +1225,7 @@ export function createRetopo({
   el.undo.addEventListener("click", () => step(-1));
   el.redo.addEventListener("click", () => step(1));
 
+  el.devScale.addEventListener("input", syncDevScale);
   el.showCage.addEventListener("change", syncCage);
   el.cageOut.addEventListener("input", syncCage);
 

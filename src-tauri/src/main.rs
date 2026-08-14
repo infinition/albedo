@@ -421,7 +421,7 @@ fn main() {
             retopo::retopo_decimate,
             retopo::retopo_bake,
             retopo::retopo_cancel,
-            retopo::retopo_quad_mask,
+            retopo::retopo_sidecar,
             startup_file,
             supported_extensions,
             scan_textures,

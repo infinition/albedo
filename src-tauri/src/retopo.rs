@@ -333,6 +333,9 @@ pub fn remesh_file(
     }
     progress(b0);
 
+    // Filled by the bake when it can vouch for the mapping; see run_bake.
+    let mut chart_bytes: Option<Vec<u8>> = None;
+
     // Stage 5: bake. The source is reprojected onto the result and the maps are
     // written into it, so what leaves here is a textured low poly rather than a
     // bare one plus a pile of loose PNGs.
@@ -342,9 +345,12 @@ pub fn remesh_file(
     // because the whole low poly inherited a single pair of metallic and
     // roughness scalars.
     if req.bake {
-        result = run_bake(&result, &mesh, req, &mut report, &mut |f| {
+        result = run_bake(&result, &mesh, req, &mut report, &mut chart_bytes, &mut |f| {
             progress(b0 + f * (b1 - b0))
         })?;
+    }
+    if let Some(raw) = &chart_bytes {
+        let _ = std::fs::write(sidecar(output, "charts"), raw);
     }
 
     // How far the result actually moved, per vertex, for the heatmap.
@@ -375,6 +381,7 @@ fn run_bake(
     high: &plancton_core::Mesh,
     req: &RemeshRequest,
     report: &mut RemeshReport,
+    chart_bytes: &mut Option<Vec<u8>>,
     progress: &mut dyn FnMut(f32),
 ) -> Result<plancton_core::Mesh, String> {
     let opts = plancton_bake::BakeOptions {
@@ -401,6 +408,27 @@ fn run_bake(
     };
     let baked =
         plancton_bake::bake(low, high, &opts, progress).map_err(|e| format!("bake: {e:#}"))?;
+
+    // The chart each triangle landed in, so the viewer can colour the atlas.
+    //
+    // `BakeResult` does not carry the atlas, and unwrapping a second time is the
+    // honest way to get it: the alternative is widening plancton's public API
+    // from here, which is the wrong direction for a dependency. The unwrap is a
+    // fraction of the bake's own cost, since the expensive part is firing rays
+    // and not growing charts.
+    //
+    // Guarded rather than trusted. The bake re-indexes the low poly against the
+    // atlas, so if it ever splits or reorders triangles the mask would line up
+    // with nothing and paint noise that looks like a real chart layout. Counts
+    // disagreeing means no file, and the viewer keeps the mode switched off.
+    let charts = plancton_bake::unwrap(low, &opts.atlas);
+    if charts.chart_of_tri.len() == baked.mesh.triangle_count() {
+        let mut raw = Vec::with_capacity(charts.chart_of_tri.len() * 4);
+        for c in &charts.chart_of_tri {
+            raw.extend_from_slice(&c.to_le_bytes());
+        }
+        *chart_bytes = Some(raw);
+    }
 
     report.charts = baked.stats.charts;
     report.utilisation = baked.stats.utilisation;
@@ -447,7 +475,11 @@ pub fn bake_file(
     report.input_triangles = high.triangle_count();
     report.output_triangles = low.triangle_count();
 
-    let baked = run_bake(&low, &high, req, &mut report, progress)?;
+    let mut chart_bytes: Option<Vec<u8>> = None;
+    let baked = run_bake(&low, &high, req, &mut report, &mut chart_bytes, progress)?;
+    if let Some(raw) = &chart_bytes {
+        let _ = std::fs::write(sidecar(output, "charts"), raw);
+    }
 
     let out = plancton_core::glb::to_bytes(&baked).map_err(|e| format!("{e:#}"))?;
     std::fs::write(output, &out).map_err(|e| format!("écriture impossible: {e}"))?;
@@ -848,21 +880,38 @@ static RUNNING: Mutex<Option<std::process::Child>> = Mutex::new(None);
 /// engine failed" to someone who just pressed Annuler is a small lie.
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 
-/// Read the quad mask that travelled beside a result, if there is one.
+/// Read one of the files that travel beside a result.
 ///
-/// One `u32` per triangle. Bit `k` set means the edge from corner `k` to corner
-/// `k+1` is a real edge; the cleared bit on a paired triangle is the quad's
-/// diagonal. That is the whole convention, and it is what lets a viewer draw
-/// quads out of a triangle soup without the file format ever knowing.
+/// Three kinds, one reader:
+///
+/// | kind | written by | one per | meaning |
+/// |---|---|---|---|
+/// | `quads` | pairing | triangle | bit `k` set means the edge from corner `k` to `k+1` is real; the cleared bit on a paired triangle is the quad's diagonal |
+/// | `charts` | the atlas | triangle | which chart the triangle landed in |
+/// | `dev` | the BVH | **vertex** | how far the result moved from the source, in model units |
+///
+/// **Everything comes back as `f32`, including the two integer kinds**, and that
+/// is safe rather than sloppy: a quad mask is `0..7` and a chart id is a count of
+/// islands, both far below the 2^24 where `f32` stops representing integers
+/// exactly. One return type means one command instead of three that differ only
+/// in a cast, and the caller feeds all three to the same vertex attribute anyway.
 #[tauri::command]
-pub fn retopo_quad_mask(output: String) -> Option<Vec<u32>> {
-    let raw = std::fs::read(sidecar(Path::new(&output), "quads")).ok()?;
-    if raw.len() % 4 != 0 {
+pub fn retopo_sidecar(output: String, kind: String) -> Option<Vec<f32>> {
+    let raw = std::fs::read(sidecar(Path::new(&output), &kind)).ok()?;
+    if raw.len() % 4 != 0 || raw.is_empty() {
         return None;
     }
+    let float = kind == "dev";
     Some(
         raw.chunks_exact(4)
-            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .map(|c| {
+                let b = [c[0], c[1], c[2], c[3]];
+                if float {
+                    f32::from_le_bytes(b)
+                } else {
+                    u32::from_le_bytes(b) as f32
+                }
+            })
             .collect(),
     )
 }
