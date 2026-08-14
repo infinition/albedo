@@ -666,6 +666,15 @@ pub fn cli_main() -> Option<i32> {
         Ok(r) => {
             if machine {
                 println!("report {}", serde_json::to_string(&r).unwrap_or_default());
+            } else if baking {
+                // No deviation here: nothing was remeshed, so reporting one
+                // would be reporting a zero that means "not measured".
+                println!(
+                    "cuit sur {} triangles en {:.2} s, source à {}",
+                    r.output_triangles,
+                    r.millis as f64 / 1000.0,
+                    r.input_triangles
+                );
             } else {
                 println!(
                     "{} → {} triangles en {:.2} s, déviation max {:.5}",

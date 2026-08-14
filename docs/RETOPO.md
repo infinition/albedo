@@ -166,38 +166,43 @@ honest number is the last row, and it is a ceiling rather than the cost, because
 it still contains `plancton-server` with axum and tower-http, the CLI's argument
 parsing, `tracing-subscriber`, and a Rust runtime Albedo already links.
 
-### The real number, now that the two are linked
+### The real number, and how it got there
 
-The estimate above was 2 to 3 MB. It was wrong, and low. Measured on this
-machine, both builds at Albedo's release profile:
+The estimate above was 2 to 3 MB. Measured on this machine, every build at
+Albedo's release profile:
 
-| Build | Bytes | Link time |
+| Build | Bytes | Cost |
 | --- | ---: | ---: |
-| `albedo.exe`, before | 3,947,008 | 3 m 55 s |
-| `albedo.exe`, with decimation wired | **8,893,440** | 5 m 58 s |
-| **Cost** | **+4,946,432 (+125 %)** | +2 m |
+| `albedo.exe`, before | 3,947,008 | |
+| decimation in process, `panic = "abort"` dropped | 8,893,440 | +4,946,432 |
+| decimation in process, `abort` kept | 4,720,128 | +773,120 |
+| **engine and baker in a child process, `abort` kept** | **4,982,272** | **+1,035,264** |
+
+The last row is what shipped, and the third is why. Dropping `abort` so a
+`catch_unwind` could fire cost 4.17 MB on its own, five times the engine's whole
+weight, because unwinding tables land on the entire binary rather than on the
+engine alone. Running the engine in a child process keeps `abort`, gives a
+stronger guard than `catch_unwind` ever was, and pays about one megabyte for the
+decimator *and* the baker together.
+
+That last point is worth stating plainly: the final binary is smaller than the
+one that only had decimation, because the architecture changed underneath it.
 
 The old 4.4 MB binary on disk was stale, from before the project moved: a fresh
 baseline is 3.95 MB, which is the "3.7 MB executable" the README claims, so that
-claim was accurate.
+claim was accurate. It now has to say five, which is a sentence to rewrite rather
+than a promise to break.
 
-Three reasons the estimate missed, and only the first was in it:
+Two things the first estimate had no way to see, and they pull in opposite
+directions:
 
-1. `gltf` and `image` are not small.
-2. **The engine is built at `opt-level = 3`, not `"s"`.** That is deliberate and
-   it is the whole point of the per package override, but it means the engine's
-   code is optimised for speed in a binary otherwise optimised for size.
-3. **Dropping `panic = "abort"` adds unwinding tables to the entire binary**, not
-   to the engine alone. This is the one that was missed: it is not a cost of the
-   engine, it is a cost the engine's presence imposes on Albedo's own code and on
-   every dependency it already had.
-
-And this is decimation only. The baker is not wired yet, so the number will grow
-again in phase 5.
-
-Whether 8.9 MB is acceptable is a judgement, not a measurement. It is still one
-file with nothing to install, which is the promise that matters, but the README's
-headline number has to be rewritten rather than quietly left wrong.
+1. **The engine is built at `opt-level = 3`, not `"s"`.** Deliberate, and the
+   whole point of the per package override, but it means the engine's code is
+   optimised for speed inside a binary otherwise optimised for size.
+2. **`panic = "abort"` is worth more than the engine.** Not a cost of the engine
+   at all: a cost its presence would have imposed on Albedo's own code and on
+   every dependency it already had. Measuring it is what turned the architecture
+   around.
 
 ---
 
@@ -293,7 +298,17 @@ Decisions taken:
 
 ## Phases
 
-> **Before anything: the build cache does not survive moving the project.**
+> **`cargo build --release` does not produce a usable application.** It produces
+> an executable that opens a window and shows `ERR_CONNECTION_REFUSED` against
+> `localhost:5183`, because it bypasses the Tauri CLI: `tauri-build` then emits
+> `cargo:rustc-cfg=dev` and the webview loads `devUrl` rather than the bundled
+> `frontendDist`. The line is in the build log and easy to read past. Use
+> `npx tauri build --no-bundle`, which runs `beforeBuildCommand` and compiles in
+> production mode. `cargo build --release` is still the right thing for
+> measuring the binary or exercising the `remesh` and `bake` subcommands, which
+> never touch a webview.
+>
+> **The build cache does not survive moving the project.**
 > Albedo was built at `C:\Users\infinition\Desktop\Albedo` and now lives at
 > `C:\DEV\coding\Github\Albedo`. `cargo build --release` fails with exit 101 and
 > `failed to read plugin permissions: ...\Desktop\Albedo\...\app_hide.toml`,
@@ -381,9 +396,28 @@ Decisions taken:
       large refusal count and a barely moved count is a guard firing on every
       candidate, and it looks exactly like a run with nothing left to collapse
       unless both numbers are on screen.
-- [ ] Method choice between Decimate, Rebuild and Pair. Only Decimate is wired.
+- [x] Method choice between Décimer and Reconstruire, each saying in a sentence
+      what it is for rather than what it does.
+- [x] **plancton's toolbar**, adapted to what Albedo can already do: five of its
+      eleven channels, wireframe, an A/B between source, result and both, and
+      frame. It drives the same channel state the inspector does, so the two
+      cannot disagree about what is on screen. Everything about looking at the
+      model is reached for constantly while judging a result, and a control you
+      must open a panel for is a control you stop using.
 - [ ] Cancellation.
-- [ ] An A/B toggle between source and result.
+
+> **The bug that made every icon in that toolbar dead**, worth writing down
+> because it looks exactly like a missing handler. The `pointer-events: auto`
+> rule named `.rt-hud` and not `.rt-top`, so the whole strip inherited
+> `pointer-events: none` from the host. The tell was that the bake switch worked
+> and nothing else did: a `<label>` toggles its checkbox natively, with no
+> JavaScript involved, so it was the only control that never needed a click to
+> reach a listener.
+>
+> The first fix made it worse by granting events to the whole column, which is
+> full width with `max-content` children: an invisible rectangle across the top
+> of the viewport, eating clicks meant for the model. Only the boxes that are
+> actually painted take events back.
 
 > The inspector panes overflow horizontally by 4 pixels, Caméra, Rendu and Effets alike,
 > for the same reason: a full width `input[type=range]`. Left alone on purpose.
