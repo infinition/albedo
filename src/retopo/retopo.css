@@ -787,3 +787,23 @@ body.retopo-open #inspector { display: none; }
   flex: none;
 }
 .rt-swap:hover { color: var(--accent, #7cc4ff); background: rgb(255 255 255 / 0.08); }
+
+/*
+ * A mesh's own portrait, in place of the glyph that used to say only "this row
+ * is a mesh" — a thing the indent already said.
+ *
+ * Transparent background on purpose: the render has no ground and no backdrop,
+ * so the part floats on the row and reads as a silhouette rather than as a
+ * picture in a frame. No border for the same reason; a box around it would make
+ * it a thumbnail of something else instead of the thing itself.
+ */
+.rt-face {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  image-rendering: auto;
+}
+.rt-mat .rt-face { width: 20px; height: 20px; }

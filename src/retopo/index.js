@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { buildCage } from "./cage.js";
 import { readScene, thumbnail, toggleMap } from "./outline.js";
+import { forgetPortraits, portrait } from "./portrait.js";
 import { ICONS } from "./icons.js";
 import { applyWire, makeWireUniforms, setSide, setWireColor } from "./wire.js";
 import "./retopo.css";
@@ -508,6 +509,7 @@ export function createRetopo({
     // First paint of a model opens every mesh, so the shape of the file is
     // visible without a single click.
     if (!treeSeen && meshes.length) {
+      forgetPortraits();
       for (const m of meshes) opened.add(m.id);
       treeSeen = true;
     }
@@ -520,8 +522,13 @@ export function createRetopo({
       const row = document.createElement("div");
       row.className = "rt-row rt-mesh" + (picked.has(mesh.id) ? " picked" : "");
       row.appendChild(caret(mesh.id, mesh.materials.length > 0));
+      // The mesh draws itself. On a file whose parts are called Object_12 through
+      // Object_47 this is the only thing that tells one row from another.
+      const face = portrait(viewer.renderer, mesh.node);
       row.insertAdjacentHTML("beforeend",
-        `<span class="rt-glyph">▦</span>` +
+        (face
+          ? `<span class="rt-face" style="background-image:url(${face})"></span>`
+          : `<span class="rt-glyph">▦</span>`) +
         `<span class="rt-name">${mesh.name}</span>` +
         `<span class="rt-num">${fr(mesh.triangles)}</span>`);
       row.title = `${mesh.name} — ${fr(mesh.triangles)} triangles`;
@@ -551,10 +558,15 @@ export function createRetopo({
         const mrow = document.createElement("div");
         mrow.className =
           "rt-row rt-mat" + (picked.has(mat.id) ? " picked" : "") + (mat.hidden ? " muted" : "");
-        const url = thumbnail(mat.material.map);
+        // The material's own portrait: this mesh with every other material
+        // ghosted out, which says *where on the part* it sits. A colour swatch
+        // says "this one is blue"; that is a different and lesser fact.
+        const shown = mesh.materials.indexOf(mat);
+        const face2 = portrait(viewer.renderer, mesh.node, mesh.materials.length > 1 ? shown : -1);
+        const url = face2 || thumbnail(mat.material.map);
         mrow.appendChild(caret(mat.id, mat.maps.length > 0));
         mrow.insertAdjacentHTML("beforeend",
-          `<span class="mat-chip"${
+          `<span class="${face2 ? "rt-face" : "mat-chip"}"${
             url
               ? ` style="background-image:url(${url})"`
               : ` style="background:${mat.material.color ? "#" + mat.material.color.getHexString() : "#3a3f48"}"`
