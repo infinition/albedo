@@ -200,13 +200,19 @@ real one, built with `npx tauri build`, carries `dist/` inside it:
 | --- | ---: |
 | before, the executable found on disk | 4,428,800 |
 | after the engine and the baker landed | 5,472,256 |
-| **after the whole viewer chantier** | **5,482,496** |
-| cost | +1,053,696 |
+| after the whole viewer chantier | 5,482,496 |
+| **after the panel became shared** | **5,494,784** |
+| cost | +1,065,984 |
 
 The same one megabyte, which is the useful confirmation: the delta measured
 between two dev builds survives into the real ones.
 
-The last row is worth its own sentence. The shader wireframe, the cage, the
+Splitting one panel into nine permanent tabs, moving the tree and the material
+numbers, and adding a central selection cost **12,288 bytes** on the shipped
+executable, of which the tree's own chunk is 8,248 bytes of JavaScript and 2,696
+of CSS that a session never opening the Scène tab does not fetch at all.
+
+The row before it is worth its own sentence. The shader wireframe, the cage, the
 comparison curtain, the ghost, undo and redo, two engine parameters, the borrowed
 materials list and the scope control together cost **10,240 bytes**. Almost all
 of that work is JavaScript and GLSL strings living in a chunk that was already
