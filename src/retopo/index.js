@@ -265,11 +265,6 @@ const SHELL = `
       laisse tranquille.</p>
     <div class="rt-tree" data-el="tree"></div>
 
-    <p class="rt-sub">Remplacer une texture</p>
-    <p class="rt-hint">La liste d'Albedo, telle quelle : chaque emplacement peut
-      être remplacé ou restauré ici. Corriger une carte de normale avant la
-      projection vaut mieux que corriger une projection après.</p>
-    <div data-el="matterHost"></div>
   </section>
 
   <section class="rt-page" data-tab="result">
@@ -338,6 +333,7 @@ export function createRetopo({
   applyChannel,
   setWireframe,
   channels,
+  swapTexture,
 }) {
   const host = document.createElement("div");
   host.id = "retopo";
@@ -447,14 +443,12 @@ export function createRetopo({
     borrowed.delete(key);
   }
 
-  const findMatter = () => document.getElementById("materials-section");
   // `div.pane`, not merely `[data-pane]`: the nav button that *selects* the pane
   // carries the same attribute, and grabbing it moves the tab instead of the
   // contents — which looks like the borrow silently doing nothing.
   const findView = () => document.querySelector('div.pane[data-pane="render"]');
 
   function borrowPanes() {
-    borrow("matter", findMatter, el.matterHost);
     // The whole render pane, not a copy of its parts: eleven channels, the
     // wireframe, the grid, the bounding box, the skeleton, the exposure and the
     // clipping, with every handler and every repaint still pointed at it.
@@ -462,7 +456,6 @@ export function createRetopo({
   }
 
   function returnPanes() {
-    giveBack("matter", findMatter);
     giveBack("view", findView);
   }
 
@@ -556,7 +549,26 @@ export function createRetopo({
             viewer.invalidate?.();
             paintTree();
           });
-          krow.appendChild(keye);
+
+          // Replacing lives on the row of the map it replaces, rather than in a
+          // second list somewhere else that says the same things about the same
+          // slots. One place per idea.
+          const swap = document.createElement("button");
+          swap.type = "button";
+          swap.className = "rt-swap";
+          swap.textContent = "⇄";
+          swap.title = `Remplacer ${map.label}`;
+          swap.addEventListener("click", (e) => {
+            e.stopPropagation();
+            swapTexture?.(mat.id, map.slot);
+          });
+
+          const size = document.createElement("span");
+          size.className = "rt-num";
+          const img = map.texture?.image;
+          size.textContent = img?.width ? `${img.width}×${img.height}` : "";
+
+          krow.append(size, swap, keye);
           group.appendChild(krow);
         }
       }

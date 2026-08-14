@@ -1915,6 +1915,10 @@ async function toggleRetopo() {
     // When the model came off disk as glTF the engine opens that file itself,
     // rather than being handed a forty megabyte re-export across the bridge.
     sourcePath: () => openedPath,
+    // Reused rather than reimplemented: picking a file, reading it, and making
+    // the incoming texture inherit the outgoing one's wrapping and transform is
+    // an afternoon of work that already exists and is already debugged.
+    swapTexture,
     // For the scope control: it reads which materials are hidden, and it needs
     // the originals to match uuids against the channel view's stand-ins.
     channels,

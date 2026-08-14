@@ -90,6 +90,21 @@ body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
  */
 body.peeking.retopo-open { --peek: 50%; }
 
+/*
+ * The inspector is gone while Retopo is open, guaranteed here rather than
+ * trusted to a call.
+ *
+ * `toggleInspector(false)` already runs when the mode opens, but its own icon
+ * strip was still showing through above the panel: one missed path, one repaint
+ * racing the other, and two panels are stacked with their two navigations
+ * arguing about which tab you are on. A rule tied to the same class that opens
+ * the mode cannot be raced.
+ *
+ * Its render pane is not lost with it — that pane has been moved into the Vue
+ * tab by then, and moving a node out of a hidden parent keeps it visible.
+ */
+body.retopo-open #inspector { display: none; }
+
 
 /* --- the panel ----------------------------------------------------------- */
 
