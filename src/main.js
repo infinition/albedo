@@ -663,6 +663,27 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     applyChannel(currentChannel);
     $("opt-skeleton").checked = viewer.skeletons.visible;
 
+    /*
+     * The tab's picture, for the model that just arrived.
+     *
+     * Capturing only when a tab is parked was not enough, and the gap showed
+     * exactly where it mattered most: a preview tab is *reused in place* and
+     * never parked, so it kept the first model's snapshot for every model after
+     * it. The strip showed one thing and the tab held another, which is worse
+     * than showing nothing.
+     *
+     * On the next frame, because the camera is framed and the channel applied
+     * during this one, and a photograph taken before either is a photograph of
+     * the wrong thing.
+     */
+    requestAnimationFrame(() => {
+      if (!activeDoc || !viewer.current) return;
+      const shot = snapThumb();
+      if (!shot) return;
+      activeDoc.thumb = shot;
+      paintTabs();
+    });
+
     // Once the maps are in, blending that the file asked for and the picture
     // does not want can be settled. Not awaited: the model is on screen and
     // this only ever makes it more correct.

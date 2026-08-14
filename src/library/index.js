@@ -165,6 +165,8 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     page: { list: [], shown: 0 },
     open: false,
     peek: false,
+    /** Set when the panel is closed by hand, so a click stops reopening it. */
+    peekDismissed: false,
   };
 
   el.sort.value = state.sort;
@@ -629,7 +631,21 @@ export function createLibrary({ tauri, onOpen, prefs }) {
       // Building a selection is not a request to look at each thing put in it:
       // every control-click used to load another model into the viewer, and a
       // run taken with shift loaded them one after another.
-      if (state.peek && state.chosen.size === 1 && state.selected) peek(state.selected);
+      if (state.chosen.size === 1 && state.selected) {
+        /*
+         * A click opens the side viewer, rather than waiting to be told twice.
+         *
+         * Selecting a card and getting nothing until you find the panel button
+         * makes the first click a wasted one, and the panel is what selecting a
+         * card is *for*. So it opens itself.
+         *
+         * Unless you closed it on purpose. Auto-opening a panel someone has just
+         * dismissed is an argument, not a convenience, so an explicit close is
+         * remembered for the session and a click then does what it did before.
+         */
+        if (!state.peek && !state.peekDismissed) setPeek(true);
+        if (state.peek) peek(state.selected);
+      }
     });
     node.addEventListener("dblclick", () => open(entry));
     observer.observe(art);
@@ -815,7 +831,11 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     if (state.peek && state.selected) peek(state.selected);
   }
 
-  el.peek.addEventListener("click", () => setPeek(!state.peek));
+  el.peek.addEventListener("click", () => {
+    // Closing it by hand is the one thing that stops a click from reopening it.
+    state.peekDismissed = state.peek;
+    setPeek(!state.peek);
+  });
 
   /** Drag the edge; the width is the user's, and it is remembered. */
   el.handle.addEventListener("pointerdown", (e) => {
