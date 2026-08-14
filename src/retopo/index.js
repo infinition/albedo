@@ -21,12 +21,52 @@ import "./retopo.css";
  */
 
 const SHELL = `
+<div class="rt-stack">
 <dl class="rt-hud" data-el="hud">
   <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
   <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
   <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
   <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
 </dl>
+
+<div class="rt-top" data-el="top">
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Affichage</span>
+    <div class="segment" role="group" aria-label="Affichage">
+      <button class="seg active" type="button" data-ch="shaded" title="Rendu physique">Rendu</button>
+      <button class="seg" type="button" data-ch="unlit" title="Texture telle qu'elle a été peinte, sans éclairage">Peint</button>
+      <button class="seg" type="button" data-ch="albedo" title="Couleur de base seule">Albedo</button>
+      <button class="seg" type="button" data-ch="normalGeom" title="Normales de géométrie, pour lire la facettisation">Normales</button>
+      <button class="seg" type="button" data-ch="uv" title="Damier d'UV, pour juger l'atlas">UV</button>
+    </div>
+  </div>
+
+  <span class="rt-tsep"></span>
+
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Arêtes</span>
+    <button class="seg" type="button" data-el="wire" aria-pressed="false" title="Fil de fer">▧</button>
+  </div>
+
+  <span class="rt-tsep"></span>
+
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Comparer</span>
+    <div class="segment" role="group" aria-label="Comparer">
+      <button class="seg" type="button" data-ab="source" title="La source seule">Source</button>
+      <button class="seg" type="button" data-ab="result" title="Le résultat seul">Résultat</button>
+      <button class="seg active" type="button" data-ab="both" title="Les deux dans la scène">Les deux</button>
+    </div>
+  </div>
+
+  <span class="rt-tsep"></span>
+
+  <div class="rt-tgroup">
+    <span class="rt-tlabel">Caméra</span>
+    <button class="seg" type="button" data-el="frame" title="Recadrer">⌖</button>
+  </div>
+</div>
+</div>
 
 <div class="rt-panel" data-el="panel">
   <nav class="rt-tabs" role="tablist">
@@ -174,6 +214,8 @@ const SHELL = `
     <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
   </label>
   <button class="wide" type="button" data-el="run">Décimer</button>
+  <button class="wide" type="button" data-el="rebake" disabled
+          title="Refaire seulement les cartes, sans retoucher la géométrie">Cuire</button>
   <span class="rt-note" data-el="note"></span>
   <button class="wide" type="button" data-el="close">Fermer</button>
   <div class="rt-progress"><i data-el="fill"></i></div>
@@ -196,7 +238,17 @@ function countTriangles(root) {
 const fr = (n) => n.toLocaleString("fr-FR");
 const isGltf = (p) => /\.(glb|gltf)$/i.test(p || "");
 
-export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, toast, sourcePath }) {
+export function createRetopo({
+  tauri,
+  viewer,
+  importPart,
+  onBusy,
+  onOpenChange,
+  toast,
+  sourcePath,
+  applyChannel,
+  setWireframe,
+}) {
   const host = document.createElement("div");
   host.id = "retopo";
   host.innerHTML = SHELL;
@@ -210,6 +262,8 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
   let running = false;
   let open = false;
   let method = "decimate";
+  /** The two files the last run left behind, so a bake can be redone alone. */
+  let lastRun = null;
 
   const METHOD_HINT = {
     decimate:
@@ -233,6 +287,48 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
   }
   for (const t of host.querySelectorAll(".rt-tab")) {
     t.addEventListener("click", () => showTab(t.dataset.tab));
+  }
+
+  // --- the top bar --------------------------------------------------------
+
+  for (const b of host.querySelectorAll("[data-ch]")) {
+    b.addEventListener("click", () => {
+      for (const o of host.querySelectorAll("[data-ch]")) o.classList.toggle("active", o === b);
+      applyChannel?.(b.dataset.ch);
+    });
+  }
+
+  el.wire.addEventListener("click", () => {
+    const on = el.wire.getAttribute("aria-pressed") !== "true";
+    el.wire.setAttribute("aria-pressed", String(on));
+    el.wire.classList.toggle("active", on);
+    setWireframe?.(on);
+  });
+
+  el.frame.addEventListener("click", () => viewer.frameCurrent?.());
+
+  /**
+   * Source, result, or both.
+   *
+   * Comparing the same pixels is far easier on the eye than reading two numbers,
+   * and the result lives in the scene beside its source rather than replacing
+   * it, which is what makes this possible at all.
+   */
+  function setAB(mode) {
+    const parts = viewer.parts || [];
+    const lastIsResult = parts.length > 1;
+    parts.forEach((p, i) => {
+      const isResult = lastIsResult && i === parts.length - 1;
+      p.object.visible =
+        mode === "both" || (mode === "result" ? isResult : !isResult);
+    });
+    viewer.invalidate?.();
+  }
+  for (const b of host.querySelectorAll("[data-ab]")) {
+    b.addEventListener("click", () => {
+      for (const o of host.querySelectorAll("[data-ab]")) o.classList.toggle("active", o === b);
+      setAB(b.dataset.ab);
+    });
   }
 
   // --- painting -----------------------------------------------------------
@@ -295,6 +391,10 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     source = viewer.current ? countTriangles(viewer.root) : 0;
     el.run.disabled = source === 0 || running || !tauri;
     el.run.title = source === 0 ? "Ouvre un modèle d'abord" : "";
+    el.rebake.disabled = !lastRun || running || !tauri;
+    el.rebake.title = lastRun
+      ? "Refaire seulement les cartes, sans retoucher la géométrie"
+      : "Il faut un résultat avant de pouvoir le cuire";
 
     // Say where the geometry will come from, because the two paths behave
     // differently and the difference is worth a sentence rather than a surprise.
@@ -320,6 +420,79 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
 
   // --- running ------------------------------------------------------------
+
+  /** The bake half of the request, shared by a full run and a bake on its own. */
+  const bakeRequest = () => ({
+    bake: true,
+    mapSize: mapSize(),
+    cageOut: Number(el.cageOut.value),
+    cageIn: Number(el.cageIn.value),
+    gutter: Number(el.gutter.value),
+    bleed: Number(el.bleed.value),
+    islandAngleDeg: Number(el.island.value),
+    bakeNormal: el.mNormal.checked,
+    bakeMetallicRoughness: el.mMR.checked,
+    bakeEmissive: el.mEmissive.checked,
+    bakeAo: el.mAo.checked,
+    aoSamples: Number(el.aoSamples.value),
+    aoDistance: Number(el.aoDistance.value),
+  });
+
+  /**
+   * Write up what a run did, on the Résultat tab.
+   *
+   * The refusals are shown rather than swallowed. A run with a large refusal
+   * count and a barely moved triangle count is a guard firing on every
+   * candidate, and it looks exactly like a run that simply had nothing left to
+   * collapse unless the numbers are on screen.
+   */
+  function reportOn(r, bakeOnly = false) {
+    const lines = [];
+    if (!bakeOnly) {
+      lines.push(
+        `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)} triangles en ` +
+          `${(r.millis / 1000).toFixed(2)} s, déviation maximum ` +
+          `${r.deviationMax.toPrecision(3)} unité.`
+      );
+      if (r.holesFilled || r.holesLeft) {
+        lines.push(`Trous : ${fr(r.holesFilled)} comblés, ${fr(r.holesLeft)} laissés ouverts.`);
+      }
+      if (r.rejectedTopology || r.rejectedFlip) {
+        lines.push(
+          `${fr(r.collapses)} fusions, refus : ${fr(r.rejectedTopology)} topologie, ` +
+            `${fr(r.rejectedFlip)} retournement.`
+        );
+      }
+      // The mean, never the worst. The worst triangle sits on a crease, which
+      // relaxation pins on purpose, so it barely moves even when the mesh
+      // improved throughout.
+      if (r.aspectAfter > 0) {
+        lines.push(
+          `Rapport d'aspect moyen : ${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}.`
+        );
+      }
+      if (r.quads) {
+        lines.push(`${fr(r.quads)} quads, ${(r.quadFraction * 100).toFixed(0)} % de la surface.`);
+      }
+    } else {
+      lines.push(`Cartes refaites en ${(r.millis / 1000).toFixed(2)} s, géométrie inchangée.`);
+    }
+    if (r.charts) {
+      const total = r.hits + r.misses;
+      const miss = total ? (r.misses / total) * 100 : 0;
+      lines.push(
+        `Atlas : ${fr(r.charts)} îlots, ${(r.utilisation * 100).toFixed(0)} % occupé, ` +
+          `${miss.toFixed(1)} % de rayons manqués.`
+      );
+      lines.push(`Cartes : ${r.maps.join(", ")}.`);
+      // A miss is a ray that fell back to the nearest surface point rather than
+      // finding the high poly. A few are normal; a lot means the cage is too
+      // tight for this pair of meshes, or a chart wrapped around something thin.
+      if (miss > 15) lines.push("Beaucoup de manques : essaie une cage plus longue.");
+    }
+    el.report.textContent = lines.join(" ");
+    showTab("result");
+  }
 
   /** The bar, the fill and the note, in one place so they cannot disagree. */
   function say(text, fraction) {
@@ -409,71 +582,18 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
           relaxIterations: Number(el.relax.value),
           relaxAngleDeg: Number(el.relaxAngle.value),
           pairQuads: el.quads.checked,
+          ...bakeRequest(),
           bake: el.bake.checked,
-          mapSize: mapSize(),
-          cageOut: Number(el.cageOut.value),
-          cageIn: Number(el.cageIn.value),
-          gutter: Number(el.gutter.value),
-          bleed: Number(el.bleed.value),
-          islandAngleDeg: Number(el.island.value),
-          bakeNormal: el.mNormal.checked,
-          bakeMetallicRoughness: el.mMR.checked,
-          bakeEmissive: el.mEmissive.checked,
-          bakeAo: el.mAo.checked,
-          aoSamples: Number(el.aoSamples.value),
-          aoDistance: Number(el.aoDistance.value),
         },
       });
 
       say("Chargement du résultat…", 1);
       await importPart(dirs.output);
       last = r;
-
-      // The refusals are shown rather than swallowed. A run with a large refusal
-      // count and a barely moved triangle count is a guard firing on every
-      // candidate, and it looks exactly like a run that simply had nothing left
-      // to collapse unless the numbers are on screen.
-      const lines = [
-        `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)} triangles en ` +
-          `${(r.millis / 1000).toFixed(2)} s, déviation maximum ` +
-          `${r.deviationMax.toPrecision(3)} unité.`,
-      ];
-      if (r.holesFilled || r.holesLeft) {
-        lines.push(`Trous : ${fr(r.holesFilled)} comblés, ${fr(r.holesLeft)} laissés ouverts.`);
-      }
-      if (r.rejectedTopology || r.rejectedFlip) {
-        lines.push(
-          `${fr(r.collapses)} fusions, refus : ${fr(r.rejectedTopology)} topologie, ` +
-            `${fr(r.rejectedFlip)} retournement.`
-        );
-      }
-      // The mean, never the worst. The worst triangle sits on a crease, which
-      // relaxation pins on purpose, so it barely moves even when the mesh
-      // improved throughout.
-      if (r.aspectAfter > 0) {
-        lines.push(
-          `Rapport d'aspect moyen : ${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}.`
-        );
-      }
-      if (r.quads) {
-        lines.push(`${fr(r.quads)} quads, ${(r.quadFraction * 100).toFixed(0)} % de la surface.`);
-      }
-      if (r.charts) {
-        const total = r.hits + r.misses;
-        const miss = total ? (r.misses / total) * 100 : 0;
-        lines.push(
-          `Atlas : ${fr(r.charts)} îlots, ${(r.utilisation * 100).toFixed(0)} % occupé, ` +
-            `${miss.toFixed(1)} % de rayons manqués.`
-        );
-        lines.push(`Cartes : ${r.maps.join(", ")}.`);
-        // A miss is a ray that fell back to the nearest surface point rather
-        // than finding the high poly. A few are normal; a lot means the cage is
-        // too tight for this pair of meshes, or a chart wrapped around something
-        // thin.
-        if (miss > 15) lines.push("Beaucoup de manques : essaie une cage plus longue.");
-      }
-      el.report.textContent = lines.join(" ");
-      showTab("result");
+      // Both files stay named, so the bake can be redone on its own without
+      // touching the geometry again.
+      lastRun = { high: input, low: dirs.output };
+      reportOn(r);
 
       const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
       toast?.(`${fr(r.outputTriangles)} triangles, ${cut} % de moins`);
@@ -489,7 +609,60 @@ export function createRetopo({ tauri, viewer, importPart, onBusy, onOpenChange, 
     }
   }
 
+  /**
+   * Bake again, and nothing else.
+   *
+   * Baking is its own operation on two meshes that already exist, not a stage of
+   * the retopology job, so changing a map size or a cage distance costs a bake
+   * rather than a whole decimation. On a big model that is the difference
+   * between seconds and a minute, which is what makes iterating on a bad map
+   * bearable at all.
+   */
+  async function rebake() {
+    if (running || !tauri || !lastRun) return;
+    running = true;
+    el.run.disabled = true;
+    el.rebake.disabled = true;
+    el.err.hidden = true;
+    el.fill.style.width = "0%";
+    say("Projection des textures…", 0);
+    onBusy?.(true);
+
+    let stop = null;
+    try {
+      const dirs = await tauri.core.invoke("retopo_workdir");
+      stop = await tauri.event.listen("retopo://progress", (e) => {
+        const f = e.payload || 0;
+        say(`Projection des textures… ${Math.round(f * 100)} %`, f);
+      });
+
+      const r = await tauri.core.invoke("retopo_bake", {
+        high: lastRun.high,
+        low: lastRun.low,
+        output: dirs.rebake,
+        request: bakeRequest(),
+      });
+
+      say("Chargement du résultat…", 1);
+      await importPart(dirs.rebake);
+      lastRun = { high: lastRun.high, low: dirs.rebake };
+      last = { ...last, ...r, outputTriangles: r.outputTriangles || last.outputTriangles };
+      reportOn(r, true);
+      toast?.(`Cartes refaites en ${(r.millis / 1000).toFixed(1)} s`);
+      say("");
+    } catch (e) {
+      fail(e);
+    } finally {
+      stop?.();
+      running = false;
+      onBusy?.(false);
+      el.bar.classList.remove("busy");
+      refresh();
+    }
+  }
+
   el.run.addEventListener("click", run);
+  el.rebake.addEventListener("click", rebake);
   el.close.addEventListener("click", () => api.hide());
   setMethod("decimate");
 

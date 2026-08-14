@@ -1864,6 +1864,13 @@ async function toggleRetopo() {
     // When the model came off disk as glTF the engine opens that file itself,
     // rather than being handed a forty megabyte re-export across the bridge.
     sourcePath: () => openedPath,
+    // The view controls in the mode's top bar drive the same channel state the
+    // inspector does, so the two can never disagree about what is on screen.
+    applyChannel,
+    setWireframe: (on) => {
+      $("opt-wireframe").checked = on;
+      channels.setWireframe(on);
+    },
     // The right edge holds one panel at a time. Retopo is a state of the viewer
     // rather than a second viewer, so it never sits beside the inspector: the
     // two would overlap, and the third surface would be showing the same model

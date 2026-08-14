@@ -320,53 +320,9 @@ pub fn remesh_file(
     // because the whole low poly inherited a single pair of metallic and
     // roughness scalars.
     if req.bake {
-        let opts = plancton_bake::BakeOptions {
-            atlas: plancton_bake::AtlasOptions {
-                resolution: req.map_size,
-                // The gutter and the bleed are two different things and both
-                // matter. This is the empty space between islands, so a mip
-                // level cannot mix two charts.
-                padding: req.gutter,
-                max_chart_angle_deg: req.island_angle_deg,
-                ..Default::default()
-            },
-            cage_out: req.cage_out,
-            cage_in: req.cage_in,
-            bake_normal: req.bake_normal,
-            bake_metallic_roughness: req.bake_metallic_roughness,
-            bake_emissive: req.bake_emissive,
-            bake_ao: req.bake_ao,
-            ao_samples: req.ao_samples,
-            ao_distance: req.ao_distance,
-            // And this is the painted colour smeared past each border, so
-            // filtering never samples the background through a seam.
-            dilate: req.bleed,
-        };
-        let baked = plancton_bake::bake(&result, &mesh, &opts, &mut |f| {
+        result = run_bake(&result, &mesh, req, &mut report, &mut |f| {
             progress(b0 + f * (b1 - b0))
-        })
-        .map_err(|e| format!("bake: {e:#}"))?;
-
-        report.charts = baked.stats.charts;
-        report.utilisation = baked.stats.utilisation;
-        report.hits = baked.stats.hits;
-        report.misses = baked.stats.misses;
-        report.maps.push("Couleur de base".into());
-        if baked.stats.has_metallic_roughness {
-            report.maps.push("Métal et rugosité".into());
-        }
-        if baked.stats.has_normal {
-            report.maps.push("Normale".into());
-        }
-        // Emissive is dropped when nothing on the model emits, so asking for it
-        // costs nothing and the report says whether it actually happened.
-        if baked.stats.has_emissive {
-            report.maps.push("Émissif".into());
-        }
-        if baked.stats.has_ao {
-            report.maps.push("Occlusion".into());
-        }
-        result = baked.mesh;
+        })?;
     }
 
     // How far the result actually moved, per vertex, for the heatmap.
@@ -386,6 +342,98 @@ pub fn remesh_file(
     Ok(report)
 }
 
+/// Reproject `high` onto `low` and hand back the low poly carrying its maps.
+///
+/// Its own function because baking is not a stage of the retopology job. It is
+/// its own operation on two meshes that already exist, which is what makes
+/// changing a map size or a cage distance cost a bake rather than a whole
+/// decimation. The Retopo mode calls it both ways.
+fn run_bake(
+    low: &plancton_core::Mesh,
+    high: &plancton_core::Mesh,
+    req: &RemeshRequest,
+    report: &mut RemeshReport,
+    progress: &mut dyn FnMut(f32),
+) -> Result<plancton_core::Mesh, String> {
+    let opts = plancton_bake::BakeOptions {
+        atlas: plancton_bake::AtlasOptions {
+            resolution: req.map_size,
+            // The gutter and the bleed are two different things and both matter.
+            // This is the empty space between islands, so a mip level cannot mix
+            // two charts.
+            padding: req.gutter,
+            max_chart_angle_deg: req.island_angle_deg,
+            ..Default::default()
+        },
+        cage_out: req.cage_out,
+        cage_in: req.cage_in,
+        bake_normal: req.bake_normal,
+        bake_metallic_roughness: req.bake_metallic_roughness,
+        bake_emissive: req.bake_emissive,
+        bake_ao: req.bake_ao,
+        ao_samples: req.ao_samples,
+        ao_distance: req.ao_distance,
+        // And this is the painted colour smeared past each border, so filtering
+        // never samples the background through a seam.
+        dilate: req.bleed,
+    };
+    let baked =
+        plancton_bake::bake(low, high, &opts, progress).map_err(|e| format!("bake: {e:#}"))?;
+
+    report.charts = baked.stats.charts;
+    report.utilisation = baked.stats.utilisation;
+    report.hits = baked.stats.hits;
+    report.misses = baked.stats.misses;
+    report.maps.clear();
+    report.maps.push("Couleur de base".into());
+    if baked.stats.has_metallic_roughness {
+        report.maps.push("Métal et rugosité".into());
+    }
+    if baked.stats.has_normal {
+        report.maps.push("Normale".into());
+    }
+    // Emissive is dropped when nothing on the model emits, so asking for it
+    // costs nothing and the report says whether it actually happened.
+    if baked.stats.has_emissive {
+        report.maps.push("Émissif".into());
+    }
+    if baked.stats.has_ao {
+        report.maps.push("Occlusion".into());
+    }
+    Ok(baked.mesh)
+}
+
+/// Bake one file onto another, with no remeshing in between.
+///
+/// `high` is what the detail comes from, `low` is what receives it. Nothing is
+/// decimated here, so iterating on a bad map costs seconds instead of a minute.
+pub fn bake_file(
+    high: &Path,
+    low: &Path,
+    output: &Path,
+    req: &RemeshRequest,
+    progress: &mut dyn FnMut(f32),
+) -> Result<RemeshReport, String> {
+    let started = std::time::Instant::now();
+    let mut report = RemeshReport::default();
+
+    let hb = std::fs::read(high).map_err(|e| format!("lecture de la source impossible: {e}"))?;
+    let lb = std::fs::read(low).map_err(|e| format!("lecture du résultat impossible: {e}"))?;
+    let high = plancton_core::glb::load_bytes(&hb).map_err(|e| format!("{e:#}"))?;
+    let low = plancton_core::glb::load_bytes(&lb).map_err(|e| format!("{e:#}"))?;
+
+    report.input_triangles = high.triangle_count();
+    report.output_triangles = low.triangle_count();
+
+    let baked = run_bake(&low, &high, req, &mut report, progress)?;
+
+    let out = plancton_core::glb::to_bytes(&baked).map_err(|e| format!("{e:#}"))?;
+    std::fs::write(output, &out).map_err(|e| format!("écriture impossible: {e}"))?;
+
+    report.millis = started.elapsed().as_millis();
+    Ok(report)
+}
+
 /// `result.glb` plus an extension, so the extras sit next to what they describe.
 fn sidecar(output: &Path, ext: &str) -> PathBuf {
     let mut name = output.file_name().unwrap_or_default().to_os_string();
@@ -398,6 +446,11 @@ fn sidecar(output: &Path, ext: &str) -> PathBuf {
 
 const USAGE: &str = "\
 albedo remesh <modèle.glb> --faces <N> [options]
+albedo bake <source.glb> <résultat.glb> [options du bake]
+
+ Le bake seul ne remaille rien : il reprojette la source sur un résultat qui
+ existe déjà, donc revenir sur une taille de carte coûte un bake et pas une
+ décimation entière.
 
   --faces <N>        budget de triangles (obligatoire)
   --out <fichier>    sortie, par défaut <modèle>-retopo.glb
@@ -438,12 +491,15 @@ albedo remesh <modèle.glb> --faces <N> [options]
 /// `panic = "abort"` and its 4.17 MB.
 pub fn cli_main() -> Option<i32> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().map(String::as_str) != Some("remesh") {
+    let sub = args.first().map(String::as_str);
+    if sub != Some("remesh") && sub != Some("bake") {
         return None;
     }
+    let baking = sub == Some("bake");
     attach_console();
 
     let mut input: Option<String> = None;
+    let mut second: Option<String> = None;
     let mut output: Option<String> = None;
     let mut req = RemeshRequest::default();
     let mut machine = false;
@@ -558,6 +614,12 @@ pub fn cli_main() -> Option<i32> {
                 input = Some(other.to_string());
                 i += 1;
             }
+            // `bake` takes two: the detail comes from the first, the second
+            // receives it.
+            other if !other.starts_with('-') && baking && second.is_none() => {
+                second = Some(other.to_string());
+                i += 1;
+            }
             other => {
                 eprintln!("option inconnue : {other}\n\n{USAGE}");
                 return Some(2);
@@ -589,7 +651,18 @@ pub fn cli_main() -> Option<i32> {
         }
     };
 
-    match remesh_file(&input, &output, &req, &mut progress) {
+    let outcome = if baking {
+        req.bake = true;
+        let Some(low) = second.clone().map(PathBuf::from) else {
+            eprintln!("bake attend deux fichiers : la source puis le résultat\n\n{USAGE}");
+            return Some(2);
+        };
+        bake_file(&input, &low, &output, &req, &mut progress)
+    } else {
+        remesh_file(&input, &output, &req, &mut progress)
+    };
+
+    match outcome {
         Ok(r) => {
             if machine {
                 println!("report {}", serde_json::to_string(&r).unwrap_or_default());
@@ -668,16 +741,125 @@ fn attach_console() {}
 pub struct Workdir {
     pub input: String,
     pub output: String,
+    /// Where a bake on its own writes, so it never reads and writes one path and
+    /// so the viewer is asked for a URL it has not cached.
+    pub rebake: String,
 }
 
 #[tauri::command]
 pub fn retopo_workdir() -> Result<Workdir, String> {
     let dir = std::env::temp_dir().join(format!("albedo-retopo-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("dossier de travail impossible: {e}"))?;
+    // A run number, because a second bake must not hand the loader a path it has
+    // already cached under the same name.
+    let n = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
     Ok(Workdir {
         input: dir.join("source.glb").to_string_lossy().into_owned(),
-        output: dir.join("result.glb").to_string_lossy().into_owned(),
+        output: dir.join(format!("result-{n}.glb")).to_string_lossy().into_owned(),
+        rebake: dir.join(format!("bake-{n}.glb")).to_string_lossy().into_owned(),
     })
+}
+
+/// Append the bake flags, so the two commands cannot describe a bake
+/// differently.
+fn bake_args(cmd: &mut Command, request: &RemeshRequest) {
+    cmd.arg("--bake")
+        .arg("--uv-size")
+        .arg(request.map_size.to_string())
+        .arg("--cage-out")
+        .arg(request.cage_out.to_string())
+        .arg("--cage-in")
+        .arg(request.cage_in.to_string())
+        .arg("--gutter")
+        .arg(request.gutter.to_string())
+        .arg("--bleed")
+        .arg(request.bleed.to_string())
+        .arg("--island-angle")
+        .arg(request.island_angle_deg.to_string());
+    if !request.bake_normal {
+        cmd.arg("--no-normal");
+    }
+    if !request.bake_metallic_roughness {
+        cmd.arg("--no-mr");
+    }
+    if !request.bake_emissive {
+        cmd.arg("--no-emissive");
+    }
+    if request.bake_ao {
+        cmd.arg("--ao")
+            .arg("--ao-samples")
+            .arg(request.ao_samples.to_string())
+            .arg("--ao-distance")
+            .arg(request.ao_distance.to_string());
+    }
+}
+
+/// Drive a child, forward its progress, and hand back what it reported.
+fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, String> {
+    use tauri::Emitter;
+
+    cmd.arg("--machine").stdout(Stdio::piped()).stderr(Stdio::piped());
+    no_window(&mut cmd);
+    let mut child = cmd.spawn().map_err(|e| format!("lancement impossible: {e}"))?;
+
+    // The report arrives on the same pipe as the progress, tagged, so there is
+    // one stream to read and no second channel to keep in step.
+    let mut report: Option<RemeshReport> = None;
+    if let Some(out) = child.stdout.take() {
+        for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+            if let Some(rest) = line.strip_prefix("progress ") {
+                if let Ok(f) = rest.trim().parse::<f32>() {
+                    let _ = app.emit("retopo://progress", f);
+                }
+            } else if let Some(rest) = line.strip_prefix("report ") {
+                report = serde_json::from_str(rest).ok();
+            }
+        }
+    }
+
+    let mut stderr = String::new();
+    if let Some(mut e) = child.stderr.take() {
+        use std::io::Read;
+        let _ = e.read_to_string(&mut stderr);
+    }
+    let status = child.wait().map_err(|e| format!("attente échouée: {e}"))?;
+
+    match report {
+        Some(r) if status.success() => Ok(r),
+        _ if !stderr.trim().is_empty() => Err(stderr.trim().to_string()),
+        // No message and no report means the child died rather than refused: a
+        // panic, a stack overflow or an allocation failure. It took the geometry
+        // down with it and left this window alone, which is the entire point of
+        // running it over there.
+        _ => Err("le moteur a échoué sur ce maillage".into()),
+    }
+}
+
+/// Reproject a source onto a result that already exists, with no remeshing.
+///
+/// Baking is its own operation and not a stage of the retopology job, so
+/// changing a map size or a cage distance costs a bake rather than a whole
+/// decimation.
+#[tauri::command]
+pub async fn retopo_bake(
+    app: tauri::AppHandle,
+    high: String,
+    low: String,
+    output: String,
+    request: RemeshRequest,
+) -> Result<RemeshReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
+        let mut cmd = Command::new(exe);
+        cmd.arg("bake").arg(&high).arg(&low).arg("--out").arg(&output);
+        bake_args(&mut cmd, &request);
+        drive(&app, cmd)
+    })
+    .await
+    .map_err(|e| format!("tâche interrompue: {e}"))?
 }
 
 /// Run the engine in a child copy of this executable and report what it said.
@@ -688,8 +870,6 @@ pub async fn retopo_decimate(
     output: String,
     request: RemeshRequest,
 ) -> Result<RemeshReport, String> {
-    use tauri::Emitter;
-
     tauri::async_runtime::spawn_blocking(move || {
         let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
 
@@ -707,10 +887,7 @@ pub async fn retopo_decimate(
             .arg("--relax")
             .arg(request.relax_iterations.to_string())
             .arg("--relax-angle")
-            .arg(request.relax_angle_deg.to_string())
-            .arg("--machine")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .arg(request.relax_angle_deg.to_string());
         if !request.preserve_boundary {
             cmd.arg("--open-borders");
         }
@@ -724,71 +901,9 @@ pub async fn retopo_decimate(
             cmd.arg("--quads");
         }
         if request.bake {
-            cmd.arg("--bake")
-                .arg("--uv-size")
-                .arg(request.map_size.to_string())
-                .arg("--cage-out")
-                .arg(request.cage_out.to_string())
-                .arg("--cage-in")
-                .arg(request.cage_in.to_string())
-                .arg("--gutter")
-                .arg(request.gutter.to_string())
-                .arg("--bleed")
-                .arg(request.bleed.to_string())
-                .arg("--island-angle")
-                .arg(request.island_angle_deg.to_string());
-            if !request.bake_normal {
-                cmd.arg("--no-normal");
-            }
-            if !request.bake_metallic_roughness {
-                cmd.arg("--no-mr");
-            }
-            if !request.bake_emissive {
-                cmd.arg("--no-emissive");
-            }
-            if request.bake_ao {
-                cmd.arg("--ao")
-                    .arg("--ao-samples")
-                    .arg(request.ao_samples.to_string())
-                    .arg("--ao-distance")
-                    .arg(request.ao_distance.to_string());
-            }
+            bake_args(&mut cmd, &request);
         }
-        no_window(&mut cmd);
-
-        let mut child = cmd.spawn().map_err(|e| format!("lancement impossible: {e}"))?;
-
-        // The report arrives on the same pipe as the progress, tagged, so there
-        // is one stream to read and no second channel to keep in step.
-        let mut report: Option<RemeshReport> = None;
-        if let Some(out) = child.stdout.take() {
-            for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
-                if let Some(rest) = line.strip_prefix("progress ") {
-                    if let Ok(f) = rest.trim().parse::<f32>() {
-                        let _ = app.emit("retopo://progress", f);
-                    }
-                } else if let Some(rest) = line.strip_prefix("report ") {
-                    report = serde_json::from_str(rest).ok();
-                }
-            }
-        }
-
-        let mut stderr = String::new();
-        if let Some(mut e) = child.stderr.take() {
-            use std::io::Read;
-            let _ = e.read_to_string(&mut stderr);
-        }
-        let status = child.wait().map_err(|e| format!("attente échouée: {e}"))?;
-
-        match report {
-            Some(r) if status.success() => Ok(r),
-            _ if !stderr.trim().is_empty() => Err(stderr.trim().to_string()),
-            // No message and no report means the child died rather than
-            // refused: a panic, a stack overflow or an allocation failure. It
-            // took the geometry down with it and left this window alone, which
-            // is the entire point of running it over there.
-            _ => Err("le moteur a échoué sur ce maillage".into()),
-        }
+        drive(&app, cmd)
     })
     .await
     .map_err(|e| format!("tâche interrompue: {e}"))?

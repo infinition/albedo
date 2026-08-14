@@ -22,7 +22,7 @@
 #retopo.open { opacity: 1; }
 #retopo.open .rt-panel,
 #retopo.open .rt-bar,
-#retopo.open .rt-hud { pointer-events: auto; }
+#retopo.open .rt-stack { pointer-events: auto; }
 
 /*
  * Retopo is a state of the viewer, not a second one, so it never shares the
@@ -36,7 +36,7 @@
  */
 body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
 body.peeking #retopo .rt-panel { width: auto; left: 12px; }
-body.peeking #retopo .rt-hud { display: none; }
+body.peeking #retopo .rt-stack { max-width: none; right: 12px; }
 
 /* --- the panel ----------------------------------------------------------- */
 
@@ -237,10 +237,26 @@ body.peeking #retopo .rt-hud { display: none; }
  * the same height it covered the file name and the open button, which is the
  * kind of collision that only shows up on a real model with a long name.
  */
-.rt-hud {
+/*
+ * The head-up display and the toolbar are one column, stacked by flex rather
+ * than each given a top offset. Two guessed offsets is two chances to overlap,
+ * and they did: the strip started five pixels inside the display above it.
+ *
+ * The column sits under Albedo's own top left cluster, which is what the 48
+ * pixels are for and the only offset left.
+ */
+.rt-stack {
   position: absolute;
   top: calc(var(--gap, 14px) + 48px);
   left: var(--gap, 14px);
+  right: calc(360px + 2 * var(--gap, 14px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.rt-hud {
   display: flex;
   gap: 14px;
   padding: 8px 12px;
@@ -265,6 +281,49 @@ body.peeking #retopo .rt-hud { display: none; }
 /* A stat that has never been filled in should not shout as loudly as one that
    has. Otherwise four em dashes read as four numbers at a glance. */
 .rt-hud dd.rt-void { color: var(--dim, #8b929c); }
+
+/* --- the top bar --------------------------------------------------------- */
+
+/*
+ * plancton's toolbar, kept because everything about looking at the model is
+ * reached for constantly while judging a result, and a control you must open a
+ * panel for is a control you stop using.
+ *
+ * It sits under the head-up display, which itself sits under Albedo's own top
+ * left cluster. Three rows down the left edge, none of them overlapping.
+ */
+.rt-top {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, #16181c) 90%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line, #2a2e35);
+  /* It is a strip of controls, not a wall: it takes the width it needs and no
+     more, so the model behind it stays visible. */
+  width: max-content;
+  max-width: 100%;
+}
+.rt-tgroup { display: flex; flex-direction: column; gap: 3px; }
+.rt-tlabel {
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim, #8b929c);
+}
+.rt-top .seg { padding: 4px 9px; font-size: 11px; }
+.rt-tsep {
+  width: 1px;
+  align-self: stretch;
+  margin: 12px 2px 1px;
+  background: var(--line, #2a2e35);
+  flex: none;
+}
+/* With the library peeking there is no room for a second strip of controls. */
+body.peeking #retopo .rt-top { display: none; }
 
 /* --- progress ------------------------------------------------------------ */
 
