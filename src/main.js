@@ -609,6 +609,24 @@ $("vb-wire-dark").addEventListener("click", async () => {
  * control you have just reached for would be the tool making you watch an
  * animation.
  */
+/*
+ * The corner that gives the interface back while full screen.
+ *
+ * Watched here rather than in CSS because a hover zone cannot reveal a different
+ * element, and the thing that must come back is the tab bar, which carries the
+ * button that leaves. Ninety by sixty pixels: big enough to find by throwing the
+ * mouse into the corner, small enough never to be crossed on the way somewhere
+ * else.
+ *
+ * Without this the only exit is a keyboard shortcut, and a mode you can only
+ * leave if you already know the shortcut is a trap rather than a mode.
+ */
+window.addEventListener("pointermove", (e) => {
+  if (!document.body.classList.contains("immersive")) return;
+  const inCorner = e.clientY < 60 && e.clientX > window.innerWidth - 90;
+  document.body.classList.toggle("peeking-out", inCorner);
+});
+
 const TUCK_AFTER = 15000;
 let tuckTimer = null;
 

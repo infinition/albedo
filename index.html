@@ -15,7 +15,15 @@
       that never had room of its own. Full width, above everything, and nothing
       else in it. Filled by src/ui/tabs.js.
     -->
-    <div id="tabbar"><div id="tabs-strip"></div></div>
+    <div id="tabbar">
+      <div id="tabs-strip"></div>
+      <!-- Far right of the strip, where a browser keeps its window controls. It
+           is the one button that acts on the window rather than on the model, so
+           it belongs with the window's own furniture. -->
+      <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
+        <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+      </button>
+    </div>
 
     <div id="app">
       <!-- The render surface has its own box so the library can hand it a
@@ -70,12 +78,6 @@
           <!-- Triangles on screen, short form. The number you check before every
                decision this application exists to help with. -->
           <span id="file-tris" class="badge" hidden></span>
-          <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
-            <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
-          </button>
-          <span class="ov-sep"></span>
-          <div class="segment" role="group" aria-label="Mode de rendu">
-            <button id="mode-pbr" class="seg active" type="button" title="Rendu PBR, éclairé par l'environnement (U)">PBR</button>
             <button id="mode-unlit" class="seg" type="button" title="Handpainted : texture telle quelle, sans éclairage (U)">Unlit</button>
           </div>
         </div>

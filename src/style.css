@@ -1080,3 +1080,36 @@ details[open] summary::before { content: "▾ "; }
 .ov-handle svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
 .ov-handle[aria-expanded="false"] { opacity: 0.55; pointer-events: auto; }
 .ov-handle:hover { opacity: 1; }
+
+/* --- full screen means full screen ----------------------------------------
+ *
+ * Asking for full screen is asking to see the model. Leaving the chrome up
+ * answers half the request, so all of it goes: tab bar, toolbars, panels, the
+ * status line, everything.
+ *
+ * Everything except the way out. A strip along the right edge stays alive, and
+ * hovering it brings the fullscreen button back on its own. Without that the
+ * only exit is a keyboard shortcut, and a mode you can only leave if you already
+ * know the shortcut is a trap rather than a mode.
+ */
+body.immersive #tabbar,
+body.immersive #chrome,
+body.immersive #inspector,
+body.immersive #retopo,
+body.immersive .ov,
+body.immersive #stats,
+body.immersive #timeline { opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+
+/* The stage takes the whole window back: nothing is reserved for chrome that is
+   no longer there. */
+body.immersive #app { top: 0; height: 100%; }
+body.immersive #stage { right: 0; }
+
+/*
+ * The way back.
+ *
+ * A CSS hover zone cannot reveal a *different* element, so the corner is watched
+ * in JavaScript and puts `peeking-out` on the body. See src/main.js.
+ */
+body.immersive #tabbar { transition: opacity 0.25s ease; }
+body.immersive.peeking-out #tabbar { opacity: 1; pointer-events: auto; }

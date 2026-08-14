@@ -44,13 +44,30 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
     if (tauri) {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const w = getCurrentWindow();
-      await w.setFullscreen(!(await w.isFullscreen()));
+      const next = !(await w.isFullscreen());
+      await w.setFullscreen(next);
+      document.body.classList.toggle("immersive", next);
       return;
     }
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen();
   };
   $("btn-fullscreen").addEventListener("click", toggleFullscreen);
+
+  /*
+   * Full screen hides the interface, not only the window frame.
+   *
+   * Asking for full screen is asking to see the model, so leaving the chrome up
+   * answers half the request. Everything goes; a strip along the right edge
+   * stays alive as a hover target, which is the one thing that must not, or
+   * there is no way back but a shortcut nobody was told about.
+   *
+   * Tauri's own full screen fires no DOM event, so the class is set from the
+   * same call rather than from a listener that would never run for it.
+   */
+  document.addEventListener("fullscreenchange", () =>
+    document.body.classList.toggle("immersive", !!document.fullscreenElement)
+  );
 
   // --- inspector ---
   const inspector = $("inspector");
