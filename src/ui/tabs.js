@@ -69,6 +69,19 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
       if (doc.preview) {
         const eye = document.createElement("span");
         eye.className = "tabs-eye";
+        /*
+         * Clicking the eye keeps the tab.
+         *
+         * The eye says "this one is temporary and the next model will take its
+         * place". Pointing at the thing that says it, to say no, is the obvious
+         * gesture, and until now it did nothing. Double-clicking the tab already
+         * does the same; this is the version you find without being told.
+         */
+        eye.title = "Garder cet onglet : le prochain aperçu en ouvrira un autre";
+        eye.addEventListener("click", (e) => {
+          e.stopPropagation();
+          onKeep?.(doc.id);
+        });
         eye.innerHTML =
           '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/>' +
           '<circle cx="12" cy="12" r="2.6"/></svg>';

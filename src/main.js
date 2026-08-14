@@ -216,6 +216,7 @@ function adoptDocument(doc) {
   // was loaded and none of the usual load-time repaints will fire.
   currentTitle = doc.title;
   const kind = /\.([a-z0-9]+)$/i.exec(doc.title);
+  $("file-tris").hidden = !kind;
   $("file-kind").hidden = !kind;
   if (kind) $("file-kind").textContent = kind[1];
   applyChannel(currentChannel);
@@ -865,8 +866,28 @@ function showDimensions() {
   $("dimensions").textContent = `${n(x)} × ${n(y)} × ${n(z)} unités`;
 }
 
+/**
+ * Triangles in the short form people actually say out loud.
+ *
+ * 845, 102.2k, 2.4M. The full figure lives in the status line; this one sits
+ * beside the file name because it is the number every decision in this
+ * application is taken against, and a budget you have to go and look up is a
+ * budget you stop checking.
+ */
+function shortCount(v) {
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`;
+  return String(v);
+}
+
 function showStats(stats, extra) {
   const n = (v) => v.toLocaleString("fr-FR");
+  const count = stats.triangles || stats.points || 0;
+  $("file-tris").hidden = !count;
+  if (count) {
+    $("file-tris").textContent = `${shortCount(count)} ${stats.points && !stats.triangles ? "pts" : "tri"}`;
+    $("file-tris").title = `${n(count)} ${stats.points && !stats.triangles ? "points" : "triangles"}`;
+  }
   const parts = [];
   // A point cloud carries points, not triangles; saying "0 tri" about one
   // describes nothing.

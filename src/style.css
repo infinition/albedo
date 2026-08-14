@@ -91,7 +91,10 @@ body {
    real one with its own controls, draws there. Nothing is duplicated. */
 body.peeking #stage {
   left: auto;
-  width: var(--peek, 460px);
+  /* Half the window by default, and draggable from there. A preview strip that
+     starts narrow makes you resize it every session; half is the honest split
+     between "what is in the folder" and "what is in this file". */
+  width: var(--peek, 50%);
 }
 
 #view {
@@ -497,7 +500,21 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
  * gives up its first forty eight pixels for nothing is a sidebar that has been
  * made smaller for a reason that no longer exists.
  */
-body.inspector #inspector { top: var(--gap); }
+/* Tight to the edges: the tab bar already sets the window off from the screen,
+   so a second inset below it is padding on padding and the column loses rows to
+   nothing. */
+body.inspector #inspector { top: 8px; bottom: 8px; right: 8px; }
+
+/*
+ * The canvas stops where the panel starts.
+ *
+ * `#stage` used to span the whole window with the panel floating over its right
+ * third. The viewer therefore framed models against a box a third wider than the
+ * one you can see: a model came up too small, pushed left, sometimes with its
+ * edge under the panel. Shrinking the box is the fix, and it costs nothing since
+ * the viewer already resizes with it. Pixels nobody can see are not viewport.
+ */
+body.inspector #stage { right: calc(324px + var(--gap) * 2); }
 body.inspector .ov-br { opacity: 0; }
 
 /* The top right corner holds nothing now. Every button that lived there is in
@@ -1021,3 +1038,21 @@ details[open] summary::before { content: "▾ "; }
 /* The checker is painted into the canvas, not here: an inline background-image
    beats a stylesheet one, so a rule here would never be seen. */
 .mat-chip.has-map { background-color: #1a1d23; }
+
+/*
+ * The preview eye is a button now, not a mark.
+ *
+ * Clicking it keeps the tab: the eye says "this one is temporary and the next
+ * model will replace it", so pointing at the thing that says it, to say no, is
+ * the obvious gesture. Double-clicking the tab already did the same; this is the
+ * version you find without being told. The reset is here rather than merged into
+ * the rule above because there are two `.tabs-eye` blocks in this file and the
+ * last one wins whichever it is.
+ */
+.tabs-eye {
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.tabs-eye:hover { opacity: 1; color: var(--fg); }
