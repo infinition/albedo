@@ -31,6 +31,7 @@ function paintLangButton() {
   const b = $("btn-lang");
   b.textContent = currentLang() === "fr" ? "EN" : "FR";
   b.title = currentLang() === "fr" ? t("lang.toEn") : t("lang.toFr");
+  b.setAttribute("aria-label", currentLang() === "fr" ? "English" : "Français");
 }
 $("btn-lang").addEventListener("click", () => {
   setLang(currentLang() === "fr" ? "en" : "fr");
@@ -487,7 +488,10 @@ function refreshSliderValues() {
   for (const input of $("inspector").querySelectorAll('input[type="range"]')) showSliderValue(input);
 }
 
-const labelOfChannel = (id) => CHANNELS.find((c) => c.id === id)?.label || id;
+const labelOfChannel = (id) => {
+  const c = CHANNELS.find((c) => c.id === id);
+  return c ? t(c.labelKey) : id;
+};
 const viewer = new Viewer($("view"));
 const channels = new ChannelView(viewer);
 
@@ -640,7 +644,7 @@ function setFlat(on, remember = true) {
 $("vb-flat").addEventListener("click", () => {
   const on = $("vb-flat").getAttribute("aria-pressed") !== "true";
   setFlat(on);
-  toast(on ? "Ombrage simple" : "Ombrage lissé");
+  toast(on ? t("toast.flatOn") : t("toast.flatOff"));
 });
 
 /**
@@ -1759,11 +1763,19 @@ function stepChannel(delta) {
 for (const c of CHANNELS) {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = c.label;
+  b.textContent = t(c.labelKey);
   b.dataset.id = c.id;
   b.addEventListener("click", () => applyChannel(c.id));
   $("channels").appendChild(b);
 }
+// The channel list is built once but its words change with the language.
+window.addEventListener("i18n", () => {
+  for (const b of $("channels").children) {
+    const c = CHANNELS.find((x) => x.id === b.dataset.id);
+    if (c) b.textContent = t(c.labelKey);
+  }
+  paintViewbar();
+});
 applyChannel("shaded");
 
 // --- display toggles ------------------------------------------------------
@@ -4019,7 +4031,7 @@ window.addEventListener("keydown", (e) => {
       if (nav.mode === "orbit") {
         const on = !$("opt-wireframe").checked;
         setWireframe(on);
-        toast(on ? "Fil de fer" : "Fil de fer coupé");
+        toast(on ? t("toast.wireOn") : t("toast.wireOff"));
       }
       break;
     default:

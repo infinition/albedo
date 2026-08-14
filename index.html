@@ -19,8 +19,10 @@
       <div id="tabs-strip"></div>
       <!-- Far right of the strip, where a browser keeps its window controls. It
            is the one button that acts on the window rather than on the model, so
-           it belongs with the window's own furniture. -->
-      <button id="btn-fullscreen" class="icon" type="button" title="Plein écran (F11)">
+           it belongs with the window's own furniture. The language toggle sits
+           beside it, in the same furniture. -->
+      <button id="btn-lang" class="icon" type="button" aria-label="Language" title="Langue">FR</button>
+      <button id="btn-fullscreen" class="icon" type="button" data-i18n-title="fs.fullscreen" title="Plein écran (F11)">
         <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
       </button>
     </div>
@@ -38,8 +40,8 @@
           <path d="M12 2.5 21 7v10l-9 4.5L3 17V7z" />
           <path d="M3 7l9 4.5L21 7M12 11.5V21" />
         </svg>
-        <p class="empty-title">Dépose un modèle</p>
-        <p class="empty-sub">ou <button id="btn-open" class="link" type="button">parcourir</button></p>
+        <p class="empty-title" data-i18n="empty.title">Dépose un modèle</p>
+        <p class="empty-sub"><span data-i18n="empty.or">ou</span> <button id="btn-open" class="link" type="button" data-i18n="empty.browse">parcourir</button></p>
         <p class="empty-formats">glTF · GLB · FBX · OBJ · STL · PLY · DAE · 3MF · 3DS · USD · USDA · USDZ · VRML · VOX · AMF · PCD · XYZ · NIF</p>
       </div>
 
@@ -264,7 +266,6 @@
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 7.2a5.4 5.4 0 1 1-1.6-3.8"/><path d="M13.4 1.8v3.2h-3.2"/><ellipse cx="8" cy="11.8" rx="4.8" ry="1.7" opacity="0.5"/></svg>
               </button>
               <span id="devices" class="devices"></span>
-              <button id="btn-lang" class="tb-i" type="button" aria-label="Language">FR</button>
             </div>
           </div>
         </div>

@@ -9,18 +9,18 @@ import { releaseMaterials } from "./release.js";
  * originals are cached and restored when going back to "shaded".
  */
 export const CHANNELS = [
-  { id: "shaded", label: "Rendu" },
-  { id: "unlit", label: "Handpainted" },
-  { id: "albedo", label: "Albedo" },
-  { id: "normalMap", label: "Normales" },
-  { id: "roughness", label: "Rugosité" },
-  { id: "metalness", label: "Métal" },
-  { id: "ao", label: "AO" },
-  { id: "emissive", label: "Émissif" },
-  { id: "opacity", label: "Alpha" },
-  { id: "normalGeom", label: "Normales géo" },
-  { id: "uv", label: "UV" },
-  { id: "clay", label: "Argile" },
+  { id: "shaded", labelKey: "chann.shaded" },
+  { id: "unlit", labelKey: "chann.unlit" },
+  { id: "albedo", labelKey: "chann.albedo" },
+  { id: "normalMap", labelKey: "chann.normalMap" },
+  { id: "roughness", labelKey: "chann.roughness" },
+  { id: "metalness", labelKey: "chann.metalness" },
+  { id: "ao", labelKey: "chann.ao" },
+  { id: "emissive", labelKey: "chann.emissive" },
+  { id: "opacity", labelKey: "chann.opacity" },
+  { id: "normalGeom", labelKey: "chann.normalGeom" },
+  { id: "uv", labelKey: "chann.uv" },
+  { id: "clay", labelKey: "chann.clay" },
 ];
 
 const MAP_OF = {
