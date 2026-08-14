@@ -46,6 +46,16 @@ pub struct RemeshRequest {
     pub method: String,
     /// Stop once this many triangles remain.
     pub target_triangles: usize,
+    /// The *other* stop condition, and the one that matters when quality is the
+    /// goal rather than a budget: stop when the next collapse would move the
+    /// surface further than this, as a share of the bounding box diagonal.
+    ///
+    /// Infinity disables it, which is the default, because a triangle budget is
+    /// what most people arrive with. Set it and the run stops when the shape
+    /// starts to suffer instead of when the counter runs out, which is the
+    /// difference between "make it 5000 triangles" and "make it as small as it
+    /// can be without visibly changing".
+    pub max_error: f32,
     /// Close boundary loops before anything else runs. A hole reached by the
     /// bake later is a hole the cage projects through.
     pub fill_holes: bool,
@@ -57,6 +67,12 @@ pub struct RemeshRequest {
     pub seam_penalty: f32,
     /// Tangential relax passes, each one reprojected onto the source.
     pub relax_iterations: u32,
+    /// How far toward the neighbour average each pass moves a vertex, `0..1`.
+    ///
+    /// Passes and strength are not the same knob wearing two hats: many gentle
+    /// passes converge on an even mesh, while a few strong ones overshoot and
+    /// wobble. Exposing only the count is why plancton's relax felt blunt.
+    pub relax_strength: f32,
     /// The crease angle **relaxation** uses, which is deliberately not the one
     /// decimation uses.
     ///
@@ -115,11 +131,13 @@ impl Default for RemeshRequest {
         Self {
             method: "decimate".into(),
             target_triangles: 0,
+            max_error: f32::INFINITY,
             fill_holes: false,
             preserve_boundary: true,
             sharp_angle_deg: 40.0,
             seam_penalty: 4.0,
             relax_iterations: 0,
+            relax_strength: 0.5,
             relax_angle_deg: 75.0,
             pair_quads: false,
             bake: false,
@@ -263,6 +281,7 @@ pub fn remesh_file(
         _ => {
             let opts = plancton_remesh::DecimateOptions {
                 target_triangles: req.target_triangles,
+                max_error: req.max_error,
                 preserve_boundary: req.preserve_boundary,
                 sharp_angle_deg: req.sharp_angle_deg,
                 seam_penalty: req.seam_penalty,
@@ -283,6 +302,7 @@ pub fn remesh_file(
     if req.relax_iterations > 0 {
         let opts = plancton_remesh::RelaxOptions {
             iterations: req.relax_iterations,
+            strength: req.relax_strength,
             preserve_features: true,
             sharp_angle_deg: req.relax_angle_deg,
             ..Default::default()
@@ -544,6 +564,14 @@ pub fn cli_main() -> Option<i32> {
             }
             "--relax" => {
                 req.relax_iterations = take(i).and_then(|v| v.parse().ok()).unwrap_or(0);
+                i += 2;
+            }
+            "--max-error" => {
+                req.max_error = take(i).and_then(|v| v.parse().ok()).unwrap_or(f32::INFINITY);
+                i += 2;
+            }
+            "--relax-strength" => {
+                req.relax_strength = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.5);
                 i += 2;
             }
             "--relax-angle" => {
@@ -963,7 +991,14 @@ pub async fn retopo_decimate(
             .arg("--relax")
             .arg(request.relax_iterations.to_string())
             .arg("--relax-angle")
-            .arg(request.relax_angle_deg.to_string());
+            .arg(request.relax_angle_deg.to_string())
+            .arg("--relax-strength")
+            .arg(request.relax_strength.to_string());
+        // Infinity has no useful spelling on a command line, and its meaning is
+        // "no second stop condition", so it is simply left off.
+        if request.max_error.is_finite() && request.max_error > 0.0 {
+            cmd.arg("--max-error").arg(request.max_error.to_string());
+        }
         if !request.preserve_boundary {
             cmd.arg("--open-borders");
         }

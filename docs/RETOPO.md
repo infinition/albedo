@@ -467,7 +467,17 @@ Decisions taken:
 - [ ] Do the same for a result with no pairing, where the wire toggle still falls
       back to Albedo's generic wireframe. It is the right fallback, but the two
       paths look different for a reason no one will remember.
-- [ ] Deviation heatmap as a channel, next to the eleven that exist.
+- [x] **The bake cage drawn**, translucent and live under its own slider. The
+      push happens in the vertex shader: rebuilding positions on the CPU per
+      pixel of drag is a full buffer upload in the one interaction where a stall
+      is least forgivable. It follows the vertex normal, the same direction the
+      baker fires its rays, because a shell offset any other way draws a lie; it
+      never writes depth, because a translucent shell that occludes hides the
+      thing it exists to be compared against; and it is not raycastable, because
+      picking a material through a diagram is not picking a material.
+- [ ] Deviation heatmap as a channel, next to the eleven that exist. Still the
+      largest of the three rebuilds: it needs per vertex distance out of the
+      engine and an attribute to carry it, where the other two needed neither.
 
 ### Phase 4: clean up and rebuild [x]
 - [x] Hole filling, tangential relax with reprojection, isotropic remeshing and
@@ -540,6 +550,21 @@ Decisions taken:
 > rises with it.
 
 ### Phase 6: per material work [ ]
+- [x] **`maxError` and `relaxStrength`**, both of which the engine had all along
+      and neither of which was exposed. `maxError` is the second stop condition
+      and the one that matters when the goal is a quality rather than a budget:
+      measured on the test model, a cap of 0.001 refuses to go below 7,392
+      triangles where the budget asked for 4,000, and lands at 0.00433 deviation
+      instead of 0.00616. `relaxStrength` is not the pass count wearing a second
+      hat: at four passes, 0.1 brings the mean aspect ratio to 2.444 and 0.9 to
+      2.125.
+
+  > Both hung the engine on the first attempt, and the cause is worth keeping.
+  > Every arm of the argument parser advances the index by two; the two new arms
+  > advanced it by nothing, so the loop span forever on the same flag. No output,
+  > no progress line, no crash — it looked exactly like a slow model. A parser
+  > that loops is the failure mode with the fewest symptoms.
+
 - [ ] Ctrl-click to add to the selection, on top of `pick()`.
 - [ ] Triangle count per material, from the geometry groups.
 - [ ] Isolate and hide per material.

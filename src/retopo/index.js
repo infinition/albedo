@@ -108,6 +108,17 @@ const SHELL = `
     </label>
     <p class="rt-hint" data-el="methodHint"></p>
 
+    <p class="rt-sub">Déviation maximum</p>
+    <label class="rt-field">
+      <span>Plafond <span class="rt-num" data-el="maxErrorValue">aucun</span></span>
+      <input type="range" data-el="maxError" min="0" max="50" step="1" value="0" />
+    </label>
+    <p class="rt-hint">La deuxième condition d'arrêt, et celle qui compte quand
+      on cherche une qualité plutôt qu'un budget : la décimation s'arrête quand
+      la prochaine fusion déplacerait la surface de plus que ça. C'est la
+      différence entre « fais-en 5 000 triangles » et « fais-le aussi petit que
+      possible sans que ça se voie ». À zéro, seul le budget décide.</p>
+
     <p class="rt-sub">Quads</p>
     <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
     <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
@@ -133,6 +144,10 @@ const SHELL = `
     <label class="rt-field">
       <span>Passes <span class="rt-num" data-el="relaxValue">0</span></span>
       <input type="range" data-el="relax" min="0" max="10" step="1" value="0" />
+    </label>
+    <label class="rt-field">
+      <span>Force <span class="rt-num" data-el="relaxStrengthValue">0.50</span></span>
+      <input type="range" data-el="relaxStrength" min="0.05" max="1" step="0.05" value="0.5" />
     </label>
     <label class="rt-field">
       <span>Angle de pli du lissage <span class="rt-num" data-el="relaxAngleValue">75°</span></span>
@@ -588,6 +603,10 @@ export function createRetopo({
     el.relaxValue.textContent = el.relax.value;
     el.relaxAngleValue.textContent = `${el.relaxAngle.value}°`;
     el.mapSizeValue.textContent = String(mapSize());
+    // Zéro veut dire « pas de plafond », ce qui est un mot et pas un nombre.
+    const cap = Number(el.maxError.value);
+    el.maxErrorValue.textContent = cap === 0 ? "aucun" : `${(cap / 1000).toFixed(3)}`;
+    el.relaxStrengthValue.textContent = Number(el.relaxStrength.value).toFixed(2);
     el.cageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
     el.cageInValue.textContent = Number(el.cageIn.value).toFixed(3);
     el.gutterValue.textContent = el.gutter.value;
@@ -654,6 +673,7 @@ export function createRetopo({
 
   const LIVE = [
     "target", "angle", "seam", "relax", "relaxAngle",
+    "maxError", "relaxStrength",
     "mapSize", "cageOut", "cageIn", "gutter", "bleed", "island",
     "aoSamples", "aoDistance",
   ];
@@ -851,6 +871,8 @@ export function createRetopo({
           seamPenalty: Number(el.seam.value),
           relaxIterations: Number(el.relax.value),
           relaxAngleDeg: Number(el.relaxAngle.value),
+          maxError: Number(el.maxError.value) / 1000,
+          relaxStrength: Number(el.relaxStrength.value),
           pairQuads: el.quads.checked,
           ...bakeRequest(),
           bake: el.bake.checked,
