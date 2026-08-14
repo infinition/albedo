@@ -420,7 +420,14 @@ Decisions taken:
       cannot disagree about what is on screen. Everything about looking at the
       model is reached for constantly while judging a result, and a control you
       must open a panel for is a control you stop using.
-- [ ] Cancellation.
+- [x] **Cancellation**, which the child process made almost free: the whole
+      implementation is killing the child. In process it would have meant
+      threading a flag through every inner loop of an engine that does not know
+      this application exists. The operating system does it instead, at once, and
+      reclaims the run's memory on the way out. The run button doubles as the
+      cancel button rather than a second button being inert for all but the
+      twenty seconds a run lasts, and a cancel is reported as a cancel rather
+      than painted red as a failure.
 
 > **The bug that made every icon in that toolbar dead**, worth writing down
 > because it looks exactly like a missing handler. The `pointer-events: auto`
@@ -448,8 +455,18 @@ Decisions taken:
       against the counts they describe: 34,400 bytes for 8,600 triangles and
       21,376 for 5,344 vertices, exactly four bytes each.
 - [x] Statistics in a head-up display: source, result, reduction, quad coverage.
-- [ ] A line material that honours the quad mask, so the pairing is visible
-      rather than merely computed.
+- [x] **A line material that honours the quad mask**, so the pairing is visible
+      rather than a number in a report. glTF has no quads, so the result really
+      is a triangle soup and the generic wireframe draws it as one, every quad
+      crossed out by its own diagonal. Bit `k` of the mask means the edge from
+      corner `k` to corner `k+1` is real; the cleared bit on a paired triangle is
+      the diagonal. Verified against a real run before drawing anything: 5,410
+      triangles carry two bits, which is 2,705 quads over 63 % of the surface,
+      the two numbers the engine reported on its own. 20,390 edges instead of
+      25,800.
+- [ ] Do the same for a result with no pairing, where the wire toggle still falls
+      back to Albedo's generic wireframe. It is the right fallback, but the two
+      paths look different for a reason no one will remember.
 - [ ] Deviation heatmap as a channel, next to the eleven that exist.
 
 ### Phase 4: clean up and rebuild [x]
@@ -531,7 +548,8 @@ Decisions taken:
 ### Phase 7: paying the rent [ ]
 - [ ] Export the result. GLB exists; OBJ is worth adding for one concrete reason,
       it stores quads natively and glTF cannot.
-- [ ] Rewrite the README size claim.
+- [x] Rewrite the README size claim. It said 3.7 MB, the shipped binary was
+      already 4.43 MB before any of this, and it is 5.47 MB now.
 - [ ] `docs/FORMATS.md` and `docs/CONTROLS.md` updated for the new tab and its
       keys.
 

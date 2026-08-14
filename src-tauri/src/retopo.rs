@@ -30,6 +30,8 @@
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -807,6 +809,55 @@ fn bake_args(cmd: &mut Command, request: &RemeshRequest) {
 }
 
 /// Drive a child, forward its progress, and hand back what it reported.
+/// The child currently running, so it can be killed from another command.
+///
+/// One run at a time is a deliberate limit, not an oversight: two decimations of
+/// the same model racing to write the same file is not a feature anyone asked
+/// for, and the front end disables the buttons anyway.
+static RUNNING: Mutex<Option<std::process::Child>> = Mutex::new(None);
+/// Set by a cancel so the failure that follows can be named as one. Without it a
+/// killed child is indistinguishable from a crashed one, and reporting "the
+/// engine failed" to someone who just pressed Annuler is a small lie.
+static CANCELLED: AtomicBool = AtomicBool::new(false);
+
+/// Read the quad mask that travelled beside a result, if there is one.
+///
+/// One `u32` per triangle. Bit `k` set means the edge from corner `k` to corner
+/// `k+1` is a real edge; the cleared bit on a paired triangle is the quad's
+/// diagonal. That is the whole convention, and it is what lets a viewer draw
+/// quads out of a triangle soup without the file format ever knowing.
+#[tauri::command]
+pub fn retopo_quad_mask(output: String) -> Option<Vec<u32>> {
+    let raw = std::fs::read(sidecar(Path::new(&output), "quads")).ok()?;
+    if raw.len() % 4 != 0 {
+        return None;
+    }
+    Some(
+        raw.chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect(),
+    )
+}
+
+/// Stop the run in progress.
+///
+/// Killing the child is the whole implementation, and that is the point. In
+/// process, cancelling a decimation would have meant threading a flag through
+/// every inner loop of an engine that does not know this application exists.
+/// Here the operating system does it, immediately, and reclaims the memory the
+/// run had allocated on the way out.
+#[tauri::command]
+pub fn retopo_cancel() -> bool {
+    let mut slot = RUNNING.lock().unwrap();
+    match slot.as_mut() {
+        Some(child) => {
+            CANCELLED.store(true, Ordering::SeqCst);
+            child.kill().is_ok()
+        }
+        None => false,
+    }
+}
+
 fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, String> {
     use tauri::Emitter;
 
@@ -814,10 +865,17 @@ fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, Strin
     no_window(&mut cmd);
     let mut child = cmd.spawn().map_err(|e| format!("lancement impossible: {e}"))?;
 
+    // The pipes come out before the child goes into the shared slot, so reading
+    // them never holds the lock a cancel needs.
+    let stdout = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    CANCELLED.store(false, Ordering::SeqCst);
+    *RUNNING.lock().unwrap() = Some(child);
+
     // The report arrives on the same pipe as the progress, tagged, so there is
     // one stream to read and no second channel to keep in step.
     let mut report: Option<RemeshReport> = None;
-    if let Some(out) = child.stdout.take() {
+    if let Some(out) = stdout {
         for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
             if let Some(rest) = line.strip_prefix("progress ") {
                 if let Ok(f) = rest.trim().parse::<f32>() {
@@ -830,12 +888,21 @@ fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, Strin
     }
 
     let mut stderr = String::new();
-    if let Some(mut e) = child.stderr.take() {
+    if let Some(e) = stderr_pipe.as_mut() {
         use std::io::Read;
         let _ = e.read_to_string(&mut stderr);
     }
-    let status = child.wait().map_err(|e| format!("attente échouée: {e}"))?;
 
+    // Take it back out and reap it, so a killed child does not linger and the
+    // slot is empty before the next run fills it.
+    let status = match RUNNING.lock().unwrap().take() {
+        Some(mut c) => c.wait().map_err(|e| format!("attente échouée: {e}"))?,
+        None => return Err("le processus a disparu".into()),
+    };
+
+    if CANCELLED.swap(false, Ordering::SeqCst) {
+        return Err("annulé".into());
+    }
     match report {
         Some(r) if status.success() => Ok(r),
         _ if !stderr.trim().is_empty() => Err(stderr.trim().to_string()),

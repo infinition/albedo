@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import "./retopo.css";
 
 /**
@@ -289,6 +290,71 @@ export function createRetopo({
     t.addEventListener("click", () => showTab(t.dataset.tab));
   }
 
+  // --- seeing the quads ---------------------------------------------------
+
+  /** The quad wireframe built for the last result, if it has one. */
+  let quadWire = null;
+
+  /**
+   * Draw the pairing, because otherwise it is a number in a report.
+   *
+   * glTF has no quads, so the result really is a triangle soup and the generic
+   * wireframe draws it as one: every quad crossed out by its own diagonal. The
+   * mask that travelled beside the file says which edges are real, so the lines
+   * built here are the only place the pairing is visible at all. A run with 63 %
+   * quads and a wireframe full of triangles looks like a run that did nothing.
+   */
+  async function attachQuadWire(object, path) {
+    quadWire = null;
+    let mask;
+    try {
+      mask = await tauri?.core.invoke("retopo_quad_mask", { output: path });
+    } catch {
+      return;
+    }
+    if (!mask?.length) return;
+
+    // One geometry for the whole result, so the pairing is one draw call rather
+    // than one per mesh.
+    const pts = [];
+    let t = 0;
+    object.traverse((n) => {
+      const g = n.isMesh && n.geometry;
+      if (!g) return;
+      const pos = g.attributes.position;
+      const idx = g.index;
+      const count = idx ? idx.count / 3 : pos.count / 3;
+      const at = (i) => (idx ? idx.getX(i) : i);
+      for (let f = 0; f < count; f++, t++) {
+        const m = mask[t];
+        if (m === undefined) return;
+        for (let k = 0; k < 3; k++) {
+          // A cleared bit is a diagonal: the one edge that must not be drawn.
+          if (!(m & (1 << k))) continue;
+          const a = at(f * 3 + k);
+          const b = at(f * 3 + ((k + 1) % 3));
+          pts.push(
+            pos.getX(a), pos.getY(a), pos.getZ(a),
+            pos.getX(b), pos.getY(b), pos.getZ(b)
+          );
+        }
+      }
+    });
+    if (!pts.length) return;
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    quadWire = new THREE.LineSegments(
+      geom,
+      new THREE.LineBasicMaterial({ color: 0x7cc4ff, transparent: true, opacity: 0.85 })
+    );
+    quadWire.visible = false;
+    // Under the object's own transform, so it follows the result rather than
+    // sitting where the result used to be.
+    object.add(quadWire);
+    viewer.invalidate?.();
+  }
+
   // --- the top bar --------------------------------------------------------
 
   for (const b of host.querySelectorAll("[data-ch]")) {
@@ -302,7 +368,16 @@ export function createRetopo({
     const on = el.wire.getAttribute("aria-pressed") !== "true";
     el.wire.setAttribute("aria-pressed", String(on));
     el.wire.classList.toggle("active", on);
-    setWireframe?.(on);
+    // When the result has a pairing, the quad lines replace the generic
+    // wireframe on it rather than joining it. Drawing both would draw every
+    // diagonal the pairing exists to hide, which is the one thing this is for.
+    if (quadWire) {
+      quadWire.visible = on;
+      el.wire.title = on ? "Quads affichés" : "Fil de fer, quads compris";
+      viewer.invalidate?.();
+    } else {
+      setWireframe?.(on);
+    }
   });
 
   el.frame.addEventListener("click", () => viewer.frameCurrent?.());
@@ -381,16 +456,20 @@ export function createRetopo({
     );
     setStat(el.hudQuads, last?.quads ? `${(last.quadFraction * 100).toFixed(0)} %` : null);
 
-    // The button says what it will do: the method segment is on another tab now
-    // and the switch is at the other end of the bar.
-    const verb = method === "isotropic" ? "Reconstruire" : "Décimer";
-    el.run.textContent = el.bake.checked ? `${verb} et projeter` : verb;
+    // The button says what it will do, unless it is currently the cancel button,
+    // in which case what it will do is stop.
+    if (!running) el.run.textContent = runLabel();
   }
 
   function refresh() {
     source = viewer.current ? countTriangles(viewer.root) : 0;
-    el.run.disabled = source === 0 || running || !tauri;
-    el.run.title = source === 0 ? "Ouvre un modèle d'abord" : "";
+    // Never disabled while running: it is the cancel button then.
+    el.run.disabled = running ? false : source === 0 || !tauri;
+    el.run.title = running
+      ? "Tuer le calcul en cours"
+      : source === 0
+        ? "Ouvre un modèle d'abord"
+        : "";
     el.rebake.disabled = !lastRun || running || !tauri;
     el.rebake.title = lastRun
       ? "Refaire seulement les cartes, sans retoucher la géométrie"
@@ -434,6 +513,18 @@ export function createRetopo({
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
 
   // --- running ------------------------------------------------------------
+
+  /**
+   * What the run button says when it is not the cancel button.
+   *
+   * The method segment moved to another tab and the bake switch sits at the far
+   * end of the bar, so the button naming both is the only place the two are
+   * visible at once.
+   */
+  const runLabel = () => {
+    const verb = method === "isotropic" ? "Reconstruire" : "Décimer";
+    return el.bake.checked ? `${verb} et projeter` : verb;
+  };
 
   /** The bake half of the request, shared by a full run and a bake on its own. */
   const bakeRequest = () => ({
@@ -525,6 +616,14 @@ export function createRetopo({
    */
   function fail(e) {
     const text = String(e?.message || e);
+    // A cancel arrives as a failure, because that is what it is at the process
+    // level, but it is not a failure to the person who asked for it. Painting it
+    // red and shouting about it would be reporting their own decision back to
+    // them as a fault.
+    if (text.trim() === "annulé") {
+      say("Calcul annulé.");
+      return;
+    }
     console.error("[retopo]", e);
     el.err.textContent = text;
     el.err.hidden = false;
@@ -568,7 +667,8 @@ export function createRetopo({
       // Everything that touches state lives inside the try, so a throw on the
       // way in cannot leave `running` stuck true and the button disabled for the
       // rest of the session.
-      el.run.disabled = true;
+      el.run.textContent = "Annuler";
+      el.rebake.disabled = true;
       el.err.hidden = true;
       el.fill.style.width = "0%";
       say("Préparation…", 0);
@@ -611,6 +711,9 @@ export function createRetopo({
       // Both files stay named, so the bake can be redone on its own without
       // touching the geometry again.
       lastRun = { high: input, low: dirs.output };
+      if (r.quads) {
+        await attachQuadWire(viewer.parts.at(-1)?.object, dirs.output);
+      }
       reportOn(r);
 
       const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
@@ -621,6 +724,7 @@ export function createRetopo({
     } finally {
       stop?.();
       running = false;
+      el.run.textContent = runLabel();
       onBusy?.(false);
       el.bar.classList.remove("busy");
       refresh();
@@ -642,7 +746,7 @@ export function createRetopo({
 
     let stop = null;
     try {
-      el.run.disabled = true;
+      el.run.textContent = "Annuler";
       el.rebake.disabled = true;
       el.err.hidden = true;
       el.fill.style.width = "0%";
@@ -674,13 +778,25 @@ export function createRetopo({
     } finally {
       stop?.();
       running = false;
+      el.run.textContent = runLabel();
       onBusy?.(false);
       el.bar.classList.remove("busy");
       refresh();
     }
   }
 
-  el.run.addEventListener("click", run);
+  /**
+   * The run button is also the cancel button.
+   *
+   * A second button that is inert for all but the twenty seconds a run lasts is
+   * worse than a label that changes: the control you need is always the one
+   * under the cursor, and there is nothing to hunt for while a long decimation
+   * is grinding.
+   */
+  el.run.addEventListener("click", () => {
+    if (running) tauri?.core.invoke("retopo_cancel").catch(() => {});
+    else run();
+  });
   el.rebake.addEventListener("click", rebake);
   el.close.addEventListener("click", () => api.hide());
   setMethod("decimate");
