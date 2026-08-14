@@ -188,10 +188,26 @@ decimator *and* the baker together.
 That last point is worth stating plainly: the final binary is smaller than the
 one that only had decimation, because the architecture changed underneath it.
 
-The old 4.4 MB binary on disk was stale, from before the project moved: a fresh
-baseline is 3.95 MB, which is the "3.7 MB executable" the README claims, so that
-claim was accurate. It now has to say five, which is a sentence to rewrite rather
-than a promise to break.
+**Every row above is a `cargo build --release`, which does not embed the
+frontend.** That is fine for comparing them to each other, and it is how the
+engine's cost was isolated, but none of those numbers is a shipped binary. The
+real one, built with `npx tauri build`, carries `dist/` inside it:
+
+| Shipped build | Bytes |
+| --- | ---: |
+| before, the executable found on disk | 4,428,800 |
+| **after** | **5,472,256** |
+| cost | +1,043,456 |
+
+The same one megabyte, which is the useful confirmation: the delta measured
+between two dev builds survives into the real ones.
+
+An earlier draft of this document called that 4,428,800 byte executable stale and
+said the fresh 3,947,008 baseline showed the README's "3.7 MB" claim was
+accurate. Both halves were wrong. It was not stale, it was the *production*
+build, and the dev build is smaller only because it has no interface inside it.
+The README's number was already optimistic before any of this, and now has to
+say about five and a half.
 
 Two things the first estimate had no way to see, and they pull in opposite
 directions:
