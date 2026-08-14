@@ -377,35 +377,22 @@ Decisions taken:
       JSON array of numbers.
 - [x] Measure the binary before and after, and write the numbers into this file.
       Done above, and the estimate they replaced was wrong by a factor of two.
-- [ ] Measure cold start, before and after, on a folder of models rather than a
-      single launch. This is the number the thumbnail provider actually cares
-      about and it is not taken yet.
+- [x] **Cold start measured**, at last. The contract had been asserted in this
+      document since before a line of the mode was written and nobody had ever
+      checked it.
 
-### Phase 2: the mode [~]
+      *In the page*, from a cold load: **8 chunks, 197,603 bytes**, DOM
+      interactive at **21 ms**, DOMContentLoaded at **94 ms**. Retopo's chunk is
+      12,344 bytes and it arrives **only when the mode is opened**, which is the
+      whole claim. The shared view toolbar added since did not drag it forward.
 
-> **It is a mode, not a tab.** It began as an eighth inspector pane and that was
-> wrong: the tool has a triangle budget, three guards, a bake with six knobs and
-> a per material selection still to come, and none of that belongs in a 324 pixel
-> column. It is now a third mode beside the inspector and the library, which is
-> also what makes plancton's finished interface reusable. Measured, and this is
-> the number that settles it: of the 1,075 lines in plancton's `ui.js`, only
-> **28** call into its viewer. The interface is barely welded to the renderer
-> underneath it, so its layout, its stylesheet and its 217 translated strings can
-> come over and be rewired onto three.js. `viewer.js`, 1,066 lines, is the part
-> that does not come.
->
-> **Unlike the library, the mode does not cover the viewport.** You cannot judge
-> a retopology without looking at it, so the host passes every pointer event
-> through and only its own panels take them back. Verified: a click at the centre
-> of the window reaches the viewer, a click on the panel reaches the panel.
->
-> **The mode no longer owns a panel at all.** It had one, with seven tabs, two of
-> which were Albedo's own panes borrowed for the duration and handed back on
-> close. That gave a single model three competing navigations and, wherever the
-> borrowing met the borrower, a tab strip nested inside a tab strip. See "One
-> panel, shared" below: the mode now fills one pane of the application's single
-> panel and keeps only the chrome that is genuinely its own.
+      *As the shell sees it*, one process per file over a folder of eleven
+      models: **10,464 ms total, 951 ms each**, eleven thumbnails written.
 
+      That last number holds the promise and does not have room to spare. It is
+      also almost entirely process launch and WebView2 startup rather than
+      anything this code does, so the lever on it is not in the frontend. Worth
+      remeasuring after anything that lands in the startup bundle.
 - [x] Its own icon in the top right cluster, beside Bibliothèque and Inspecteur.
 - [x] The mode's module and stylesheet are a lazy chunk, fetched on first open.
       **Verified, not assumed**: 4,898 bytes of JavaScript and 2,277 of CSS in
