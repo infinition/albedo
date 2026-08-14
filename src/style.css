@@ -14,6 +14,18 @@
   --accent: #4c8dff;
   --radius: 9px;
   --gap: 14px;
+  /*
+   * The right edge the panel occupies, declared once because two rules have to
+   * agree about it exactly: the stage gives up this much, and the panel steps
+   * back out by the same amount. See the inspector section.
+   *
+   * Written with literals rather than `var(--gap)` on purpose. A custom property
+   * holding a `calc` is substituted where it is *used*, not where it is written,
+   * so a `--gap` overridden further down would give the two readers two
+   * different numbers -- which is precisely the disagreement this exists to
+   * prevent.
+   */
+  --panel-reserve: 352px;
   color-scheme: dark;
 }
 
@@ -91,11 +103,28 @@ body {
    real one with its own controls, draws there. Nothing is duplicated. */
 body.peeking #stage {
   left: auto;
+  /* See the rule below: with the panel out as well, this width is wrong by
+     exactly the panel's reservation and the strip slides under the library. */
   /* Half the window by default, and draggable from there. A preview strip that
      starts narrow makes you resize it every session; half is the honest split
      between "what is in the folder" and "what is in this file". */
   width: var(--peek, 50%);
 }
+/*
+ * With the panel out too, the strip has to be that much narrower.
+ *
+ * The two rules pull in opposite directions and the box cannot obey both: this
+ * one anchors the strip's right edge to the window and gives it `--peek` of
+ * width, while `body.inspector #stage` moves the right edge left by the panel's
+ * reservation. Width being fixed, the *left* edge went with it -- three hundred
+ * and fifty pixels of stage, canvas and toolbar sliding under the library, which
+ * drew over them. The model rendered behind the folder list and the first two
+ * groups of the bar were simply not on screen.
+ *
+ * Taking the reservation out of the width instead pins the left edge back where
+ * the library ends, which is the edge that actually has to line up.
+ */
+body.peeking.inspector #stage { width: calc(var(--peek, 50%) - var(--panel-reserve)); }
 
 #view {
   display: block;
@@ -500,10 +529,24 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
  * gives up its first forty eight pixels for nothing is a sidebar that has been
  * made smaller for a reason that no longer exists.
  */
-/* Tight to the edges: the tab bar already sets the window off from the screen,
-   so a second inset below it is padding on padding and the column loses rows to
-   nothing. */
-body.inspector #inspector { top: 8px; bottom: 8px; right: 8px; }
+/*
+ * Tight to the edges: the tab bar already sets the window off from the screen,
+ * so a second inset below it is padding on padding and the column loses rows to
+ * nothing.
+ *
+ * The negative right is the panel stepping back out of the box it made the stage
+ * give up. `#inspector` is a child of `#stage`, so the rule below that shrinks
+ * the stage to stop the canvas at the panel moved the panel itself left by the
+ * very same amount: a three hundred and fifty pixel band of nothing opened
+ * between the panel and the right edge of the window, and the sidebar stopped
+ * touching the side. It gives back exactly what it took, from the one
+ * declaration both rules read.
+ */
+body.inspector #inspector {
+  top: 8px;
+  bottom: 8px;
+  right: calc(8px - var(--panel-reserve));
+}
 
 /*
  * The canvas stops where the panel starts.
@@ -514,7 +557,7 @@ body.inspector #inspector { top: 8px; bottom: 8px; right: 8px; }
  * edge under the panel. Shrinking the box is the fix, and it costs nothing since
  * the viewer already resizes with it. Pixels nobody can see are not viewport.
  */
-body.inspector #stage { right: calc(324px + var(--gap) * 2); }
+body.inspector #stage { right: var(--panel-reserve); }
 body.inspector .ov-br { opacity: 0; }
 
 /* The top right corner holds nothing now. Every button that lived there is in
@@ -538,25 +581,136 @@ body.inspector .ov-br { opacity: 0; }
   align-items: flex-end;
   gap: 12px;
   padding: 7px 10px;
+  /*
+   * Retopo hangs three more groups off this bar, so it has to be allowed to give
+   * ground before it runs under the panel. Wrapping costs a second row on a
+   * narrow window; overflowing costs whichever group is last, silently.
+   */
+  flex-wrap: wrap;
+  max-width: calc(100cqw - 2 * var(--gap));
 }
-.vb-group { display: flex; flex-direction: column; gap: 3px; }
-.vb-row { display: flex; align-items: center; gap: 4px; }
-.vb-label {
+body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
+
+/* --- the shared toolbar grammar -------------------------------------------
+ *
+ * These classes are the bar's vocabulary and they live here, in the stylesheet
+ * that is parsed at startup, rather than in a mode's own. Retopo used to carry a
+ * copy of all of it for a bar of its own, drawn in the same corner, and the copy
+ * you are not looking at is always the one that has drifted.
+ *
+ * Two shapes carry the grammar, and that is the whole reason a row of small
+ * squares reads as a toolbar rather than as a wall:
+ *
+ *   a **plate** is a choice, exactly one of its buttons is lit;
+ *   a **loose button** is a layer, any number can be on at once.
+ *
+ * Labels above each group cost nine pixels of height and turn a row of glyphs
+ * into four short sentences.
+ */
+.tb-group { display: flex; flex-direction: column; gap: 3px; }
+.tb-row { display: flex; align-items: center; gap: 3px; }
+.tb-label {
   font-size: 8.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
   padding-left: 2px;
+  white-space: nowrap;
 }
-.ov-view .seg { font-size: 11px; padding: 4px 9px; }
-.ov-view .icon { width: 26px; height: 26px; }
-.ov-view .icon svg { width: 14px; height: 14px; }
-/* A layer that is on gets an outline rather than a fill, so "one of these" and
-   "any of these" never look the same even when both are lit. */
-.ov-view .icon.active {
+
+/* One choice among several: recessed, joined, exactly one lit. */
+.tb-plate {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--line) 42%, transparent);
+}
+
+/*
+ * An icon button. Square, because a row of squares reads as a row where a row of
+ * differently sized pills reads as a list. The lit state is a filled plate
+ * rather than a brighter glyph: several icons are already coloured, so
+ * brightening one would compete with its own colour instead of standing out
+ * from its neighbours.
+ */
+.tb-i {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+  transition: background 0.13s ease, color 0.13s ease, opacity 0.13s ease;
+}
+.tb-i:hover:not(:disabled) { color: var(--fg); background: rgb(255 255 255 / 0.06); }
+.tb-i.active {
   color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.tb-i:disabled { opacity: 0.3; cursor: default; }
+.tb-i:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tb-i svg { display: block; pointer-events: none; width: 15px; height: 15px; }
+
+/* A layer that is on gets an outline rather than the plate's fill, so at a
+   glance "one of these" and "any of these" never look the same even when both
+   are lit. */
+.tb-t.active {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* A detail of the button beside it, not a peer of it: the wire colour flip. */
+.tb-sub { width: 21px; height: 21px; border-radius: 6px; }
+.tb-sub svg { width: 12px; height: 12px; }
+
+.tb-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 1px;
+  background: var(--line);
+  flex: none;
+}
+
+/*
+ * Counters inline in the bar, which is Retopo's contribution to it.
+ *
+ * Tabular figures so the numbers do not jitter as they change, and a fixed order
+ * so the eye learns where each one lives instead of re-reading the labels.
+ */
+.tb-counts {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 2px 2px 3px;
+}
+.tb-counts > div { display: flex; flex-direction: column; line-height: 1.15; }
+.tb-counts dt {
+  font-size: 8.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tb-counts dd {
+  margin: 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+/* Under a narrow stage the counters go first: they are the only thing in the bar
+   you can read off the panel instead. */
+@container (max-width: 900px) {
+  .tb-counts { display: none; }
 }
 .ov-tr, .ov-br { transition: right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s; }
 
@@ -1057,9 +1211,22 @@ details[open] summary::before { content: "▾ "; }
 }
 .tabs-eye:hover { opacity: 1; color: var(--fg); }
 
-/* --- the view bar tucks itself away -------------------------------------- */
-#viewbar { transition: opacity 5s ease, transform 5s ease; }
+/* --- the view bar tucks itself away ---------------------------------------
+ *
+ * Going away is slow, coming back is not, and the two speeds are the whole
+ * point. Leaving over five seconds is a bar getting out of the way without
+ * snatching itself from under the pointer; coming back over five seconds is the
+ * tool making you watch an animation to reach a button you have already aimed
+ * at. Same element, opposite intents.
+ *
+ * A transition declared on a state governs the trip *towards* that state, so the
+ * slow one belongs on `.tucked` and the quick one on the base rule. Both are on
+ * the identifier: `.ov-view.tucked` loses on specificity to `#viewbar`, and a
+ * rule that loses is a rule that does nothing at all.
+ */
+#viewbar { transition: opacity 0.12s ease, transform 0.12s ease; }
 #viewbar.tucked {
+  transition: opacity 5s ease, transform 5s ease;
   opacity: 0;
   transform: translateX(-115%);
   pointer-events: none;
@@ -1075,11 +1242,29 @@ details[open] summary::before { content: "▾ "; }
   border-radius: 0 8px 8px 0;
   opacity: 0;
   pointer-events: none;
+  /* Fading in behind the bar that is still leaving, and snapping out the
+     instant the bar is back: the delay belongs to the slow direction only. */
   transition: opacity 0.5s ease 4.5s;
 }
+.ov-handle[aria-expanded="true"] { transition: opacity 0.12s ease; }
 .ov-handle svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
 .ov-handle[aria-expanded="false"] { opacity: 0.55; pointer-events: auto; }
 .ov-handle:hover { opacity: 1; }
+/*
+ * The handle is sixteen pixels wide and the pointer has to find it while the bar
+ * is invisible. So it reaches further than it is drawn: an invisible apron down
+ * the whole left edge of the bar's own band, which triggers the same
+ * `pointerenter` the visible sliver does. Only while tucked, or it would sit on
+ * top of the first column of buttons and eat their clicks.
+ */
+.ov-handle[aria-expanded="false"]::before {
+  content: "";
+  position: absolute;
+  top: -18px;
+  bottom: -18px;
+  left: 0;
+  width: 52px;
+}
 
 /* --- full screen means full screen ----------------------------------------
  *

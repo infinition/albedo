@@ -52,15 +52,15 @@
 /*
  * Only the boxes that are actually painted take pointer events back.
  *
- * Not `.rt-stack`: it is a full width column whose children are `max-content`,
- * so granting it events would put an invisible rectangle across the top of the
- * viewport and eat clicks meant for the model. And `.rt-top` has to be named
- * explicitly, because naming only the counters left the whole toolbar inheriting
- * `pointer-events: none` from the host. Every icon in it was inert, which looks
- * exactly like a handler that was never attached.
+ * The host spans the viewport and must not: granting it events would put an
+ * invisible rectangle over the model and eat clicks meant for it. So each
+ * painted box is named. There used to be a second one here, the mode's own
+ * toolbar, and forgetting to name it left every icon in it inert -- which looks
+ * exactly like a handler that was never attached. The groups this mode lends the
+ * shared bar cannot repeat that mistake: they are inside `#chrome`, which is not
+ * a descendant of this host and never gave its events up.
  */
-#retopo.open .rt-bar,
-#retopo.open .rt-top { pointer-events: auto; }
+#retopo.open .rt-bar { pointer-events: auto; }
 
 /*
  * With the library open the viewport is the preview strip it leaves on the
@@ -95,6 +95,21 @@ body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
  * the bar wraps onto three rows in a narrow window.
  */
 body.retopo-open #inspector {
+  bottom: calc(var(--gap) + var(--rt-bar-h, 54px) + 10px);
+}
+
+/*
+ * And so does the animation scrubber, for the same reason and by the same
+ * amount.
+ *
+ * Both are centred on the bottom of the viewport, so the action bar landed on
+ * top of the scrubber and a model with animation lost its transport controls the
+ * moment the mode opened. Reading the measured height rather than guessing one
+ * matters more here than for the panel: the action bar wraps onto two and three
+ * rows in a narrow window, and a reserved guess is how the scrubber ends up back
+ * underneath it at the width where it is hardest to reach.
+ */
+body.retopo-open #timeline {
   bottom: calc(var(--gap) + var(--rt-bar-h, 54px) + 10px);
 }
 
@@ -184,7 +199,7 @@ body.retopo-open #inspector {
 /* The history buttons speak the bar's icon language, not the text one: they are
    verbs on the same footing as the icons above, and a glyph typed as a character
    sits differently in every font it lands in. */
-.rt-bar .rt-i { min-height: 30px; width: 30px; padding: 0; }
+.rt-bar .tb-i { min-height: 30px; width: 30px; padding: 0; }
 .rt-note {
   font-size: 11px;
   color: var(--dim, #8b929c);
@@ -239,39 +254,23 @@ body.retopo-open #inspector {
 }
 .rt-switch input:focus-visible + i { outline: 2px solid var(--accent, #7cc4ff); outline-offset: 2px; }
 
-/* --- the one bar -----------------------------------------------------------
+/* --- no bar of this mode's own ----------------------------------------------
  *
- * One strip, not three.
+ * There was one strip here, then three, then one again, and now none.
  *
- * It was a file name, then a row of counters, then a row of controls, stacked
- * down the left edge and eating a third of the height before the model got any.
- * They are one thing — "what am I looking at and how" — so they are one bar.
+ * The last version was a column in the top left carrying Couleur, Calques, Scène
+ * and Caméra, laid out over the same corner as Albedo's view bar and hiding it
+ * while the mode was open. Two bars asking one question, drawn two different
+ * ways, and the copy nobody was looking at was always the one that had drifted:
+ * this one had lost Libre and Rotation continue from its Caméra group and nobody
+ * noticed for as long as the other bar was hidden behind it.
  *
- * It sits under Albedo's own top left cluster, which is the only offset left in
- * this file.
+ * The four groups it had that were genuinely its own -- the two data views, the
+ * three surface layers, the comparison plate and the counters -- go into the
+ * slots of the shared bar and come back out on close. Their look comes from
+ * `style.css`, with the rest of the bar's vocabulary, so the two cannot drift
+ * apart again: there is only one of everything now.
  */
-.rt-stack {
-  /*
-   * A container in its own right, because the bar's room is not the mode's room:
-   * the panel takes its width off the right before the bar sees any of it.
-   * Asking the host gives the whole window where the truth is several hundred
-   * pixels less, and the bar lays out a row it cannot fit.
-   */
-  container-type: inline-size;
-  container-name: rtstack;
-  position: absolute;
-  top: calc(var(--gap, 14px) + 48px);
-  left: var(--gap, 14px);
-  /* Room for the shared panel only when it is actually out; see below. */
-  right: var(--gap, 14px);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-body.inspector .rt-stack {
-  right: calc(var(--rt-panel-w) + 2 * var(--gap, 14px));
-}
 
 /*
  * The action bar is centred on the space the model has, not on the window.
@@ -283,138 +282,6 @@ body.inspector .rt-stack {
  */
 body.inspector #retopo .rt-bar {
   left: calc(50% - (var(--rt-panel-w) + var(--gap, 14px)) / 2);
-}
-
-.rt-top {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 6px 9px;
-  border-radius: 11px;
-  background: var(--rt-skin);
-  backdrop-filter: var(--rt-blur);
-  border: 1px solid var(--line, #2a2e35);
-  /* A strip of controls, not a wall: it takes the width it needs and no more,
-     so the model behind it stays visible. */
-  width: max-content;
-  max-width: 100%;
-}
-
-/*
- * Three axes, and the bar has to *look* like three axes.
- *
- * They were one flat row of seventeen identical squares in which some buttons
- * replaced each other and others stacked, with nothing on screen saying which
- * did what. That is the whole reason the row read as chaos rather than as a
- * toolbar. The shapes carry the grammar now:
- *
- *   a **plate** is a choice, exactly one of its buttons is lit;
- *   a **loose button** is a layer, any number can be on at once.
- *
- * Labels are back above each group. They cost nine pixels of height and they are
- * what turns a wall of glyphs into three short sentences.
- */
-.rt-tgroup { display: flex; flex-direction: column; gap: 3px; }
-.rt-tlabel {
-  font-size: 8.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--dim, #8b929c);
-  padding-left: 2px;
-}
-
-/* One choice among several: recessed, joined, exactly one lit. */
-.rt-plate {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  padding: 2px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--line, #2a2e35) 42%, transparent);
-}
-
-/* Independent switches: no plate under them, so they read as separate things. */
-.rt-toggles { display: flex; align-items: center; gap: 3px; }
-
-/*
- * A layer that is on gets an outline rather than the plate's fill, so at a glance
- * "one of these" and "any of these" never look the same even when both are lit.
- */
-.rt-t.active {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--accent, #7cc4ff);
-}
-
-/* The wire colour flip is a detail of the wire button, not a peer of it. */
-.rt-sub-i { width: 22px; height: 22px; border-radius: 6px; }
-.rt-sub-i svg { width: 12px; height: 12px; }
-
-.rt-tsep {
-  width: 1px;
-  align-self: stretch;
-  margin: 3px 3px;
-  background: var(--line, #2a2e35);
-  flex: none;
-}
-
-/*
- * An icon button.
- *
- * Square, because a row of squares reads as a row where a row of differently
- * sized pills reads as a list. The active state is a filled plate rather than a
- * brighter glyph: the icons are already coloured, so brightening one would
- * compete with its own colour instead of standing out from its neighbours.
- */
-.rt-i {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--dim, #8b929c);
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  flex: none;
-  padding: 0;
-  transition: background 0.13s ease, color 0.13s ease, opacity 0.13s ease;
-}
-.rt-i:hover:not(:disabled) { color: var(--fg, #e6e9ef); background: rgb(255 255 255 / 0.06); }
-.rt-i.active {
-  color: var(--fg, #e6e9ef);
-  background: color-mix(in srgb, var(--accent, #7cc4ff) 22%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #7cc4ff) 45%, transparent);
-}
-.rt-i:disabled { opacity: 0.3; cursor: default; }
-.rt-i:focus-visible { outline: 2px solid var(--accent, #7cc4ff); outline-offset: 1px; }
-.rt-i svg { display: block; pointer-events: none; }
-
-/*
- * The counters, inline in the bar.
- *
- * Tabular figures so the numbers do not jitter as they change, and a fixed order
- * so the eye learns where each one lives instead of re-reading the labels.
- */
-.rt-counts {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  margin: 0 2px 0 3px;
-}
-.rt-counts > div { display: flex; flex-direction: column; line-height: 1.15; }
-.rt-counts dt {
-  font-size: 8.5px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--dim, #8b929c);
-}
-.rt-counts dd {
-  margin: 0;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--fg, #e6e9ef);
-  white-space: nowrap;
 }
 
 /* --- the curtain --------------------------------------------------------- */
@@ -469,59 +336,35 @@ body.inspector #retopo .rt-bar {
  * the model, because that is the thing you opened the mode to look at.
  */
 
-/* Group labels are a luxury. The tooltips still say what everything does. */
 /*
- * The counters are the first thing to go. They are a read-out; the icons are how
- * you do things, and a control you cannot reach costs more than a number you
- * cannot see. The panel's Bilan tab carries the same figures in full.
+ * The bar's own narrow-window behaviour moved out with the bar.
+ *
+ * Three queries used to live here, dropping the counters two at a time and then
+ * making the strip scroll sideways, all keyed to a container this mode declared
+ * for a toolbar it no longer owns. The shared bar wraps and drops its counters
+ * on its own, from `style.css`, for every mode at once.
  */
-@container rtstack (max-width: 820px) {
-  .rt-counts > div:nth-child(n + 3) { display: none; }
-}
-@container rtstack (max-width: 660px) {
-  .rt-counts { display: none; }
-}
 
 /*
- * Below that the bar stops wrapping and scrolls sideways instead. A strip three
- * rows tall covers the model, which defeats a mode whose whole premise is being
- * chrome around the viewport rather than a screen in front of it.
- */
-@container rtstack (max-width: 520px) {
-  .rt-top {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    width: auto;
-    max-width: 100%;
-  }
-  .rt-tgroup { flex-wrap: nowrap; }
-}
-
-/*
- * The shortcut column reserves room for the shared panel, and only while that
- * panel is out.
+ * How much the action bar leaves for the shared panel, and only while that panel
+ * is out. A container query never applies to the element that declares the
+ * container, only below it, which is why these name `.rt-bar` and not `#retopo`:
+ * a rule written for `#retopo` inside `@container retopo` fails silently.
  *
- * `.rt-stack` is a descendant of `#retopo`, which is what makes the container
- * query above it work at all: a container query never applies to the element
- * that declares the container, only below it. That is worth stating because a
- * rule written for `#retopo` inside `@container retopo` fails silently.
- *
- * The panel's own behaviour in a narrow window is `#inspector`'s business now
- * and lives in `style.css`, which is right: it belongs to one panel serving
- * every mode, not to whichever mode happens to be open in front of it.
+ * The panel's own behaviour in a narrow window is `#inspector`'s business now and
+ * lives in `style.css`, which is right: it belongs to one panel serving every
+ * mode, not to whichever mode happens to be open in front of it.
  */
 @container retopo (max-width: 760px) {
-  .rt-stack { --rt-panel-w: 288px; }
+  .rt-bar { --rt-panel-w: 288px; }
 }
 
 /*
- * Under 560 the panel takes the width and the model shows between uses of it,
- * so the column above the model stops reserving room for a panel that is no
- * longer beside it.
+ * Under 560 the panel takes the width and the model shows between uses of it, so
+ * the action bar stops centring itself around a panel no longer beside it.
  */
 @container retopo (max-width: 560px) {
-  .rt-stack { --rt-panel-w: 0px; }
+  .rt-bar { --rt-panel-w: 0px; }
   .rt-bar {
     flex-wrap: wrap;
     justify-content: center;

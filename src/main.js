@@ -651,9 +651,20 @@ $("viewbar-handle").addEventListener("pointerenter", untuck);
 untuck();
 
 function paintViewbar() {
-  const live = document.querySelector("#channels .active")?.dataset.id;
-  for (const b of document.querySelectorAll("[data-vb-ch]")) {
-    b.classList.toggle("active", b.dataset.vbCh === live);
+  /*
+   * The plate is repainted whole, not just the six buttons this file put in it.
+   *
+   * Retopo appends two more -- the atlas islands and the deviation heat map --
+   * and those are not channels: they are painted over the shaded render, so the
+   * channel underneath stays `shaded` and reading `#channels` would light the
+   * wrong button. It says which of its own is showing in `data-view` on the
+   * plate, and clears it as soon as a real channel is picked. Nothing here knows
+   * what those two are, only that the plate may hold buttons it did not write.
+   */
+  const plate = $("vb-colour");
+  const live = plate.dataset.view || document.querySelector("#channels .active")?.dataset.id;
+  for (const b of plate.children) {
+    b.classList.toggle("active", (b.dataset.vbCh || b.dataset.colour) === live);
   }
   const on = $("opt-wireframe").checked;
   $("vb-wire").setAttribute("aria-pressed", String(on));
@@ -2826,9 +2837,6 @@ async function toggleRetopo() {
   const { createRetopo } = await import("./retopo/index.js");
   retopo = createRetopo({
     wire: w,
-    // So the bar opens showing the state the rest of the application is in,
-    // rather than its own idea of it.
-    wireframeOn: () => $("opt-wireframe").checked,
     tauri,
     viewer,
     importPart,
@@ -2856,9 +2864,16 @@ async function toggleRetopo() {
     // the eye without a second surface being invented to carry it.
     showPane,
     onOpenChange: (on) => {
-      // Retopo brings its own, richer bar. Two stacked would be the very thing
-      // this one was made to end.
-      $("viewbar").hidden = on;
+      /*
+       * The bar stays. Retopo adds to it.
+       *
+       * This line used to read `$("viewbar").hidden = on`, because the mode put
+       * up a second bar in the same corner carrying its own Couleur, its own
+       * Calques and a Caméra group that had lost Libre and Rotation continue
+       * along the way. Two bars meant two answers to "how am I looking at this",
+       * and the mode's answer was the poorer one. Now the groups this mode adds
+       * go into the slots of the one bar, and come back out on close.
+       */
       $("btn-retopo").classList.toggle("active", on);
       $("btn-retopo").setAttribute("aria-pressed", String(on));
       if (on) {
@@ -3534,6 +3549,12 @@ function setEditMode(mode) {
   ]) {
     $(id).classList.toggle("active", editMode === value);
   }
+  // The bar shows the same state as the pane, because it is the same state.
+  for (const b of document.querySelectorAll("[data-giz]")) {
+    const on = editMode === b.dataset.giz;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
   paintEditTarget();
   paintTransform();
   if (editMode) {
@@ -3550,6 +3571,21 @@ for (const [id, mode] of [
   ["edit-rotate", "rotate"], ["edit-scale", "scale"],
 ]) {
   $(id).addEventListener("click", () => setEditMode(mode));
+}
+
+/*
+ * The same three modes, in the bar over the model.
+ *
+ * Relays, not a second implementation: they call the one `setEditMode` the pane
+ * and the G, R, S keys call, and `setEditMode` paints all of them. There is no
+ * fourth button for "none" because the lit one already is it -- clicking the
+ * mode you are in puts the handles away, which is the gesture you reach for
+ * before you look for a button that says Aucun.
+ */
+for (const b of document.querySelectorAll("[data-giz]")) {
+  b.addEventListener("click", () => {
+    setEditMode(editMode === b.dataset.giz ? null : b.dataset.giz);
+  });
 }
 
 /**

@@ -40,76 +40,26 @@ import "./retopo.css";
  */
 
 /**
- * The chrome around the viewport: the shortcut bar, the curtain and the actions.
+ * The chrome this mode owns outright: the curtain and the action bar.
  *
- * Everything in here is either glanced at constantly while judging a result or
- * done constantly while iterating on one. A control you have to open a panel for
- * is a control you stop using, which is the whole argument for the bar existing
- * beside a panel that holds the same settings in full.
+ * There is no shortcut bar here any more. This mode used to put up a second one
+ * in the same corner as Albedo's, hiding the first, and carrying its own Couleur,
+ * its own Calques and a Caméra group that had lost Libre and Rotation continue
+ * somewhere along the way. Two bars for one question, and the one the mode showed
+ * was the poorer of the two.
+ *
+ * What that mode genuinely adds now goes into the slots of the shared bar, and
+ * comes back out on close. See `BAR_*` below.
  */
 const SHELL = `
-<div class="rt-stack">
-<div class="rt-top" data-el="top">
-
-  <dl class="rt-counts" data-el="hud">
-    <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
-    <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
-    <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
-    <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
-  </dl>
-
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Couleur</span>
-    <div class="rt-plate" role="radiogroup" aria-label="Couleur de la surface">
-      <button class="rt-i active" type="button" data-colour="shaded" data-icon="shaded" title="Rendu physique"></button>
-      <button class="rt-i" type="button" data-colour="unlit" data-icon="unlit" title="Peint : la texture telle qu'elle a été faite, sans éclairage"></button>
-      <button class="rt-i" type="button" data-colour="albedo" data-icon="albedo" title="Couleur de base seule"></button>
-      <button class="rt-i" type="button" data-colour="normalGeom" data-icon="normalGeom" title="Normales de géométrie"></button>
-      <button class="rt-i" type="button" data-colour="uv" data-icon="uv" title="Damier d'UV"></button>
-      <button class="rt-i" type="button" data-colour="charts" data-icon="charts" data-el="btnCharts" title="Îlots de l'atlas, une couleur par îlot" disabled></button>
-      <button class="rt-i" type="button" data-colour="deviation" data-icon="deviation" data-el="btnDeviation" title="Écart au modèle d'origine" disabled></button>
-    </div>
-  </div>
-
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Calques</span>
-    <div class="rt-toggles">
-      <button class="rt-i rt-t" type="button" data-el="wire" data-icon="wireLight" aria-pressed="false" title="Fil de fer par-dessus la surface"></button>
-      <button class="rt-i rt-t rt-sub-i" type="button" data-el="wireFlip" data-icon="wireDark" aria-pressed="false" title="Traits sombres plutôt que clairs" hidden></button>
-      <button class="rt-i rt-t" type="button" data-el="flat" data-icon="flat" aria-pressed="false" title="Ombrage plat : chaque triangle sa normale"></button>
-      <button class="rt-i rt-t" type="button" data-el="opaque" data-icon="opaque" aria-pressed="false" title="Opaque : forcer la surface pleine, pour que le fil de fer ne traverse plus"></button>
-      <button class="rt-i rt-t" type="button" data-el="xray" data-icon="xray" aria-pressed="false" title="Rayons X : voir à travers la surface"></button>
-    </div>
-  </div>
-
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Scène</span>
-    <div class="rt-plate" role="radiogroup" aria-label="Ce qui est dans la scène">
-      <button class="rt-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
-      <button class="rt-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
-      <button class="rt-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
-      <button class="rt-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
-      <button class="rt-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
-    </div>
-  </div>
-
-  <div class="rt-tgroup">
-    <span class="rt-tlabel">Caméra</span>
-    <div class="rt-toggles">
-      <button class="rt-i rt-t" type="button" data-el="frame" data-icon="frame" title="Recadrer"></button>
-    </div>
-  </div>
-</div>
-</div>
-
 <div class="rt-split" data-el="splitLine" hidden><i></i></div>
 
 <div class="rt-bar" data-el="bar">
   <label class="rt-switch" title="Reprojeter les textures de la source sur le résultat">
     <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
   </label>
-  <button class="rt-i" type="button" data-el="undo" data-icon="undo" title="Annuler le dernier résultat" disabled></button>
-  <button class="rt-i" type="button" data-el="redo" data-icon="redo" title="Refaire" disabled></button>
+  <button class="tb-i" type="button" data-el="undo" data-icon="undo" title="Annuler le dernier résultat" disabled></button>
+  <button class="tb-i" type="button" data-el="redo" data-icon="redo" title="Refaire" disabled></button>
   <span class="rt-note" data-el="history"></span>
   <button class="wide" type="button" data-el="run">Décimer</button>
   <button class="wide" type="button" data-el="rebake" disabled
@@ -118,6 +68,63 @@ const SHELL = `
   <button class="wide" type="button" data-el="close">Fermer</button>
   <div class="rt-progress"><i data-el="fill"></i></div>
 </div>
+`;
+
+/*
+ * What this mode lends the shared bar, by slot.
+ *
+ * Each of these is a handful of buttons that only make sense while a retopology
+ * is on screen, and every one of them is genuinely new: nothing here duplicates
+ * a control the bar already has. The wireframe, its light-or-dark flip, the
+ * frame button and the five colour channels used to be repeated in this file and
+ * are not any more; the bar's own are the ones that work now, and they work
+ * whether the mode is open or not.
+ *
+ * They are written as markup rather than built node by node for the same reason
+ * the rest of this file is: a template you can read as a layout beats fifteen
+ * `createElement` calls you have to run in your head.
+ */
+
+/** Two data views, painted over the shaded render rather than replacing it. */
+const BAR_COLOUR = `
+  <button class="tb-i" type="button" data-colour="charts" data-icon="charts" data-el="btnCharts" disabled
+          title="Îlots de l'atlas : une couleur par îlot d'UV"></button>
+  <button class="tb-i" type="button" data-colour="deviation" data-icon="deviation" data-el="btnDeviation" disabled
+          title="Écart au modèle d'origine : du bleu au rouge"></button>
+`;
+
+/** Three ways of looking through or at a surface, while judging its topology. */
+const BAR_LAYERS = `
+  <button class="tb-i tb-t" type="button" data-el="flat" data-icon="flat" aria-pressed="false"
+          title="Ombrage plat : chaque triangle sa normale, pour voir les faces réelles"></button>
+  <button class="tb-i tb-t" type="button" data-el="opaque" data-icon="opaque" aria-pressed="false"
+          title="Forcer la surface opaque, pour que le fil de fer cesse de la traverser"></button>
+  <button class="tb-i tb-t" type="button" data-el="xray" data-icon="xray" aria-pressed="false"
+          title="Rayons X : voir la face arrière au travers de la proche"></button>
+`;
+
+/** A group of its own: what the viewport holds, source or result or both. */
+const BAR_SCENE = `
+<div class="tb-group">
+  <span class="tb-label">Scène</span>
+  <div class="tb-plate" role="radiogroup" aria-label="Ce qui est dans la scène">
+    <button class="tb-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
+    <button class="tb-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
+    <button class="tb-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
+    <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
+    <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
+  </div>
+</div>
+`;
+
+/** The four numbers you check between every run. */
+const BAR_HUD = `
+<dl class="tb-counts" data-el="hud">
+  <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
+  <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
+  <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
+  <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
+</dl>
 `;
 
 /**
@@ -332,12 +339,11 @@ export function createRetopo({
   toast,
   sourcePath,
   applyChannel,
-  setWireframe,
   channels,
   showPane,
   wire,
-  setWireDark,
-  wireframeOn,
+  // No `setWireframe`, `setWireDark` or `wireframeOn` any more: the buttons that
+  // needed them belonged to a bar of this mode's own, and that bar is gone.
 }) {
   const host = document.createElement("div");
   host.id = "retopo";
@@ -354,18 +360,56 @@ export function createRetopo({
   pane.innerHTML = PANEL;
   const tab = document.querySelector('.tab[data-pane="retopo"]');
 
-  // Two roots, one map. Nothing is named twice across them, and a lookup that
+  /*
+   * The groups this mode lends the shared bar.
+   *
+   * Built once, here, and then moved in and out of the bar as the mode opens and
+   * closes. Built rather than rebuilt because the buttons carry state -- which
+   * data view is showing, whether the x-ray is on -- and a fresh set of nodes on
+   * every open would be a fresh set of listeners on every open and a bar that
+   * forgot what it was doing every time you left it for a second.
+   *
+   * `held` is where they wait while the mode is shut. It is never in the
+   * document, so nothing in it is painted, measured or clickable, and the `el`
+   * map below can still find every one of them.
+   */
+  const bar = document.getElementById("viewbar");
+  const plate = document.getElementById("vb-colour");
+  const held = document.createElement("div");
+  /** @type {{parent: Element, node: Element, before: Element|null}[]} */
+  const lent = [];
+
+  const lend = (parent, html, before = null) => {
+    if (!parent) return;
+    const box = document.createElement("template");
+    box.innerHTML = html.trim();
+    for (const node of [...box.content.children]) {
+      lent.push({ parent, node, before });
+      held.appendChild(node);
+    }
+  };
+
+  lend(plate, BAR_COLOUR);
+  lend(document.getElementById("vb-layers"), BAR_LAYERS);
+  // Before Caméra, so the two groups that say *what* is on screen stay together
+  // and the two that say *how you are looking at it* stay together after them.
+  lend(bar, BAR_SCENE, document.getElementById("vb-camera")?.closest(".tb-group"));
+  lend(bar, BAR_HUD);
+
+  // Three roots, one map. Nothing is named twice across them, and a lookup that
   // silently found nothing is what the static audit exists to catch.
   const el = {};
-  for (const root of [host, pane]) {
+  for (const root of [host, pane, held]) {
     for (const node of root.querySelectorAll("[data-el]")) el[node.dataset.el] = node;
   }
 
   // The icons are set from the map rather than written inline in the template,
   // so the same glyph cannot end up drawn two slightly different ways in two
   // places, and so the template stays readable as a layout.
-  for (const node of host.querySelectorAll("[data-icon]")) {
-    node.innerHTML = ICONS[node.dataset.icon] || "";
+  for (const root of [host, held]) {
+    for (const node of root.querySelectorAll("[data-icon]")) {
+      node.innerHTML = ICONS[node.dataset.icon] || "";
+    }
   }
 
   let source = 0;
@@ -555,11 +599,6 @@ export function createRetopo({
   const say2 = (text) => text && toast?.(text);
 
   const LABELS = {
-    shaded: "Rendu physique",
-    unlit: "Peint, sans éclairage",
-    albedo: "Couleur de base",
-    normalGeom: "Normales de géométrie",
-    uv: "Damier d'UV",
     charts: "Îlots de l'atlas",
     deviation: "Écart au modèle d'origine",
   };
@@ -572,48 +611,51 @@ export function createRetopo({
     ghost: "Fantôme : source en transparence",
   };
 
+  /**
+   * Show one of this mode's two data views.
+   *
+   * Not a channel, and the difference matters to everything below: a data view is
+   * painted by the shared shader *over* the render, so the channel underneath
+   * stays on the plain shaded one rather than on a UV checker that would show
+   * through nothing. Albedo's Couleur group has no way to express that, which is
+   * why the plate is told, in `data-view`, which of the two is showing. It reads
+   * that back when it repaints and lights the right button; clearing the
+   * attribute is how a real channel takes the plate back.
+   */
   function setColour(name) {
-    for (const o of host.querySelectorAll("[data-colour]")) {
-      o.classList.toggle("active", o.dataset.colour === name);
-    }
-    const view = COLOUR_VIEWS[name] || 0;
-    wireU.uView.value = view;
-    // A data view is painted over whatever channel is underneath, so the
-    // underlying one stays on the plain shaded render rather than on a UV
-    // checker that would show through nothing.
-    applyChannel?.(view ? "shaded" : name);
+    plate.dataset.view = name;
+    for (const o of plate.children) o.classList.toggle("active", o.dataset.colour === name);
+    wireU.uView.value = COLOUR_VIEWS[name] || 0;
+    applyChannel?.("shaded");
     viewer.invalidate?.();
     say2(LABELS[name] || name);
   }
 
-  for (const b of host.querySelectorAll("[data-colour]")) {
+  for (const b of held.querySelectorAll("[data-colour]")) {
     b.addEventListener("click", () => setColour(b.dataset.colour));
   }
 
   /*
-   * The bar follows the Vue pane, which is the same state said twice.
+   * A channel picked anywhere leaves the data view, wherever it was picked.
    *
-   * The bar shows the handful of channels reached for constantly while judging a
-   * result; the pane shows all eleven. They are two ways of picking one thing,
-   * and the one you are not looking at is the one that goes stale. Rather than
-   * route the pane's clicks through this module, the bar re-reads which channel
-   * Albedo says is active after any click in the grid: one source of truth, and
-   * no assumption about how the panel chooses to mark it.
+   * Two places can pick one: the Vue pane's grid of eleven, and the Couleur
+   * group of the shared bar. Both are Albedo's and neither knows this mode
+   * exists, which is the right way round given that this module is fetched on
+   * demand and they are not. So this listens to both rather than asking either to
+   * call in, and the only state it has to put back is its own: the shader
+   * uniform, and the attribute that tells the plate a data view is showing.
    *
-   * The grid is looked up now rather than held, because it is rebuilt from
-   * `CHANNELS` at startup and this module arrives long after.
+   * Albedo repaints the plate itself, from `applyChannel`, on a microtask -- so
+   * after this has run, whichever order the listeners happen to fire in.
    */
-  document.getElementById("channels")?.addEventListener("click", () => {
-    const live = document.querySelector("#channels .active")?.dataset.id;
-    if (!live) return;
-    // A data view is this module's own and no channel button can mean it, so
-    // picking a channel over there necessarily leaves it.
+  const leaveDataView = (e) => {
+    if (e.target.closest("[data-colour]")) return;
+    delete plate.dataset.view;
     wireU.uView.value = 0;
-    for (const o of host.querySelectorAll("[data-colour]")) {
-      o.classList.toggle("active", o.dataset.colour === live);
-    }
     viewer.invalidate?.();
-  });
+  };
+  document.getElementById("channels")?.addEventListener("click", leaveDataView);
+  plate.addEventListener("click", leaveDataView);
 
   /*
    * Layers are toggles, and they look like toggles.
@@ -628,25 +670,15 @@ export function createRetopo({
   };
 
   /*
-   * The bar's wire button is a shortcut to the application's one wireframe, not
-   * a second wireframe.
+   * There is no wire button here, and no light-or-dark flip beside it.
    *
-   * It asks the host, and the host asks back through `onWireframe`, so pressing
-   * `W`, ticking the box in the Vue pane and clicking here all end in the same
-   * place and all three show the same state afterwards.
+   * This mode used to carry a pair that forwarded to the application's one
+   * wireframe and then read its own state back through `onWireframe`. All that
+   * relaying existed only because the bar it sat in was a different bar. The
+   * shared one has both buttons, driving the same `setWireframe`, and they work
+   * whether this mode is open or not -- which is what the relay was pretending to
+   * achieve.
    */
-  el.wire.addEventListener("click", () => {
-    const on = el.wire.getAttribute("aria-pressed") !== "true";
-    setWireframe?.(on);
-    say2(on ? (hasQuads ? "Fil de fer, quads compris" : "Fil de fer") : "Fil de fer coupé");
-  });
-
-  el.wireFlip.addEventListener("click", () => {
-    const dark = el.wireFlip.getAttribute("aria-pressed") !== "true";
-    toggle(el.wireFlip, dark);
-    setWireDark?.(dark);
-  });
-
   el.flat.addEventListener("click", () => {
     const on = el.flat.getAttribute("aria-pressed") !== "true";
     toggle(el.flat, on);
@@ -731,32 +763,19 @@ export function createRetopo({
   });
 
   /*
-   * Flat shading, which is not a stylistic choice here.
+   * Flat shading had a second listener here, identical to the one above, and the
+   * two cancelled each other out exactly.
    *
-   * A decimated mesh keeps the smooth normals it inherited, and those normals
-   * lie: they draw a curve across a face that is now dead flat. Flat shading
-   * shows the faces you actually have, which is the only honest way to judge how
-   * far a budget went.
+   * Both fired on one click: the first read `aria-pressed`, found false, turned
+   * flat shading on and wrote true; the second read the attribute the first had
+   * just written, concluded the button was being turned off, and put everything
+   * back. Net effect of pressing it: nothing at all, with no error anywhere. The
+   * one that remains is the one with the toast, above.
+   *
+   * There is no Recadrer button here either. The shared bar has it, in the Caméra
+   * group beside Libre and Rotation continue, which is where someone looks for it
+   * whether or not this mode happens to be open.
    */
-  el.flat.addEventListener("click", () => {
-    const on = el.flat.getAttribute("aria-pressed") !== "true";
-    el.flat.setAttribute("aria-pressed", String(on));
-    el.flat.classList.toggle("active", on);
-    viewer.root.traverse((n) => {
-      if (!n.isMesh && !n.isSkinnedMesh) return;
-      for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
-        if (!m || !("flatShading" in m)) continue;
-        m.flatShading = on;
-        m.needsUpdate = true;
-      }
-    });
-    viewer.invalidate?.();
-  });
-
-  el.frame.addEventListener("click", () => {
-    viewer.frameCurrent?.();
-    say2("Recadré");
-  });
 
   /**
    * How the source and the result share the viewport.
@@ -1587,9 +1606,12 @@ export function createRetopo({
       // The tab exists only while the mode does. A tab that opens a pane full of
       // controls driving a mode that is shut is a tab that lies.
       if (tab) tab.hidden = false;
+      // The bar gets its extra groups back, each in the slot it was written for.
+      for (const { parent, node, before } of lent) {
+        parent.insertBefore(node, before && before.parentNode === parent ? before : null);
+      }
       dressScene();
       paintScope();
-      api.onWireframe(!!wireframeOn?.());
       onOpenChange?.(true);
       syncViewport();
       refresh();
@@ -1602,6 +1624,19 @@ export function createRetopo({
       host.classList.remove("open");
       document.body.classList.remove("retopo-open");
       if (tab) tab.hidden = true;
+      /*
+       * The lent groups come back out, and the data view goes with them.
+       *
+       * Leaving the attribute behind would leave the plate looking for a button
+       * that is no longer in it, so it would light nothing at all and the channel
+       * that is actually on would show as unselected.
+       */
+      if (plate.dataset.view) {
+        delete plate.dataset.view;
+        wireU.uView.value = 0;
+        applyChannel?.("shaded");
+      }
+      for (const { node } of lent) held.appendChild(node);
       onOpenChange?.(false);
     },
     toggle() {
@@ -1638,15 +1673,15 @@ export function createRetopo({
     /** The shared selection moved: only the scope line depends on it. */
     onSelection: paintScope,
     /**
-     * The one wireframe changed, from wherever. The bar shows it.
+     * The one wireframe changed, from wherever.
      *
-     * The light-or-dark choice only exists while there are lines to colour, so
-     * it appears with them rather than sitting inert two thirds of the time.
+     * Nothing to do here any more: the buttons that show it belong to the shared
+     * bar, and Albedo paints them from `paintViewbar` whether this mode is open
+     * or not. Kept as a no-op because the host calls it on every wireframe
+     * change and a missing method would be a throw on a hot path, and because
+     * dropping it would make it look as though the mode had stopped caring.
      */
-    onWireframe(on) {
-      toggle(el.wire, on);
-      el.wireFlip.hidden = !on;
-    },
+    onWireframe() {},
   };
   return api;
 }
