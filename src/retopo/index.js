@@ -92,6 +92,7 @@ const SHELL = `
     <button class="rt-tab" type="button" data-tab="clean" role="tab">Nettoyage</button>
     <button class="rt-tab" type="button" data-tab="maps" role="tab">Cartes</button>
     <button class="rt-tab" type="button" data-tab="atlas" role="tab">Atlas</button>
+    <button class="rt-tab" type="button" data-tab="matter" role="tab">Matières</button>
     <button class="rt-tab" type="button" data-tab="result" role="tab">Bilan</button>
   </nav>
 
@@ -238,6 +239,14 @@ const SHELL = `
     </div>
   </section>
 
+  <section class="rt-page" data-tab="matter">
+    <p class="rt-hint">La liste des matières d'Albedo, telle quelle. Chaque
+      emplacement de texture peut être remplacé ou restauré ici, ce qui est la
+      façon de préparer une source avant de la cuire : une carte de normale
+      corrigée avant projection vaut mieux qu'une projection corrigée après.</p>
+    <div data-el="matterHost"></div>
+  </section>
+
   <section class="rt-page" data-tab="result">
     <p class="rt-hint" data-el="report">Rien encore.</p>
     <p class="rt-hint rt-err" data-el="err" hidden></p>
@@ -328,6 +337,39 @@ export function createRetopo({
   }
 
   // --- seeing the quads ---------------------------------------------------
+
+  /**
+   * Borrow Albedo's materials list rather than build a second one.
+   *
+   * The inspector already has a row per material, every texture slot listed one
+   * at a time, replacement and restore, and `replaceMap` already does the part
+   * that costs an afternoon: the incoming texture inherits flipY, wrapping,
+   * repeat, offset, centre and rotation from the one it replaces, because those
+   * belong to the model's UVs and not to the image.
+   *
+   * So the section is *moved* here while the mode is open and handed straight
+   * back on close. Not copied: a second list would need its own handlers, its
+   * own repaint on model change, and would drift from the first one within a
+   * week. Moving a node keeps its listeners, and the repaint that targets it by
+   * id keeps finding it because the id came along.
+   *
+   * The two can never both want it, since opening either mode closes the other.
+   */
+  let matterHome = null;
+
+  function borrowMatter() {
+    const section = document.getElementById("materials-section");
+    if (!section || matterHome) return;
+    matterHome = { parent: section.parentNode, next: section.nextSibling };
+    el.matterHost.appendChild(section);
+  }
+
+  function returnMatter() {
+    const section = document.getElementById("materials-section");
+    if (!section || !matterHome) return;
+    matterHome.parent.insertBefore(section, matterHome.next);
+    matterHome = null;
+  }
 
   /** The drawn bake cage, rebuilt with each result. */
   let cage = null;
@@ -986,6 +1028,7 @@ export function createRetopo({
       // The layout outside this module has to know, because the library sizes
       // the viewport and a retopology cannot be judged in a preview strip.
       document.body.classList.add("retopo-open");
+      borrowMatter();
       onOpenChange?.(true);
       syncViewport();
       refresh();
@@ -996,6 +1039,7 @@ export function createRetopo({
     hide() {
       open = false;
       host.classList.remove("open");
+      returnMatter();
       document.body.classList.remove("retopo-open");
       onOpenChange?.(false);
     },
