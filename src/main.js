@@ -147,9 +147,45 @@ function promoteDocument(doc = activeDoc) {
 /** The one tab being looked through, if there is one. */
 const previewDocument = () => documents.find((d) => d.preview) || null;
 
+/**
+ * A square snapshot of the viewport, for the tab strip.
+ *
+ * Taken from the live canvas rather than rendered afresh, so a tab shows *what
+ * you were looking at* when you left it: your angle, your channel, your framing.
+ * A synthetic three quarter view would be prettier and would lie about which tab
+ * is which the moment you turn a model around.
+ *
+ * The read happens in the same synchronous block as the render. Without
+ * `preserveDrawingBuffer` the browser may discard the buffer at the next paint,
+ * and asking for it permanently would tax every frame of every session to serve
+ * a forty pixel square taken three times an hour.
+ */
+function snapThumb() {
+  const gl = viewer.renderer;
+  if (!gl || !viewer.current) return null;
+  try {
+    gl.render(viewer.scene, viewer.camera);
+    const src = gl.domElement;
+    const side = Math.min(src.width, src.height);
+    if (!side) return null;
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 40;
+    // Cropped from the centre rather than squashed: a wide viewport squeezed
+    // into a square turns every model into the same tall smear.
+    cv.getContext("2d").drawImage(
+      src, (src.width - side) / 2, (src.height - side) / 2, side, side, 0, 0, 40, 40
+    );
+    return cv.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
 /** Take the live document out of the viewer and into its own holder. */
 function parkActive() {
   if (!activeDoc) return;
+  // Before the detach, while there is still something on screen to photograph.
+  activeDoc.thumb = snapThumb() || activeDoc.thumb;
   activeDoc.held = viewer.detachModel();
   activeDoc.channelState = channels.snapshot();
   activeDoc.path = openedPath;
@@ -223,6 +259,7 @@ function newDocument({ activate = true, preview = false } = {}) {
   const doc = makeDocument({ preview });
   // An empty holder rather than null, so `adoptDocument` has the same shape to
   // work with whether the tab has ever held anything or not.
+  doc.thumb = snapThumb() || doc.thumb;
   doc.held = viewer.detachModel();
   doc.channelState = channels.snapshot();
   channels.reset();
@@ -256,6 +293,7 @@ async function closeDocument(id) {
   if (wasActive) {
     // Park it so its objects are in a holder to release, then take up the
     // neighbour on the right, the way every tab strip does.
+    doc.thumb = snapThumb() || doc.thumb;
     doc.held = viewer.detachModel();
     doc.channelState = channels.snapshot();
     activeDoc = null;

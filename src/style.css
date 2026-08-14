@@ -186,6 +186,64 @@ body.clean #inspector { opacity: 0; pointer-events: none; }
  */
 .tabs-tab.preview .tabs-name { font-style: italic; }
 
+/*
+ * The snapshot of the model, standing in for its name on inactive tabs.
+ *
+ * Contained rather than cover: a crop would cut the silhouette, and the
+ * silhouette is the whole reason the picture is there. The dark plate behind it
+ * gives a consistent ground so two models photographed against different
+ * backgrounds still read as the same kind of thing.
+ */
+.tabs-thumb {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 4px;
+  background-color: #14161a;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+/* Wider on the tab you are in, where it sits beside the name rather than
+   instead of it and has room to be legible. */
+.tabs-tab.active .tabs-thumb { width: 22px; height: 22px; }
+
+/*
+ * The eye that says a tab is a preview.
+ *
+ * The italic name says it too, but italics are a difference you only notice once
+ * you already know to look for one, and the whole point of the preview tab is
+ * that you are not thinking about tabs at all while you click through a folder.
+ * The glyph is Albedo's own, the same one the texture rows use for "this is
+ * being shown", so it needs no legend: you are looking through this tab rather
+ * than working in it.
+ *
+ * Dimmer than the name it sits beside. It is a state, not a control, and there
+ * is nothing to click.
+ */
+.tabs-eye {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--accent);
+  opacity: 0.75;
+}
+.tabs-eye svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* On the tab you are actually in, the eye earns its full colour: that is the one
+   place the distinction changes what your next click does. */
+.tabs-tab.active .tabs-eye { opacity: 1; }
+
 /* Modified, said with a dot rather than a word: it has to read at a glance in a
    strip where the name is already fighting for room. */
 .tabs-dot {

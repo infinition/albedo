@@ -56,10 +56,51 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
       tab.setAttribute("aria-selected", String(doc.id === activeId));
       tab.tabIndex = 0;
 
+      /*
+       * An eye on a preview tab.
+       *
+       * The italic name says it too, but italics are a difference you only see
+       * once you already know to look for one. The eye is Albedo's own, the same
+       * glyph the texture rows use for "this is being shown", so it reads
+       * without a legend: you are looking through this tab rather than working
+       * in it.
+       */
       const label = doc.title || "Sans titre";
+      if (doc.preview) {
+        const eye = document.createElement("span");
+        eye.className = "tabs-eye";
+        eye.innerHTML =
+          '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/>' +
+          '<circle cx="12" cy="12" r="2.6"/></svg>';
+        tab.appendChild(eye);
+      }
+      /*
+       * The model itself, in place of most of its name.
+       *
+       * A truncated file name is the worst of both worlds: it takes the room a
+       * name needs and delivers none of what a name is for. Half the assets in a
+       * library begin with the same twenty characters, so the strip ends up
+       * reading `A_10-meter_secti…` four times over. The snapshot is the view you
+       * left the tab on, which is the thing you actually remember it by.
+       *
+       * The name stays on the active tab. Icon-only everywhere would save more
+       * room and cost too much: two variants of one model are indistinguishable
+       * as pictures, and that is exactly the case where several tabs are open.
+       * So the tab you are working in keeps its words, and the rest keep their
+       * pictures, with the full path in the tooltip on all of them.
+       */
+      if (doc.thumb) {
+        const shot = document.createElement("span");
+        shot.className = "tabs-thumb";
+        shot.style.backgroundImage = `url(${doc.thumb})`;
+        tab.appendChild(shot);
+      }
       const name = document.createElement("span");
       name.className = "tabs-name";
       name.textContent = label.length > MAX_TITLE ? label.slice(0, MAX_TITLE - 1) + "…" : label;
+      // Hidden rather than absent, so the tab keeps its width when it becomes
+      // the active one and the strip does not jump under the cursor.
+      name.hidden = !!doc.thumb && doc.id !== activeId;
       // The whole path, because two files called `scene.glb` in two folders is
       // the ordinary case and the tab can only show one of those words.
       tab.title = doc.dirty
