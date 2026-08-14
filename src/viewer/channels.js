@@ -21,6 +21,7 @@ export const CHANNELS = [
   { id: "normalGeom", labelKey: "chann.normalGeom" },
   { id: "uv", labelKey: "chann.uv" },
   { id: "clay", labelKey: "chann.clay" },
+  { id: "clayUnlit", labelKey: "chann.clayUnlit" },
 ];
 
 const MAP_OF = {
@@ -436,6 +437,15 @@ export class ChannelView {
         metalness: 0,
         side: mat.side,
         flatShading: this.flat,
+      });
+    }
+    if (channel === "clayUnlit") {
+      // The same gray without the light, which is where the wireframe reads
+      // best of all: no shading competes with the lines. Unlit, so it is a
+      // MeshBasicMaterial like the inspection channels.
+      return new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0x9b9b9b),
+        side: mat.side,
       });
     }
     if (channel === "normalGeom") {

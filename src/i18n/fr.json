@@ -58,6 +58,7 @@
   "chann.normalGeom": "Normales géo",
   "chann.uv": "UV",
   "chann.clay": "Argile",
+  "chann.clayUnlit": "Argile sans lumière",
   "toast.wireOn": "Fil de fer",
   "toast.wireOff": "Fil de fer coupé",
   "toast.flatOn": "Ombrage simple",

@@ -58,6 +58,7 @@
   "chann.normalGeom": "Geometry normals",
   "chann.uv": "UV",
   "chann.clay": "Clay",
+  "chann.clayUnlit": "Clay unlit",
   "toast.wireOn": "Wireframe",
   "toast.wireOff": "Wireframe off",
   "toast.flatOn": "Flat shading",

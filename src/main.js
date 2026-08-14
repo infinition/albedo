@@ -560,9 +560,13 @@ window.addEventListener("resize", () => {
  */
 for (const b of document.querySelectorAll("[data-vb-ch]")) {
   b.addEventListener("click", () => {
-    // Clay is a click away from Peint and a click back: the neutral gray is a
-    // look you pass through to reach the painted texture, not a place to stay.
-    const id = b.dataset.vbCh === "clay" && currentChannel === "clay" ? "unlit" : b.dataset.vbCh;
+    // Clay cycles: lit clay, then the same gray without the light, then back.
+    // The unlit state is where the wireframe reads best, and that is the thing
+    // the clay button is for, so it is one button, not two.
+    let id = b.dataset.vbCh;
+    if (id === "clay") {
+      id = currentChannel === "clay" ? "clayUnlit" : currentChannel === "clayUnlit" ? "clay" : "clay";
+    }
     applyChannel(id);
     paintViewbar();
   });
@@ -723,7 +727,10 @@ function paintViewbar() {
   const plate = $("vb-colour");
   const live = plate.dataset.view || document.querySelector("#channels .active")?.dataset.id;
   for (const b of plate.children) {
-    b.classList.toggle("active", (b.dataset.vbCh || b.dataset.colour) === live);
+    // The clay button lights for both of its states: lit gray and unlit gray
+    // are one button that cycles, not two channels the plate should split.
+    const isClay = b.dataset.vbCh === "clay" && (live === "clay" || live === "clayUnlit");
+    b.classList.toggle("active", isClay || (b.dataset.vbCh || b.dataset.colour) === live);
   }
   const on = $("opt-wireframe").checked;
   $("vb-wire").setAttribute("aria-pressed", String(on));
