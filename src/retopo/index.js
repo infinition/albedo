@@ -219,6 +219,7 @@ const BAR_SCENE = `
       <button class="tb-i active" type="button" data-ab="both" data-icon="cmpBoth" data-i18n-title="rt.abBoth" title="Les deux dans la scène"></button>
       <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" data-i18n-title="rt.abSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
       <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" data-i18n-title="rt.abGhost" title="Fantôme : source en transparence sur le résultat"></button>
+      <button class="tb-i" type="button" data-ab="none" data-icon="cmpNone" data-i18n-title="rt.abNoneTitle" title="Rien : masquer la source et le résultat"></button>
     </div>
     <button class="tb-i tb-t" type="button" data-el="peek" data-icon="peek" aria-pressed="false"
             data-i18n-title="rt.peekTitle" title="Maintenir pour voir la source, relâcher pour le résultat (X)"></button>
@@ -763,6 +764,7 @@ export function createRetopo({
     both: "rt.abBothSay",
     split: "rt.abSplitSay",
     ghost: "rt.abGhostSay",
+    none: "rt.abNoneSay",
   };
 
   /**
@@ -991,7 +993,10 @@ export function createRetopo({
     if (src && res) {
       if (mode === "source") res.visible = false;
       else if (mode === "result") src.visible = false;
-      else if (mode === "split") {
+      else if (mode === "none") {
+        src.visible = false;
+        res.visible = false;
+      } else if (mode === "split") {
         setSide(src, -1);
         setSide(res, 1);
       } else if (mode === "ghost") ghost(src);

@@ -143,6 +143,12 @@ export const ICONS = {
      <circle cx="8" cy="8" r="5.4" stroke="#4dd0e1" stroke-dasharray="1.8 1.6"/>`
   ),
 
+  /** Nothing: both hidden, an empty circle with a slash. */
+  cmpNone: wrap(
+    `<circle cx="8" cy="8" r="5" stroke="#8b929c"/>
+     <path d="M4.4 4.4l7.2 7.2" stroke="#ff8b7a"/>`
+  ),
+
   /** Frame the model. */
   frame: wrap(
     `<path d="M2.6 5.6V2.6h3M10.4 2.6h3v3M13.4 10.4v3h-3M5.6 13.4h-3v-3"/>
