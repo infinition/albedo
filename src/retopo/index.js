@@ -1663,6 +1663,12 @@ export function createRetopo({
     }
   }
 
+  /** The result is the source's own name, low poly: table.glb yields table_LP. */
+  const resultLabel = () => {
+    const file = (sourcePath?.() || "").split(/[\\/]/).pop() || "modele";
+    return `${file.replace(/\.[^.]+$/, "")}_LP`;
+  };
+
   async function inputFor(dirs) {
     const p = sourcePath?.();
     // The fast path hands the engine the file on disk, which by definition
@@ -1741,7 +1747,7 @@ export function createRetopo({
       // second run stacked a second low poly on the first, so the scene held
       // three meshes claiming to be two and every count above was a lie.
       dropResult();
-      await importPart(dirs.output);
+      await importPart(dirs.output, resultLabel());
       claimResult(viewer.parts.at(-1)?.object);
       last = r;
       // Both files stay named, so the bake can be redone on its own without
@@ -1817,7 +1823,7 @@ export function createRetopo({
        * would otherwise take two undos to get back one decimation.
        */
       dropResult();
-      await importPart(dirs.rebake);
+      await importPart(dirs.rebake, resultLabel());
       claimResult(viewer.parts.at(-1)?.object);
       lastRun = { high: lastRun.high, low: dirs.rebake };
       if (cursor >= 0) history[cursor] = { ...history[cursor], path: dirs.rebake };

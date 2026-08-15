@@ -3845,7 +3845,7 @@ function paintSaveButtons() {
  * imported model is not a lesser one: it gets its materials normalised, its
  * colour spaces fixed and its textures found exactly as the first did.
  */
-async function importPart(path) {
+async function importPart(path, label) {
   if (!tauri) return;
   // An empty tab has no model to add to, and that is a state to fill rather
   // than a reason to refuse: the first import becomes the scene.
@@ -3853,7 +3853,7 @@ async function importPart(path) {
   setBusy(true);
   try {
     const url = tauri.core.convertFileSrc(path);
-    const name = path.split(/[\\/]/).pop();
+    const name = label || path.split(/[\\/]/).pop();
     const findTextures = async (names) => {
       const found = await tauri.core.invoke("find_textures", { modelPath: path, names });
       return (found || []).map((f) => ({ name: f.name, url: tauri.core.convertFileSrc(f.path) }));
