@@ -211,6 +211,26 @@ body.retopo-open #timeline {
 }
 .rt-note:empty { display: none; }
 
+/* The run's progress: a thin accent line along the bottom edge of the bar,
+   filling as the engine reports its fraction. */
+.rt-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 0 0 10px 10px;
+  pointer-events: none;
+}
+.rt-progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent, #7cc4ff);
+  transition: width 0.15s ease;
+}
+
 /* The unfolded settings menu, reached by the arrow on the action bar. */
 .rt-menu-toggle[aria-pressed="true"] { color: var(--accent); }
 .rt-menu {

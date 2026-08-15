@@ -770,17 +770,24 @@ viewer.alsoKeep = () => {
 // The HUD needs the navigation and the navigation fires HUD actions, so the
 // handlers are filled in once both exist.
 const actions = {};
+let lastFovToast = -1;
 const nav = new Navigation(viewer, {
   onAction: (a) => actions[a]?.(),
   onDevice: showDevice,
   // The lens can be dragged as well as slid, and the panel must agree
   onFov: (fov) => {
-    $("opt-fov").value = String(Math.round(fov));
-    $("fov-value").textContent = `${Math.round(fov)}°`;
+    const deg = Math.round(fov);
+    $("opt-fov").value = String(deg);
+    $("fov-value").textContent = `${deg}°`;
     // The panel is usually shut while the lens is being dragged, and the drag
-    // is the one gesture where the number is the whole point.
-    toast(`Champ ${Math.round(fov)}°`);
-    prefs.set("fov", Math.round(fov));
+    // is the one gesture where the number is the whole point. Announced only
+    // when the whole degree changes, not on every pointer move, so the toast
+    // stays readable instead of flashing the same number a hundred times.
+    if (deg !== lastFovToast) {
+      lastFovToast = deg;
+      toast(`Champ ${deg}°`);
+    }
+    prefs.set("fov", deg);
   },
   // Shift and drag turns the environment when the environment is the light
   onEnvRotate: (deg) => {
