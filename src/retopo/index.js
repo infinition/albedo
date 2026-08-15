@@ -1532,7 +1532,12 @@ export function createRetopo({
     // it, which stopped working the moment the line could be in two languages.
     delete el.note.dataset.why;
     el.bar.classList.toggle("busy", running);
-    if (typeof fraction === "number") el.fill.style.width = `${Math.round(fraction * 100)}%`;
+    if (typeof fraction === "number") {
+      el.fill.style.width = `${Math.round(fraction * 100)}%`;
+    } else if (!text) {
+      // A finished run clears the bar rather than leaving it full.
+      el.fill.style.width = "0%";
+    }
   }
 
   /**
@@ -1719,7 +1724,7 @@ export function createRetopo({
         // The engine apportions its own bar by what each stage costs, so the
         // wording follows the fraction rather than being timed here.
         const what = !el.bake.checked || f < 0.5 ? verb : t("rt.projecting");
-        say(`${what}… ${Math.round(f * 100)} %`, f);
+        say(`${what}…`, f);
       });
 
       const r = await tauri.core.invoke("retopo_decimate", {
@@ -1801,7 +1806,7 @@ export function createRetopo({
       const dirs = await tauri.core.invoke("retopo_workdir");
       stop = await tauri.event.listen("retopo://progress", (e) => {
         const f = e.payload || 0;
-        say(`${t("rt.projecting")}… ${Math.round(f * 100)} %`, f);
+        say(`${t("rt.projecting")}…`, f);
       });
 
       const r = await tauri.core.invoke("retopo_bake", {

@@ -975,7 +975,7 @@ label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
   top: calc(var(--gap) + 4px);
   left: 50%;
   transform: translate(-50%, -6px);
-  z-index: 12;
+  z-index: 40;
   padding: 5px 12px;
   border-radius: 999px;
   border: 1px solid var(--line);
