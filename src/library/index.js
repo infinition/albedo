@@ -1,5 +1,12 @@
 import "./library.css";
 import { thumbnailFor, releaseThumbnails, cancelPending } from "./thumbs.js";
+import { applyStaticIn, register, t } from "../i18n/index.js";
+import libFr from "./fr.json";
+import libEn from "./en.json";
+
+// The library's own strings travel with it, in this chunk, not in the startup
+// dictionaries parsed by every Explorer thumbnail job.
+register({ fr: libFr, en: libEn });
 
 /**
  * The asset manager.
@@ -79,33 +86,33 @@ const SORTS = {
 const SHELL = `
   <div class="lib-shell">
   <div class="lib-bar">
-    <button class="icon lib-drawer" data-el="drawer" title="Dossiers et tags" aria-pressed="false">
+    <button class="icon lib-drawer" data-el="drawer" data-i18n-title="lib.drawer" title="Dossiers et tags" aria-pressed="false">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <span class="lib-title">Bibliothèque</span>
+    <span class="lib-title" data-i18n="lib.title">Bibliothèque</span>
     <span class="lib-spacer"></span>
     <div class="segment" data-el="kinds"></div>
     <select class="quiet" data-el="sort">
-      <option value="name">Nom</option>
-      <option value="recent">Plus récent</option>
-      <option value="size">Taille</option>
-      <option value="format">Format</option>
+      <option value="name" data-i18n="lib.sortName">Nom</option>
+      <option value="recent" data-i18n="lib.sortRecent">Plus récent</option>
+      <option value="size" data-i18n="lib.sortSize">Taille</option>
+      <option value="format" data-i18n="lib.sortFormat">Format</option>
     </select>
-    <label class="lib-size" title="Taille des vignettes, Ctrl + molette dans la grille">
+    <label class="lib-size" data-i18n-title="lib.zoomTitle" title="Taille des vignettes, Ctrl + molette dans la grille">
       <input type="range" min="84" max="320" step="4" value="132" data-el="zoom" />
     </label>
-    <button class="icon" data-el="peek" title="Volet d'aperçu" aria-pressed="false">
+    <button class="icon" data-el="peek" data-i18n-title="lib.peek" title="Volet d'aperçu" aria-pressed="false">
       <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M15 5v14"/></svg>
     </button>
-    <button class="icon" data-el="close" title="Retour au viewer (Échap)">
+    <button class="icon" data-el="close" data-i18n-title="lib.close" title="Retour au viewer (Échap)">
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
 
   <aside class="lib-side">
-    <h3>Bibliothèques <button data-el="add">Ajouter</button></h3>
+    <h3><span data-i18n="lib.libraries">Bibliothèques</span> <button data-el="add" data-i18n="lib.add">Ajouter</button></h3>
     <div data-el="roots"></div>
-    <h3>Dossiers</h3>
+    <h3 data-i18n="lib.folders">Dossiers</h3>
     <div class="lib-tree" data-el="tree"></div>
   </aside>
 
@@ -116,13 +123,13 @@ const SHELL = `
     <div class="lib-bottom">
       <label class="lib-search">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-        <input type="search" placeholder="Rechercher un nom ou un tag" data-el="search" />
+        <input type="search" data-i18n-placeholder="lib.search" placeholder="Rechercher un nom ou un tag" data-el="search" />
       </label>
       <div class="lib-tags" data-el="tags"></div>
     </div>
   </main>
 
-  <div class="lib-handle" data-el="handle" title="Largeur de l'aperçu"></div>
+  <div class="lib-handle" data-el="handle" data-i18n-title="lib.handle" title="Largeur de l'aperçu"></div>
   </div>
 `;
 
@@ -137,6 +144,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
   host.id = "library";
   host.innerHTML = SHELL;
   document.getElementById("app").appendChild(host);
+  applyStaticIn(host);
 
   const el = {};
   for (const node of host.querySelectorAll("[data-el]")) el[node.dataset.el] = node;
@@ -203,7 +211,8 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       '<rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="8.5" cy="9.5" r="1.6" />' +
       '<path d="M4 16l5-4.5 4 3.5 3-2.5 4 3.5" />',
   };
-  for (const [id, label] of [["all", "Tout"], ["model", "Modèles"], ["texture", "Textures"]]) {
+  for (const [id, key] of [["all", "lib.kindAll"], ["model", "lib.kindModel"], ["texture", "lib.kindTexture"]]) {
+    const label = t(key);
     const b = document.createElement("button");
     b.className = "seg" + (id === "all" ? " active" : "");
     b.innerHTML =
@@ -236,7 +245,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
     if (!state.roots.length) {
       const hint = document.createElement("p");
       hint.className = "hint";
-      hint.textContent = "Ajoute un dossier pour commencer.";
+      hint.textContent = t("lib.empty");
       el.roots.appendChild(hint);
       return;
     }
@@ -251,7 +260,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       const drop = document.createElement("span");
       drop.className = "drop";
       drop.textContent = "✕";
-      drop.title = "Retirer de la liste (le dossier n'est pas touché)";
+      drop.title = t("lib.remove");
       drop.addEventListener("click", async (e) => {
         e.stopPropagation();
         state.roots = await call("library_remove", { path: root.path });
@@ -370,7 +379,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
    * wants when deciding where to look.
    */
   function buildTree(entries) {
-    const root = { name: "Tout", path: null, children: new Map(), count: entries.length };
+    const root = { name: t("lib.kindAll"), path: null, children: new Map(), count: entries.length };
     for (const entry of entries) {
       const parts = entry.rel.split("/");
       parts.pop(); // the file itself
@@ -413,7 +422,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       twist.type = "button";
       if (hasChildren) {
         twist.appendChild(icon("chevron"));
-        twist.title = open ? "Replier" : "Déplier";
+        twist.title = open ? t("lib.collapse") : t("lib.expand");
         twist.addEventListener("click", (e) => {
           e.stopPropagation();
           if (open) state.expanded.delete(node.path);
@@ -427,7 +436,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "lib-item" + (state.folder === node.path ? " active" : "");
-      button.title = node.path || "Toute la bibliothèque";
+      button.title = node.path || t("lib.allLibrary");
       button.append(
         icon(node.path === null ? "drive" : open && hasChildren ? "folderOpen" : "folder"),
         Object.assign(document.createElement("span"), { textContent: node.name, className: "label" })
@@ -462,7 +471,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
     if (!counts.size) {
       const hint = document.createElement("p");
       hint.className = "hint";
-      hint.textContent = "Sélectionne un élément pour lui poser un tag.";
+      hint.textContent = t("lib.tagHint");
       el.tags.appendChild(hint);
       return;
     }
@@ -486,7 +495,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
 
     const all = document.createElement("button");
     all.className = "lib-tag" + (state.format === null ? " active" : "");
-    all.textContent = "Tous formats";
+    all.textContent = t("lib.allFormats");
     all.addEventListener("click", () => {
       state.format = null;
       paint();
@@ -557,8 +566,8 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       const empty = document.createElement("div");
       empty.className = "lib-empty";
       empty.textContent = state.root
-        ? "Rien ne correspond."
-        : "Ajoute un dossier pour commencer.";
+        ? t("lib.noMatch")
+        : t("lib.empty");
       el.grid.appendChild(empty);
       state.page = { list: [], shown: 0 };
       paintDetail();
