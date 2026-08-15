@@ -2784,52 +2784,10 @@ function applyPrefs() {
   $("clip-at").value = String(p.clipAt);
   viewer.setClipping({ at: p.clipAt });
   setClipping(p.clipAxis, false);
-  $("opt-grid").checked = p.grid;
-  viewer.setGrid(p.grid);
-  $("opt-bounds").checked = p.bounds;
-  viewer.setBounds(p.bounds);
-  $("opt-skeleton").checked = p.skeleton;
-  viewer.setSkeleton(p.skeleton);
-  $("opt-wire-dark").checked = p.wireDark;
-  setWireframe(p.wireframe, false);
-  setWireOnly(p.wireOnly, false);
-  setFlat(p.flat, false);
-  $("opt-exposure").value = String(p.exposure);
-  viewer.setExposure(p.exposure);
   $("opt-fov").value = String(p.fov);
   $("fov-value").textContent = `${p.fov}°`;
   viewer.setFov(p.fov);
   if (p.projection !== "perspective") setProjection(p.projection, false);
-  $("env-background").checked = p.environmentBackground;
-  viewer.showEnvBackground = p.environmentBackground;
-  $("env-lighting").checked = p.environmentLighting;
-  viewer.envLighting = p.environmentLighting;
-  $("env-intensity").value = String(p.environmentIntensity);
-  $("env-intensity-value").textContent = Number(p.environmentIntensity).toFixed(1);
-  viewer.setEnvironmentIntensity(p.environmentIntensity);
-  $("key-light").checked = p.keyLight;
-  viewer.setKeyLight(p.keyLight);
-  $("key-power").value = String(p.keyLightPower);
-  $("key-power-value").textContent = Number(p.keyLightPower).toFixed(1);
-  viewer.setKeyLightPower(p.keyLightPower);
-  $("key-colour").value = p.keyLightColour;
-  viewer.setKeyLightColour(p.keyLightColour);
-  $("grad-hue").value = String(p.gradientHue);
-  $("bg-brightness").value = String(p.backgroundBrightness);
-  viewer.setBackgroundBrightness(p.backgroundBrightness);
-  $("env-zoom").value = String(p.environmentZoom);
-  $("zoom-value").textContent = `${Number(p.environmentZoom).toFixed(1)}×`;
-  $("env-rotation").value = String(p.environmentRotation);
-  $("rot-value").textContent = `${p.environmentRotation}°`;
-  $("env-blur").value = String(p.environmentBlur);
-  viewer.setFraming({
-    zoom: p.environmentZoom,
-    rotation: p.environmentRotation,
-    blur: p.environmentBlur,
-  });
-  paintGradient(false);
-  if (p.environment !== "studio") useEnvironment(p.environment, p.environmentPath, false);
-  else viewer.applyBackground();
   if (p.pedestal) usePedestal(p.pedestal, false);
   // Setting `value` fires no input event, so the readouts would still be
   // showing the markup's defaults and quietly disagreeing with the sliders.
@@ -3405,13 +3363,9 @@ $("light-colour").addEventListener("input", (e) => {
   saveLights();
 });
 
-void shellReady.then(() => {
-  const saved = prefs.get("lights");
-  if (saved?.length) {
-    viewer.applyLights(saved);
-    paintLights();
-  }
-});
+// Lights are a look, per scene, not a setting that survives a restart. The
+// default rig is what a fresh launch starts with; custom lights return when a
+// document is reopened in its own tab.
 
 
 
