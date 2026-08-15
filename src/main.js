@@ -212,15 +212,12 @@ function captureViewState() {
     grid: $("opt-grid").checked,
     bounds: $("opt-bounds").checked,
     skeleton: $("opt-skeleton").checked,
-    exposure: Number($("opt-exposure").value),
+    exposure: Number($("opt-exposure")?.value || 0),
     environment: viewer.envKind,
-    environmentPath: prefs.get("environmentPath"),
+    environmentPath: prefs?.get?.("environmentPath") ?? null,
     envBackground: viewer.showEnvBackground,
     envLighting: viewer.envLighting,
-    envIntensity: prefs.get("environmentIntensity"),
-    keyLight: prefs.get("keyLight"),
-    keyLightPower: prefs.get("keyLightPower"),
-    keyLightColour: prefs.get("keyLightColour"),
+    envIntensity: prefs?.get?.("environmentIntensity") ?? 1.0,
     lights: viewer.lightState(),
   };
 }
@@ -2787,9 +2784,12 @@ function applyPrefs() {
   viewer.setFov(p.fov);
   if (p.projection !== "perspective") setProjection(p.projection, false);
   if (p.pedestal) usePedestal(p.pedestal, false);
+  if (p.lights) viewer.applyLights(p.lights);
   // Setting `value` fires no input event, so the readouts would still be
   // showing the markup's defaults and quietly disagreeing with the sliders.
   refreshSliderValues();
+  paintDecorTree();
+  selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 });
 }
 
 /** The tuning of a device outlives the session that found it. */
@@ -3284,7 +3284,7 @@ function lightIntensityPercent(entry) {
 }
 
 function saveLights() {
-  prefs.set("lights", viewer.lightState());
+  prefs?.set?.("lights", viewer.lightState());
 }
 
 function updateDecorSelectedLabel() {
@@ -3299,7 +3299,7 @@ function updateDecorSelectedLabel() {
       label.textContent = `Selected: Lumière`;
     }
   } else if (decorSelection.type === "pedestal") {
-    const pName = prefs.get("pedestal")
+    const pName = prefs?.get?.("pedestal")
       ? fileLabel(prefs.get("pedestal"))
       : viewer.pedestal
       ? "Socle 3D"
@@ -3308,7 +3308,7 @@ function updateDecorSelectedLabel() {
   } else if (decorSelection.type === "background") {
     const bName =
       viewer.envKind === "image"
-        ? prefs.get("environmentPath")
+        ? prefs?.get?.("environmentPath")
           ? fileLabel(prefs.get("environmentPath"))
           : "Image HDRI"
         : viewer.envKind === "gradient"
@@ -3518,7 +3518,7 @@ function paintDecorTree() {
 
       const name = document.createElement("span");
       name.className = "decor-item-name";
-      name.textContent = prefs.get("pedestal")
+      name.textContent = prefs?.get?.("pedestal")
         ? fileLabel(prefs.get("pedestal"))
         : "Socle 3D";
 
@@ -3571,7 +3571,7 @@ function paintDecorTree() {
       { kind: "gradient", label: "Fond Dégradé", icon: "🏁" },
       {
         kind: "image",
-        label: prefs.get("environmentPath")
+        label: prefs?.get?.("environmentPath")
           ? fileLabel(prefs.get("environmentPath"))
           : "Image HDRI",
         icon: "🖼️",
