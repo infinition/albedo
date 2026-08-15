@@ -89,7 +89,7 @@ export const ACTIONS = {
 };
 
 export class Navigation {
-  constructor(viewer, { onAction, onDevice, onMode, onFov, onEnvRotate } = {}) {
+  constructor(viewer, { onAction, onDevice, onMode, onFov, onEnvRotate, onLightRotate } = {}) {
     this.viewer = viewer;
     this.onAction = onAction || (() => {});
     this.onDevice = onDevice || (() => {});
@@ -97,6 +97,8 @@ export class Navigation {
     this.onFov = onFov || (() => {});
     /** Fired while the environment is being turned by a drag. */
     this.onEnvRotate = onEnvRotate || (() => {});
+    /** Fired while a light is being swung by a drag. */
+    this.onLightRotate = onLightRotate || (() => {});
     /** Fired whenever the mode changes, including when it changes itself. */
     this.onMode = onMode || (() => {});
     /**
@@ -257,7 +259,8 @@ export class Navigation {
         if (viewer.lightsFromEnvironment()) {
           this.onEnvRotate(viewer.rotateEnvironment(-(e.clientX - modX) * 0.4));
         } else {
-          viewer.orbitLight((e.clientX - modX) * 0.008, (e.clientY - modY) * 0.008);
+          const entry = viewer.orbitLight((e.clientX - modX) * 0.008, (e.clientY - modY) * 0.008);
+          if (entry) this.onLightRotate(entry);
         }
         modX = e.clientX;
         modY = e.clientY;

@@ -114,18 +114,25 @@ export class Viewer {
     this.framing = { zoom: 1, rotation: 0, blur: 0 };
     this.solidBackground = new THREE.Color(0x14161a);
 
-    this.keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
-    this.keyLight.position.set(3, 6, 4);
-    this.scene.add(this.keyLight);
-
-    // Lights the user adds, kept in their own group so clearing a model never
-    // takes the rig with it.
+    // Lights rig: contains all scene lights, starting with the primary "light"
     this.rig = new THREE.Group();
     this.scene.add(this.rig);
     this.lights = [];
     this.lightHelper = null;
     this.selectedLight = null;
     this._lightSeq = 0;
+
+    // Primary default light "light"
+    const primaryLight = this.addLight("directional", {
+      name: "light",
+      colour: "#ffffff",
+      intensity: 1.6,
+      azimuth: 45,
+      elevation: 35,
+      distance: 2.5,
+    });
+    this.keyLight = primaryLight.object;
+    this.selectedLight = primaryLight.id;
 
     this.grid = new THREE.GridHelper(10, 20, 0x3a4150, 0x272c35);
     this.grid.material.transparent = true;
@@ -596,21 +603,33 @@ export class Viewer {
     this.invalidate();
   }
 
-  /** The directional fill, which a panorama usually makes unnecessary. */
+  /** The primary directional light. */
   setKeyLight(on) {
-    this.keyLight.visible = on !== false;
-    this.invalidate();
+    if (this.lights[0]) {
+      this.setLight(this.lights[0].id, { enabled: on !== false });
+    } else if (this.keyLight) {
+      this.keyLight.visible = on !== false;
+      this.invalidate();
+    }
   }
 
-  /** How hard the fill hits, and what colour it is. */
+  /** How hard the primary light hits, and what colour it is. */
   setKeyLightPower(value) {
-    this.keyLight.intensity = Math.max(0, value);
-    this.invalidate();
+    if (this.lights[0]) {
+      this.setLight(this.lights[0].id, { intensity: Math.max(0, value) });
+    } else if (this.keyLight) {
+      this.keyLight.intensity = Math.max(0, value);
+      this.invalidate();
+    }
   }
 
   setKeyLightColour(hex) {
-    this.keyLight.color.set(hex);
-    this.invalidate();
+    if (this.lights[0]) {
+      this.setLight(this.lights[0].id, { colour: hex });
+    } else if (this.keyLight) {
+      this.keyLight.color.set(hex);
+      this.invalidate();
+    }
   }
 
   /**
@@ -1003,9 +1022,24 @@ export class Viewer {
     // Fires on every step of a drag, which is where a number is wanted: not
     // knowing what you started from and by how much it has moved is the whole
     // complaint about dragging a handle blind.
-    this.gizmo.addEventListener("objectChange", () =>
-      this.onGizmoDrag?.("move", this.gizmo.object)
-    );
+    this.gizmo.addEventListener("objectChange", () => {
+      if (this.gizmo.object) {
+        const lightEntry = this.lights.find((l) => l.object === this.gizmo.object);
+        if (lightEntry) {
+          const box = this.boxHelper.box;
+          const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+          const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3);
+          const offset = this.gizmo.object.position.clone().sub(centre);
+          const spherical = new THREE.Spherical().setFromVector3(offset);
+          lightEntry.azimuth = Math.round(THREE.MathUtils.radToDeg(spherical.theta));
+          lightEntry.elevation = Math.round(90 - THREE.MathUtils.radToDeg(spherical.phi));
+          lightEntry.distance = Math.max(0.5, Math.min(8, Number((spherical.radius / radius).toFixed(2))));
+          if (this.lightHelper) this.lightHelper.update?.();
+          this.onLightChange?.(lightEntry);
+        }
+      }
+      this.onGizmoDrag?.("move", this.gizmo.object);
+    });
     // Before the drag begins, so a duplication can swap the object out from
     // under the handles and the drag then moves the copy, Blender style.
     this.gizmo.addEventListener("mouseDown", () =>
@@ -1064,20 +1098,26 @@ export class Viewer {
   }
 
   /**
-   * Swing the key light around the model.
+   * Swing the selected or primary light around the model.
    *
    * Turning the light instead of the model is how every DCC application lets
    * you find a shape's relief, and it is the one thing an environment map
    * cannot do on its own.
    */
-  orbitLight(dx, dy) {
-    const target = this.controls.target;
-    const offset = this.keyLight.position.clone().sub(target);
-    const spherical = new THREE.Spherical().setFromVector3(offset);
-    spherical.theta -= dx;
-    spherical.phi = Math.min(Math.PI - 0.05, Math.max(0.05, spherical.phi + dy));
-    this.keyLight.position.copy(target).add(new THREE.Vector3().setFromSpherical(spherical));
+  orbitLight(dx, dy, targetId = this.selectedLight) {
+    const entry = this.lights.find((l) => l.id === targetId) || this.lights[0];
+    if (!entry) return null;
+    let az = (entry.azimuth ?? 45) - dx * (180 / Math.PI);
+    let el = (entry.elevation ?? 35) + dy * (180 / Math.PI);
+    az = Math.round((((az + 180) % 360) + 360) % 360) - 180;
+    el = Math.round(Math.max(-89, Math.min(89, el)));
+    entry.azimuth = az;
+    entry.elevation = el;
+    this.placeLight(entry);
+    if (this.lightHelper) this.lightHelper.update?.();
+    this.onLightChange?.(entry);
     this.invalidate();
+    return entry;
   }
 
   /** Put a loaded object in the scene, frame it, and collect its stats. */
@@ -1497,12 +1537,17 @@ export class Viewer {
    */
   addLight(kind = "directional", patch = {}) {
     const id = ++this._lightSeq;
+    const name =
+      patch.name ||
+      (this.lights.length === 0
+        ? "light"
+        : `light${this.lights.length + 1}`);
     const entry = {
       id,
       kind,
-      name: patch.name || `light${this.lights.length + 2}`,
+      name,
       colour: patch.colour || "#ffffff",
-      intensity: patch.intensity ?? (kind === "directional" ? 2 : 12),
+      intensity: patch.intensity ?? (kind === "directional" ? 1.6 : (kind === "spot" ? 6 : 4)),
       azimuth: patch.azimuth ?? 45,
       elevation: patch.elevation ?? 35,
       distance: patch.distance ?? 2.5,
@@ -1515,6 +1560,9 @@ export class Viewer {
     if (entry.object.target) this.rig.add(entry.object.target);
     this.lights.push(entry);
     this.placeLight(entry);
+    if (this.lights.length === 1) {
+      this.keyLight = entry.object;
+    }
     this.invalidate();
     return entry;
   }
@@ -1587,7 +1635,56 @@ export class Viewer {
     }
     this.placeLight(entry);
     this.lightHelper?.update?.();
+    if (this.lights[0]?.id === id) {
+      this.keyLight = this.lights[0].object;
+    }
     return entry;
+  }
+
+  duplicateLight(id) {
+    const source = this.lights.find((l) => l.id === id) || this.lights[0];
+    if (!source) return null;
+    const num = this.lights.length + 1;
+    const entry = this.addLight(source.kind, {
+      name: `light${num}`,
+      colour: source.colour,
+      intensity: source.intensity,
+      azimuth: ((source.azimuth + 30 + 180) % 360) - 180,
+      elevation: source.elevation,
+      distance: source.distance,
+      angle: source.angle,
+      penumbra: source.penumbra,
+      enabled: source.enabled,
+    });
+    return entry;
+  }
+
+  resetLights() {
+    if (this.lightHelper) {
+      this.rig.remove(this.lightHelper);
+      this.lightHelper.dispose?.();
+      this.lightHelper = null;
+    }
+    for (const entry of [...this.lights]) {
+      this.rig.remove(entry.object);
+      if (entry.object.target) this.rig.remove(entry.object.target);
+      entry.object.dispose?.();
+    }
+    this.lights = [];
+    this._lightSeq = 0;
+    const primary = this.addLight("directional", {
+      name: "light",
+      colour: "#ffffff",
+      intensity: 1.6,
+      azimuth: 45,
+      elevation: 35,
+      distance: 2.5,
+    });
+    this.keyLight = primary.object;
+    this.selectedLight = primary.id;
+    this.showLightHelper(primary.id);
+    this.invalidate();
+    return primary;
   }
 
   removeLight(id) {
@@ -1597,7 +1694,13 @@ export class Viewer {
     this.rig.remove(entry.object);
     if (entry.object.target) this.rig.remove(entry.object.target);
     entry.object.dispose?.();
-    if (this.selectedLight === id) this.showLightHelper(null);
+    if (this.selectedLight === id) {
+      this.selectedLight = this.lights[0]?.id ?? null;
+      this.showLightHelper(this.selectedLight);
+    }
+    if (this.lights.length > 0) {
+      this.keyLight = this.lights[0].object;
+    }
     this.invalidate();
   }
 
@@ -1632,8 +1735,30 @@ export class Viewer {
   }
 
   applyLights(saved) {
-    for (const entry of [...this.lights]) this.removeLight(entry.id);
-    for (const item of saved || []) this.addLight(item.kind, item);
+    if (this.lightHelper) {
+      this.rig.remove(this.lightHelper);
+      this.lightHelper.dispose?.();
+      this.lightHelper = null;
+    }
+    for (const entry of [...this.lights]) {
+      this.rig.remove(entry.object);
+      if (entry.object.target) this.rig.remove(entry.object.target);
+      entry.object.dispose?.();
+    }
+    this.lights = [];
+    this._lightSeq = 0;
+    if (!saved || !saved.length) {
+      this.resetLights();
+      return;
+    }
+    for (const item of saved) {
+      this.addLight(item.kind, item);
+    }
+    if (this.lights.length > 0) {
+      this.keyLight = this.lights[0].object;
+      this.selectedLight = this.lights[0].id;
+    }
+    this.invalidate();
   }
 
 

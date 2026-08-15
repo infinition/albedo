@@ -880,6 +880,12 @@ const nav = new Navigation(viewer, {
     toast(`Environnement ${deg}°`);
     prefs.set("environmentRotation", deg);
   },
+  onLightRotate: (entry) => {
+    if (decorSelection.type === "light" && decorSelection.id === entry.id) {
+      updateLightControls(entry);
+    }
+    paintDecorTree();
+  },
 });
 
 viewer.onFrame = (dt) => {
@@ -2656,20 +2662,6 @@ $("env-intensity").addEventListener("input", (e) => {
   viewer.setEnvironmentIntensity(value);
   prefs.set("environmentIntensity", value);
 });
-$("key-light").addEventListener("change", (e) => {
-  viewer.setKeyLight(e.target.checked);
-  prefs.set("keyLight", e.target.checked);
-});
-$("key-power").addEventListener("input", (e) => {
-  const value = Number(e.target.value);
-  $("key-power-value").textContent = value.toFixed(1);
-  viewer.setKeyLightPower(value);
-  prefs.set("keyLightPower", value);
-});
-$("key-colour").addEventListener("input", (e) => {
-  viewer.setKeyLightColour(e.target.value);
-  prefs.set("keyLightColour", e.target.value);
-});
 
 // --- the stand --------------------------------------------------------------
 
@@ -2680,7 +2672,7 @@ function setGizmoMode(mode) {
     ["giz-scale", "scale"],
     ["giz-off", null],
   ]) {
-    $(id).classList.toggle("active", m === mode);
+    $(id)?.classList.toggle("active", m === mode);
   }
   viewer.setGizmo(mode, (placing) => {
     // A placing chosen by hand replaces the automatic fit, and is remembered
@@ -2695,19 +2687,19 @@ for (const [id, mode] of [
   ["giz-scale", "scale"],
   ["giz-off", null],
 ]) {
-  $(id).addEventListener("click", () => setGizmoMode(mode));
+  $(id)?.addEventListener("click", () => setGizmoMode(mode));
 }
 
 function setStandShading(mode, remember = true) {
   viewer.setPedestalShading(mode);
-  $("stand-pbr").classList.toggle("active", mode !== "unlit");
-  $("stand-unlit").classList.toggle("active", mode === "unlit");
+  $("stand-pbr")?.classList.toggle("active", mode !== "unlit");
+  $("stand-unlit")?.classList.toggle("active", mode === "unlit");
   if (remember) prefs.set("pedestalShading", mode);
 }
-$("stand-pbr").addEventListener("click", () => setStandShading("shaded"));
-$("stand-unlit").addEventListener("click", () => setStandShading("unlit"));
+$("stand-pbr")?.addEventListener("click", () => setStandShading("shaded"));
+$("stand-unlit")?.addEventListener("click", () => setStandShading("unlit"));
 
-$("pedestal-refit").addEventListener("click", () => {
+$("pedestal-refit")?.addEventListener("click", () => {
   prefs.set("pedestalTransform", null);
   viewer.setPedestalTransform(null);
 });
@@ -2728,6 +2720,8 @@ async function usePedestal(path, remember = true) {
     $("btn-pedestal").textContent = "Retirer le socle";
     $("pedestal-tools").hidden = false;
     if (remember && tauri) prefs.set("pedestal", path);
+    selectDecorItem({ type: "pedestal" });
+    paintDecorTree();
   } catch (e) {
     $("pedestal-file").textContent = "Socle illisible";
     console.warn("[albedo] socle:", e);
@@ -2742,9 +2736,13 @@ function dropPedestal() {
   setGizmoMode(null);
   prefs.set("pedestal", null);
   prefs.set("pedestalTransform", null);
+  selectDecorItem({ type: "pedestal" });
+  paintDecorTree();
 }
 
-$("btn-pedestal").addEventListener("click", async () => {
+$("pedestal-remove")?.addEventListener("click", () => dropPedestal());
+
+$("btn-pedestal")?.addEventListener("click", async () => {
   if (viewer.pedestal) {
     dropPedestal();
     return;
@@ -3259,118 +3257,503 @@ void shellReady.then(() => {
 });
 
 
-// --- custom lights --------------------------------------------------------
+// --- Décor / Object Manager --------------------------------------------------
 
-/**
- * The light rig.
- *
- * A light is placed by bearing and height around the subject rather than by
- * coordinates, so it stays where it was put when the next model is a different
- * size. Selecting one draws its helper, which is the only way to tell where a
- * directional light is coming from without moving it and watching.
- */
-let selectedLight = null;
+let decorSelection = {
+  type: "light",
+  id: viewer.lights[0]?.id || 1,
+  kind: "directional",
+};
+let decorGizmoMode = null;
 
-const LIGHT_FIELDS = [
-  ["intensity", "light-power", "light-power-value", (v) => v.toFixed(1)],
-  ["azimuth", "light-azimuth", "light-azimuth-value", (v) => `${v | 0}°`],
-  ["elevation", "light-elevation", "light-elevation-value", (v) => `${v | 0}°`],
-  ["distance", "light-distance", "light-distance-value", (v) => `${v.toFixed(1)}×`],
-  ["angle", "light-angle", "light-angle-value", (v) => `${v | 0}°`],
-  ["penumbra", "light-penumbra", "light-penumbra-value", (v) => v.toFixed(2)],
-];
+const LIGHT_KIND_LABELS = {
+  directional: "Directionnelle",
+  point: "Ponctuelle",
+  spot: "Projecteur",
+};
+
+const LIGHT_KIND_ICONS = {
+  directional: "☀️",
+  point: "💡",
+  spot: "🔦",
+};
+
+function lightIntensityPercent(entry) {
+  const max = entry.kind === "spot" ? 20 : entry.kind === "point" ? 15 : 2.5;
+  return Math.max(0, Math.min(100, Math.round((entry.intensity / max) * 100)));
+}
 
 function saveLights() {
   prefs.set("lights", viewer.lightState());
 }
 
-function paintLights() {
-  const list = $("lights-list");
-  list.textContent = "";
-  for (const entry of viewer.lights) {
-    const row = document.createElement("div");
-    row.className = "mat-row";
-
-    const on = document.createElement("input");
-    on.type = "checkbox";
-    on.checked = entry.enabled;
-    on.title = "Allumer ou éteindre";
-    on.addEventListener("change", () => {
-      viewer.setLight(entry.id, { enabled: on.checked });
-      saveLights();
-    });
-
-    const name = document.createElement("button");
-    name.type = "button";
-    name.className = "mat-name";
-    name.style.cursor = "pointer";
-    name.textContent = entry.name;
-    name.title = { directional: "Directionnelle", point: "Ponctuelle", spot: "Projecteur" }[entry.kind];
-    name.addEventListener("click", () => selectLight(entry.id));
-
-    const power = document.createElement("span");
-    power.className = "mat-count";
-    power.textContent = `${entry.intensity.toFixed(1)}×`;
-
-    const swatch = document.createElement("span");
-    swatch.style.cssText = `width:12px;height:12px;border-radius:3px;background:${entry.colour};border:1px solid var(--line)`;
-
-    row.append(on, name, power, swatch);
-    if (selectedLight === entry.id) row.style.background = "rgba(255,255,255,0.06)";
-    list.appendChild(row);
+function updateDecorSelectedLabel() {
+  const label = $("decor-selected-label");
+  if (!label) return;
+  if (decorSelection.type === "light") {
+    const entry =
+      viewer.lights.find((l) => l.id === decorSelection.id) || viewer.lights[0];
+    if (entry) {
+      label.textContent = `Selected: ${entry.name} (${LIGHT_KIND_LABELS[entry.kind] || entry.kind})`;
+    } else {
+      label.textContent = `Selected: Lumière`;
+    }
+  } else if (decorSelection.type === "pedestal") {
+    const pName = prefs.get("pedestal")
+      ? fileLabel(prefs.get("pedestal"))
+      : viewer.pedestal
+      ? "Socle 3D"
+      : "Aucun socle";
+    label.textContent = `Selected: Socle (${pName})`;
+  } else if (decorSelection.type === "background") {
+    const bName =
+      viewer.envKind === "image"
+        ? prefs.get("environmentPath")
+          ? fileLabel(prefs.get("environmentPath"))
+          : "Image HDRI"
+        : viewer.envKind === "gradient"
+        ? "Dégradé"
+        : "Studio";
+    label.textContent = `Selected: Fond (${bName})`;
   }
-  $("light-editor").hidden = selectedLight === null;
+}
+
+function updateLightControls(entry) {
+  if (!entry) return;
+  const pct = lightIntensityPercent(entry);
+  if ($("light-power")) $("light-power").value = String(entry.intensity);
+  if ($("light-power-value")) $("light-power-value").textContent = `${pct}%`;
+  if ($("light-azimuth")) $("light-azimuth").value = String(entry.azimuth ?? 45);
+  if ($("light-azimuth-value"))
+    $("light-azimuth-value").textContent = `${entry.azimuth ?? 45}°`;
+  if ($("light-elevation"))
+    $("light-elevation").value = String(entry.elevation ?? 35);
+  if ($("light-elevation-value"))
+    $("light-elevation-value").textContent = `${entry.elevation ?? 35}°`;
+  if ($("light-distance"))
+    $("light-distance").value = String(entry.distance ?? 2.5);
+  if ($("light-distance-value"))
+    $("light-distance-value").textContent = `${(entry.distance ?? 2.5).toFixed(1)}×`;
+  if ($("light-colour")) $("light-colour").value = entry.colour || "#ffffff";
+  if ($("light-kind")) $("light-kind").value = entry.kind || "directional";
+  if ($("light-cone")) $("light-cone").hidden = entry.kind !== "spot";
+  if (entry.kind === "spot") {
+    if ($("light-angle")) $("light-angle").value = String(entry.angle ?? 35);
+    if ($("light-angle-value"))
+      $("light-angle-value").textContent = `${entry.angle ?? 35}°`;
+    if ($("light-penumbra"))
+      $("light-penumbra").value = String(entry.penumbra ?? 0.4);
+    if ($("light-penumbra-value"))
+      $("light-penumbra-value").textContent = (entry.penumbra ?? 0.4).toFixed(2);
+  }
+}
+
+function selectDecorItem(sel) {
+  decorSelection = sel;
+  updateDecorSelectedLabel();
+
+  if ($("decor-params-light"))
+    $("decor-params-light").hidden = sel.type !== "light";
+  if ($("decor-params-pedestal"))
+    $("decor-params-pedestal").hidden = sel.type !== "pedestal";
+  if ($("decor-params-background"))
+    $("decor-params-background").hidden = sel.type !== "background";
+
+  if (sel.type === "light") {
+    const entry =
+      viewer.lights.find((l) => l.id === sel.id) || viewer.lights[0];
+    if (entry) {
+      decorSelection.id = entry.id;
+      viewer.showLightHelper(entry.id);
+      updateLightControls(entry);
+      if (decorGizmoMode) {
+        viewer.setGizmo(decorGizmoMode, null, entry.object);
+      }
+    }
+  } else if (sel.type === "pedestal") {
+    viewer.showLightHelper(null);
+    if (viewer.pedestal) {
+      setGizmoMode("translate");
+    }
+  } else if (sel.type === "background") {
+    viewer.showLightHelper(null);
+    setGizmoMode(null);
+    if (sel.kind) useEnvironment(sel.kind);
+  }
+
+  if ($("decor-act-dup")) $("decor-act-dup").disabled = sel.type !== "light";
+  if ($("decor-act-del"))
+    $("decor-act-del").disabled =
+      sel.type === "background" || (sel.type === "pedestal" && !viewer.pedestal);
+
+  paintDecorTree();
 }
 
 function selectLight(id) {
-  selectedLight = viewer.lights.some((l) => l.id === id) ? id : null;
-  viewer.showLightHelper(selectedLight);
-  const entry = viewer.lights.find((l) => l.id === selectedLight);
-  if (entry) {
-    for (const [key, input, label, format] of LIGHT_FIELDS) {
-      $(input).value = String(entry[key]);
-      $(label).textContent = format(entry[key]);
-    }
-    $("light-colour").value = entry.colour;
-    $("light-cone").hidden = entry.kind !== "spot";
-  }
-  paintLights();
+  selectDecorItem({ type: "light", id });
 }
 
-$("light-add").addEventListener("click", () => {
-  const entry = viewer.addLight($("light-kind").value);
-  selectLight(entry.id);
+function setLightGizmoMode(mode) {
+  decorGizmoMode = mode;
+  $("light-giz-move")?.classList.toggle("active", mode === "translate");
+  $("light-giz-rotate")?.classList.toggle("active", mode === "rotate");
+  $("light-giz-off")?.classList.toggle("active", mode === null);
+
+  const entry = viewer.lights.find((l) => l.id === decorSelection.id);
+  if (entry && mode) {
+    viewer.setGizmo(mode, null, entry.object);
+  } else {
+    viewer.setGizmo(null);
+  }
+}
+
+function paintDecorTree() {
+  if (!$("decor-tree")) return;
+
+  // 1. Lights list
+  const lightsList = $("decor-lights-list");
+  if (lightsList) {
+    lightsList.textContent = "";
+    if ($("decor-count-lights"))
+      $("decor-count-lights").textContent = String(viewer.lights.length);
+
+    for (const entry of viewer.lights) {
+      const isPicked =
+        decorSelection.type === "light" && decorSelection.id === entry.id;
+      const row = document.createElement("div");
+      row.className = `decor-item-row${isPicked ? " picked" : ""}${
+        !entry.enabled ? " muted" : ""
+      }`;
+
+      // Caret spacer
+      const spacer = document.createElement("span");
+      spacer.style.cssText = "width:10px;flex:none;";
+
+      // Light type icon tinted with colour
+      const icon = document.createElement("span");
+      icon.className = "decor-light-icon";
+      icon.style.color = entry.colour;
+      icon.textContent = LIGHT_KIND_ICONS[entry.kind] || "☀️";
+      icon.title = LIGHT_KIND_LABELS[entry.kind] || entry.kind;
+
+      // Light name
+      const name = document.createElement("span");
+      name.className = "decor-item-name";
+      name.textContent = entry.name;
+      name.title = `${entry.name} (${LIGHT_KIND_LABELS[entry.kind]})`;
+
+      // Visual gauge bar
+      const pct = lightIntensityPercent(entry);
+      const barWrap = document.createElement("div");
+      barWrap.className = "decor-bar-wrap";
+      barWrap.title = `Intensité : ${pct}%`;
+      const barFill = document.createElement("div");
+      barFill.className = "decor-bar-fill";
+      barFill.style.width = `${pct}%`;
+      barFill.style.backgroundColor = entry.colour;
+      barWrap.appendChild(barFill);
+
+      // Percentage text
+      const percent = document.createElement("span");
+      percent.className = "decor-percent";
+      percent.textContent = `${pct}%`;
+
+      // Gizmo toggle icon button
+      const gizBtn = document.createElement("button");
+      gizBtn.type = "button";
+      gizBtn.className = `decor-icon-btn${
+        isPicked && decorGizmoMode ? " active" : ""
+      }`;
+      gizBtn.textContent = "⌖";
+      gizBtn.title = "Activer le gizmo 3D sur cette lumière";
+      gizBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectDecorItem({ type: "light", id: entry.id });
+        setLightGizmoMode(decorGizmoMode ? null : "translate");
+      });
+
+      // Eye button
+      const eyeBtn = document.createElement("button");
+      eyeBtn.type = "button";
+      eyeBtn.className = `decor-icon-btn${entry.enabled ? "" : " off"}`;
+      eyeBtn.textContent = entry.enabled ? "◉" : "◌";
+      eyeBtn.title = entry.enabled
+        ? "Masquer la lumière"
+        : "Afficher la lumière";
+      eyeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        viewer.setLight(entry.id, { enabled: !entry.enabled });
+        saveLights();
+        paintDecorTree();
+      });
+
+      row.append(spacer, icon, name, barWrap, percent, gizBtn, eyeBtn);
+      row.addEventListener("click", () =>
+        selectDecorItem({ type: "light", id: entry.id })
+      );
+      lightsList.appendChild(row);
+    }
+  }
+
+  // 2. Pedestals list
+  const pList = $("decor-pedestals-list");
+  if (pList) {
+    pList.textContent = "";
+    if ($("decor-count-pedestals"))
+      $("decor-count-pedestals").textContent = viewer.pedestal ? "1" : "0";
+
+    if (viewer.pedestal) {
+      const isPicked = decorSelection.type === "pedestal";
+      const row = document.createElement("div");
+      row.className = `decor-item-row${isPicked ? " picked" : ""}${
+        !viewer.pedestal.visible ? " muted" : ""
+      }`;
+
+      const spacer = document.createElement("span");
+      spacer.style.cssText = "width:10px;flex:none;";
+
+      const icon = document.createElement("span");
+      icon.className = "decor-light-icon";
+      icon.textContent = "🧊";
+
+      const name = document.createElement("span");
+      name.className = "decor-item-name";
+      name.textContent = prefs.get("pedestal")
+        ? fileLabel(prefs.get("pedestal"))
+        : "Socle 3D";
+
+      const eyeBtn = document.createElement("button");
+      eyeBtn.type = "button";
+      eyeBtn.className = `decor-icon-btn${viewer.pedestal.visible ? "" : " off"}`;
+      eyeBtn.textContent = viewer.pedestal.visible ? "◉" : "◌";
+      eyeBtn.title = viewer.pedestal.visible
+        ? "Masquer le socle"
+        : "Afficher le socle";
+      eyeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        viewer.pedestal.visible = !viewer.pedestal.visible;
+        viewer.invalidate();
+        paintDecorTree();
+      });
+
+      const trashBtn = document.createElement("button");
+      trashBtn.type = "button";
+      trashBtn.className = "decor-icon-btn";
+      trashBtn.textContent = "🗑";
+      trashBtn.title = "Retirer le socle";
+      trashBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dropPedestal();
+      });
+
+      row.append(spacer, icon, name, eyeBtn, trashBtn);
+      row.addEventListener("click", () => selectDecorItem({ type: "pedestal" }));
+      pList.appendChild(row);
+    } else {
+      const row = document.createElement("div");
+      row.className = "decor-item-row muted";
+      row.style.fontStyle = "italic";
+      row.innerHTML = `<span style="width:10px;flex:none;"></span><span class="decor-light-icon">🧊</span><span class="decor-item-name">Aucun socle (+ Choisir)</span>`;
+      row.addEventListener("click", () => {
+        selectDecorItem({ type: "pedestal" });
+        $("btn-pedestal")?.click();
+      });
+      pList.appendChild(row);
+    }
+  }
+
+  // 3. Backgrounds list
+  const bgList = $("decor-backgrounds-list");
+  if (bgList) {
+    bgList.textContent = "";
+    const bgItems = [
+      { kind: "studio", label: "Studio Neutre", icon: "🏛️" },
+      { kind: "gradient", label: "Fond Dégradé", icon: "🏁" },
+      {
+        kind: "image",
+        label: prefs.get("environmentPath")
+          ? fileLabel(prefs.get("environmentPath"))
+          : "Image HDRI",
+        icon: "🖼️",
+      },
+    ];
+
+    for (const bg of bgItems) {
+      const isActive = viewer.envKind === bg.kind;
+      const isPicked =
+        decorSelection.type === "background" && decorSelection.kind === bg.kind;
+      const row = document.createElement("div");
+      row.className = `decor-item-row${isPicked ? " picked" : ""}${
+        !isActive ? " muted" : ""
+      }`;
+
+      const spacer = document.createElement("span");
+      spacer.style.cssText = "width:10px;flex:none;";
+
+      const icon = document.createElement("span");
+      icon.className = "decor-light-icon";
+      icon.textContent = bg.icon;
+
+      const name = document.createElement("span");
+      name.className = "decor-item-name";
+      name.textContent = bg.label;
+
+      const activeDot = document.createElement("span");
+      activeDot.className = "tree-num";
+      activeDot.textContent = isActive ? "●" : "○";
+      activeDot.style.color = isActive ? "var(--accent)" : "var(--muted)";
+
+      row.append(spacer, icon, name, activeDot);
+      row.addEventListener("click", () => {
+        useEnvironment(bg.kind);
+        selectDecorItem({ type: "background", kind: bg.kind });
+      });
+      bgList.appendChild(row);
+    }
+  }
+}
+
+const paintLights = paintDecorTree;
+
+// Event listeners for Light controls
+$("light-power")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  const value = Number(e.target.value);
+  viewer.setLight(decorSelection.id, { intensity: value });
+  const entry = viewer.lights.find((l) => l.id === decorSelection.id);
+  if (entry) $("light-power-value").textContent = `${lightIntensityPercent(entry)}%`;
+  paintDecorTree();
   saveLights();
 });
 
-$("light-remove").addEventListener("click", () => {
-  if (selectedLight === null) return;
-  viewer.removeLight(selectedLight);
-  selectedLight = null;
-  selectLight(null);
+$("light-azimuth")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  const value = Number(e.target.value);
+  $("light-azimuth-value").textContent = `${value}°`;
+  viewer.setLight(decorSelection.id, { azimuth: value });
   saveLights();
 });
 
-for (const [key, input, label, format] of LIGHT_FIELDS) {
-  $(input).addEventListener("input", (e) => {
-    if (selectedLight === null) return;
-    const value = Number(e.target.value);
-    $(label).textContent = format(value);
-    viewer.setLight(selectedLight, { [key]: value });
+$("light-elevation")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  const value = Number(e.target.value);
+  $("light-elevation-value").textContent = `${value}°`;
+  viewer.setLight(decorSelection.id, { elevation: value });
+  saveLights();
+});
+
+$("light-distance")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  const value = Number(e.target.value);
+  $("light-distance-value").textContent = `${value.toFixed(1)}×`;
+  viewer.setLight(decorSelection.id, { distance: value });
+  saveLights();
+});
+
+$("light-colour")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  viewer.setLight(decorSelection.id, { colour: e.target.value });
+  paintDecorTree();
+  saveLights();
+});
+
+$("light-kind")?.addEventListener("change", (e) => {
+  if (decorSelection.type !== "light") return;
+  viewer.setLight(decorSelection.id, { kind: e.target.value });
+  $("light-cone").hidden = e.target.value !== "spot";
+  updateDecorSelectedLabel();
+  paintDecorTree();
+  saveLights();
+});
+
+$("light-angle")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  const value = Number(e.target.value);
+  $("light-angle-value").textContent = `${value}°`;
+  viewer.setLight(decorSelection.id, { angle: value });
+  saveLights();
+});
+
+$("light-penumbra")?.addEventListener("input", (e) => {
+  if (decorSelection.type !== "light") return;
+  const value = Number(e.target.value);
+  $("light-penumbra-value").textContent = value.toFixed(2);
+  viewer.setLight(decorSelection.id, { penumbra: value });
+  saveLights();
+});
+
+// Light gizmo mode buttons
+$("light-giz-move")?.addEventListener("click", () => setLightGizmoMode("translate"));
+$("light-giz-rotate")?.addEventListener("click", () => setLightGizmoMode("rotate"));
+$("light-giz-off")?.addEventListener("click", () => setLightGizmoMode(null));
+
+// Actions toolbar
+$("decor-act-add")?.addEventListener("click", () => {
+  const entry = viewer.addLight($("light-kind")?.value || "directional");
+  selectDecorItem({ type: "light", id: entry.id });
+  saveLights();
+});
+$("decor-btn-add-light")?.addEventListener("click", () => {
+  const entry = viewer.addLight($("light-kind")?.value || "directional");
+  selectDecorItem({ type: "light", id: entry.id });
+  saveLights();
+});
+
+$("decor-act-dup")?.addEventListener("click", () => {
+  if (decorSelection.type !== "light") return;
+  const entry = viewer.duplicateLight(decorSelection.id);
+  if (entry) {
+    selectDecorItem({ type: "light", id: entry.id });
     saveLights();
+  }
+});
+
+$("decor-act-del")?.addEventListener("click", () => {
+  if (decorSelection.type === "light") {
+    if (viewer.lights.length <= 1) {
+      toast("Au moins une lumière doit être présente");
+      return;
+    }
+    const idToDelete = decorSelection.id;
+    viewer.removeLight(idToDelete);
+    selectDecorItem({ type: "light", id: viewer.lights[0].id });
+    saveLights();
+  } else if (decorSelection.type === "pedestal" && viewer.pedestal) {
+    dropPedestal();
+  }
+});
+
+$("decor-act-reset")?.addEventListener("click", () => {
+  const primary = viewer.resetLights();
+  selectDecorItem({ type: "light", id: primary.id });
+  saveLights();
+  toast("Éclairage réinitialisé");
+});
+
+// Group collapse carets
+for (const [headId, groupId, caretId] of [
+  ["decor-head-lights", "decor-group-lights", "decor-caret-lights"],
+  ["decor-head-pedestals", "decor-group-pedestals", "decor-caret-pedestals"],
+  ["decor-head-backgrounds", "decor-group-backgrounds", "decor-caret-backgrounds"],
+]) {
+  $(headId)?.addEventListener("click", (e) => {
+    if (e.target.tagName === "BUTTON" && e.target.id !== caretId) return;
+    const grp = $(groupId);
+    if (!grp) return;
+    grp.classList.toggle("collapsed");
+    $(caretId).textContent = grp.classList.contains("collapsed") ? "▸" : "▾";
   });
 }
 
-$("light-colour").addEventListener("input", (e) => {
-  if (selectedLight === null) return;
-  viewer.setLight(selectedLight, { colour: e.target.value });
-  paintLights();
-  saveLights();
-});
+// Global viewer lighting hooks
+viewer.onLightChange = (entry) => {
+  if (decorSelection.type === "light" && decorSelection.id === entry.id) {
+    updateLightControls(entry);
+  }
+  paintDecorTree();
+};
 
-// Lights are a look, per scene, not a setting that survives a restart. The
-// default rig is what a fresh launch starts with; custom lights return when a
-// document is reopened in its own tab.
+selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 });
 
 
 

@@ -417,128 +417,197 @@
         </div>
 
         <div class="pane" data-pane="decor">
-        <section>
-          <h2 data-i18n="pane.environment">Environnement</h2>
-          <div class="row">
-            <div class="segment" role="group" data-i18n-aria="pane.environment" aria-label="Environnement">
-              <button id="env-studio" class="seg active" type="button" data-i18n-title="pane.envStudio" data-i18n="pane.envStudio" title="Éclairage neutre généré">Studio</button>
-              <button id="env-gradient" class="seg" type="button" data-i18n-title="pane.envGradient" data-i18n="pane.envGradient" title="Fond en dégradé">Dégradé</button>
-              <button id="env-image" class="seg" type="button" data-i18n-title="pane.envImage" data-i18n="pane.envImage" title="Panorama 360, HDR ou image">Image</button>
+          <div class="decor-manager">
+            <div class="decor-tree-header">
+              <span class="decor-title" data-i18n="pane.decorTitle">DECOR / GESTIONNAIRE D'OBJETS</span>
             </div>
-          </div>
-          <p id="env-file" class="hint" data-i18n="pane.noPanorama">Aucun panorama</p>
-          <div class="row" id="env-image-tools" hidden>
-            <button id="env-replace" class="seg" type="button" data-i18n-title="pane.envReplaceTitle" data-i18n="pane.envReplace" title="Choisir une autre image">Remplacer</button>
-            <button id="env-clear" class="seg" type="button" data-i18n-title="pane.envClearTitle" data-i18n="pane.envClear" title="Revenir à l'éclairage studio">Retirer</button>
-          </div>
-          <label class="check"><input type="checkbox" id="env-background" checked /><span data-i18n="pane.envBg">Fond visible</span></label>
-          <label class="check"><input type="checkbox" id="env-lighting" checked /><span data-i18n="pane.envLight">Éclaire la scène</span></label>
-          <label class="check"><input type="checkbox" id="key-light" checked /><span data-i18n="pane.keyLight">Lumière d'appoint</span></label>
-          <div id="key-light-tools">
-            <label class="field">
-              <span data-i18n="pane.keyPower">Force de l'appoint <span id="key-power-value" class="mono">1.6</span></span>
-              <input type="range" id="key-power" min="0" max="5" step="0.1" value="1.6" />
-            </label>
-            <div class="map-row">
-              <span class="map-role" data-i18n="pane.lightColor">Couleur</span>
-              <input type="color" id="key-colour" class="swatch" value="#ffffff" />
-            </div>
-          </div>
-          <label class="field">
-            <span data-i18n="pane.envIntensity">Intensité de l'éclairage <span id="env-intensity-value" class="mono">1.0</span></span>
-            <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1" />
-          </label>
 
-          <h2 style="margin-top:18px" data-i18n="pane.lights">Lumières</h2>
-          <div id="lights-list"></div>
-          <div class="row">
-            <select id="light-kind" class="quiet">
-              <option value="directional" data-i18n="pane.lightDirectional">Directionnelle</option>
-              <option value="point" data-i18n="pane.lightPoint">Ponctuelle</option>
-              <option value="spot" data-i18n="pane.lightSpot">Projecteur</option>
-            </select>
-            <button id="light-add" class="seg" type="button" data-i18n-title="pane.lightAddTitle" data-i18n="pane.lightAdd" title="Ajouter une lumière">Ajouter</button>
-          </div>
-          <div id="light-editor" hidden>
-            <label class="field"><span data-i18n="pane.lightIntensity">Intensité <span id="light-power-value" class="mono">2.0</span></span>
-              <input type="range" id="light-power" min="0" max="20" step="0.1" value="2" /></label>
-            <label class="field"><span data-i18n="pane.lightAzimuth">Azimut <span id="light-azimuth-value" class="mono">45°</span></span>
-              <input type="range" id="light-azimuth" min="-180" max="180" step="1" value="45" /></label>
-            <label class="field"><span data-i18n="pane.lightHeight">Hauteur <span id="light-elevation-value" class="mono">35°</span></span>
-              <input type="range" id="light-elevation" min="-89" max="89" step="1" value="35" /></label>
-            <label class="field"><span data-i18n="pane.lightDistance">Distance <span id="light-distance-value" class="mono">2.5×</span></span>
-              <input type="range" id="light-distance" min="0.5" max="8" step="0.1" value="2.5" /></label>
-            <div id="light-cone" hidden>
-              <label class="field"><span data-i18n="pane.lightAngle">Ouverture <span id="light-angle-value" class="mono">35°</span></span>
-                <input type="range" id="light-angle" min="5" max="80" step="1" value="35" /></label>
-              <label class="field"><span data-i18n="pane.lightEdge">Bord <span id="light-penumbra-value" class="mono">0.4</span></span>
-                <input type="range" id="light-penumbra" min="0" max="1" step="0.02" value="0.4" /></label>
-            </div>
-            <div class="row">
-              <input type="color" id="light-colour" class="swatch" value="#ffffff" />
-              <button id="light-remove" class="seg" type="button" data-i18n-title="pane.lightRemoveTitle" data-i18n="pane.lightRemove" title="Retirer cette lumière">Retirer</button>
-            </div>
-          </div>
+            <!-- Arborescence hiérarchique -->
+            <div id="decor-tree" class="decor-tree">
+              <!-- Groupe Lumières -->
+              <div class="decor-group" id="decor-group-lights">
+                <div class="decor-group-head" id="decor-head-lights">
+                  <button class="tree-caret" id="decor-caret-lights" type="button">▾</button>
+                  <span class="decor-folder-icon">📁</span>
+                  <span class="decor-group-label" data-i18n="pane.lights">Lumières</span>
+                  <span class="tree-num" id="decor-count-lights">1</span>
+                  <button id="decor-btn-add-light" class="tree-mini" type="button" title="Ajouter une lumière">+</button>
+                </div>
+                <div id="decor-lights-list" class="decor-group-body"></div>
+              </div>
 
-          <div id="env-framing" hidden>
-            <label class="field">
-              <span data-i18n="pane.envZoom">Zoom <span id="zoom-value" class="mono">1.0×</span></span>
-              <input type="range" id="env-zoom" min="1" max="4" step="0.05" value="1" />
-            </label>
-            <label class="field">
-              <span data-i18n="pane.envRotation">Rotation <span id="rot-value" class="mono">0°</span></span>
-              <input type="range" id="env-rotation" min="-180" max="180" step="1" value="0" />
-            </label>
-            <label class="field">
-              <span data-i18n="pane.envBlur">Flou</span>
-              <input type="range" id="env-blur" min="0" max="1" step="0.01" value="0" />
-            </label>
-          </div>
+              <!-- Groupe Socles -->
+              <div class="decor-group" id="decor-group-pedestals">
+                <div class="decor-group-head" id="decor-head-pedestals">
+                  <button class="tree-caret" id="decor-caret-pedestals" type="button">▾</button>
+                  <span class="decor-folder-icon">📁</span>
+                  <span class="decor-group-label" data-i18n="pane.stand">Socles</span>
+                  <span class="tree-num" id="decor-count-pedestals">0</span>
+                  <button id="btn-pedestal" class="tree-mini" type="button" title="Choisir ou changer de socle">+</button>
+                </div>
+                <div id="decor-pedestals-list" class="decor-group-body"></div>
+              </div>
 
-          <div id="gradient-editor" hidden>
-            <div id="gradient-strip" class="strip" data-i18n-title="pane.gradientStrip" title="Le dégradé, de haut en bas"></div>
-            <div id="gradient-stops"></div>
-            <div class="row">
-              <button id="gradient-add" class="seg" type="button" data-i18n="pane.gradientAdd">Ajouter une couleur</button>
-            </div>
-            <label class="field">
-              <span data-i18n="pane.gradientHue">Teinte <span id="hue-value" class="mono">0°</span></span>
-              <input type="range" id="grad-hue" min="-180" max="180" step="1" value="0" />
-            </label>
-          </div>
-
-          <label class="field">
-            <span data-i18n="pane.bgBrightness">Luminosité du fond</span>
-            <input type="range" id="bg-brightness" min="0" max="3" step="0.05" value="1" />
-          </label>
-        </section>
-
-        <section>
-          <h2 data-i18n="pane.stand">Socle</h2>
-          <div class="row">
-            <button id="btn-pedestal" class="wide" type="button" data-i18n="pane.pedestal">Choisir un socle</button>
-          </div>
-          <p id="pedestal-file" class="hint" data-i18n="pane.noStand">Aucun socle</p>
-          <div id="pedestal-tools" hidden>
-            <div class="row">
-              <div class="segment" role="group" data-i18n-aria="pane.standRender" aria-label="Rendu du socle">
-                <button id="stand-pbr" class="seg active" type="button" data-i18n-title="pane.standPbrTitle" data-i18n="pane.standPbr" title="Éclairé par l'environnement">PBR</button>
-                <button id="stand-unlit" class="seg" type="button" data-i18n-title="pane.standUnlitTitle" data-i18n="pane.standUnlit" title="Texture telle quelle">Unlit</button>
+              <!-- Groupe Fonds -->
+              <div class="decor-group" id="decor-group-backgrounds">
+                <div class="decor-group-head" id="decor-head-backgrounds">
+                  <button class="tree-caret" id="decor-caret-backgrounds" type="button">▾</button>
+                  <span class="decor-folder-icon">📁</span>
+                  <span class="decor-group-label" data-i18n="pane.backgrounds">Fonds</span>
+                  <span class="tree-num" id="decor-count-backgrounds">3</span>
+                </div>
+                <div id="decor-backgrounds-list" class="decor-group-body"></div>
               </div>
             </div>
-            <div class="row">
-              <div class="segment" role="group" data-i18n-aria="pane.gizmo" aria-label="Gizmo">
-                <button id="giz-move" class="seg" type="button" data-i18n-title="pane.gizMove" data-i18n="pane.gizMove" title="Déplacer">Déplacer</button>
-                <button id="giz-rotate" class="seg" type="button" data-i18n-title="pane.gizRotate" data-i18n="pane.gizRotate" title="Tourner">Tourner</button>
-                <button id="giz-scale" class="seg" type="button" data-i18n-title="pane.gizScale" data-i18n="pane.gizScale" title="Échelle">Échelle</button>
-                <button id="giz-off" class="seg active" type="button" data-i18n-title="pane.gizOffTitle" data-i18n="pane.gizOff" title="Masquer le gizmo">Aucun</button>
+
+            <!-- Panneau de détails & Paramètres Rapides -->
+            <div id="decor-details" class="decor-details">
+              <div class="decor-details-header">
+                <span id="decor-selected-label" class="decor-selected-label">Selected: light (Directionnelle)</span>
+              </div>
+
+              <!-- Paramètres Lumière -->
+              <div id="decor-params-light" class="decor-param-section">
+                <div class="decor-param-grid">
+                  <label class="field">
+                    <span><span data-i18n="pane.lightIntensity">Intensité</span> <span id="light-power-value" class="mono">75%</span></span>
+                    <input type="range" id="light-power" min="0" max="20" step="0.1" value="1.6" />
+                  </label>
+                  <label class="field">
+                    <span><span data-i18n="pane.lightRotation">Rotation / Azimut</span> <span id="light-azimuth-value" class="mono">45°</span></span>
+                    <input type="range" id="light-azimuth" min="-180" max="180" step="1" value="45" />
+                  </label>
+                  <label class="field">
+                    <span><span data-i18n="pane.lightHeight">Hauteur</span> <span id="light-elevation-value" class="mono">35°</span></span>
+                    <input type="range" id="light-elevation" min="-89" max="89" step="1" value="35" />
+                  </label>
+                  <label class="field">
+                    <span><span data-i18n="pane.lightDistance">Distance</span> <span id="light-distance-value" class="mono">2.5×</span></span>
+                    <input type="range" id="light-distance" min="0.5" max="8" step="0.1" value="2.5" />
+                  </label>
+                </div>
+
+                <div id="light-cone" hidden>
+                  <label class="field">
+                    <span><span data-i18n="pane.lightAngle">Ouverture</span> <span id="light-angle-value" class="mono">35°</span></span>
+                    <input type="range" id="light-angle" min="5" max="80" step="1" value="35" />
+                  </label>
+                  <label class="field">
+                    <span><span data-i18n="pane.lightEdge">Bord</span> <span id="light-penumbra-value" class="mono">0.4</span></span>
+                    <input type="range" id="light-penumbra" min="0" max="1" step="0.02" value="0.4" />
+                  </label>
+                </div>
+
+                <div class="map-row" style="margin-top:6px;gap:8px">
+                  <span class="map-role" data-i18n="pane.lightColor">Couleur</span>
+                  <input type="color" id="light-colour" class="swatch" value="#ffffff" />
+                  <select id="light-kind" class="quiet" style="flex:1">
+                    <option value="directional" data-i18n="pane.lightDirectional">Directionnelle</option>
+                    <option value="point" data-i18n="pane.lightPoint">Ponctuelle</option>
+                    <option value="spot" data-i18n="pane.lightSpot">Projecteur</option>
+                  </select>
+                </div>
+
+                <div class="row" style="margin-top:6px">
+                  <div class="segment" role="group" aria-label="Gizmo Lumière">
+                    <button id="light-giz-move" class="seg" type="button" title="Déplacer en 3D">Déplacer</button>
+                    <button id="light-giz-rotate" class="seg" type="button" title="Tourner en 3D">Tourner</button>
+                    <button id="light-giz-off" class="seg active" type="button" title="Helper seul">Helper</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Paramètres Socle -->
+              <div id="decor-params-pedestal" class="decor-param-section" hidden>
+                <p id="pedestal-file" class="hint" data-i18n="pane.noStand">Aucun socle</p>
+                <div id="pedestal-tools" hidden>
+                  <div class="row">
+                    <div class="segment" role="group" data-i18n-aria="pane.standRender" aria-label="Rendu du socle">
+                      <button id="stand-pbr" class="seg active" type="button" data-i18n-title="pane.standPbrTitle" data-i18n="pane.standPbr" title="Éclairé par l'environnement">PBR</button>
+                      <button id="stand-unlit" class="seg" type="button" data-i18n-title="pane.standUnlitTitle" data-i18n="pane.standUnlit" title="Texture telle quelle">Unlit</button>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="segment" role="group" data-i18n-aria="pane.gizmo" aria-label="Gizmo">
+                      <button id="giz-move" class="seg" type="button" data-i18n-title="pane.gizMove" data-i18n="pane.gizMove" title="Déplacer">Déplacer</button>
+                      <button id="giz-rotate" class="seg" type="button" data-i18n-title="pane.gizRotate" data-i18n="pane.gizRotate" title="Tourner">Tourner</button>
+                      <button id="giz-scale" class="seg" type="button" data-i18n-title="pane.gizScale" data-i18n="pane.gizScale" title="Échelle">Échelle</button>
+                      <button id="giz-off" class="seg active" type="button" data-i18n-title="pane.gizOffTitle" data-i18n="pane.gizOff" title="Masquer le gizmo">Aucun</button>
+                    </div>
+                  </div>
+                  <div class="row" style="gap:6px">
+                    <button id="pedestal-refit" class="seg" style="flex:1" type="button" data-i18n="pane.pedestalRefit">Replacer auto</button>
+                    <button id="pedestal-remove" class="seg" type="button" title="Retirer ce socle">Retirer</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Paramètres Fonds -->
+              <div id="decor-params-background" class="decor-param-section" hidden>
+                <div class="row">
+                  <div class="segment" role="group" data-i18n-aria="pane.environment" aria-label="Environnement">
+                    <button id="env-studio" class="seg active" type="button" data-i18n-title="pane.envStudio" data-i18n="pane.envStudio" title="Éclairage neutre généré">Studio</button>
+                    <button id="env-gradient" class="seg" type="button" data-i18n-title="pane.envGradient" data-i18n="pane.envGradient" title="Fond en dégradé">Dégradé</button>
+                    <button id="env-image" class="seg" type="button" data-i18n-title="pane.envImage" data-i18n="pane.envImage" title="Panorama 360, HDR ou image">Image</button>
+                  </div>
+                </div>
+                <div class="row" style="margin-top:6px">
+                  <label class="check"><input type="checkbox" id="env-background" checked /><span data-i18n="pane.envBg">Fond visible</span></label>
+                  <label class="check"><input type="checkbox" id="env-lighting" checked /><span data-i18n="pane.envLight">Éclaire la scène</span></label>
+                </div>
+                <label class="field">
+                  <span><span data-i18n="pane.envIntensity">Intensité de l'éclairage</span> <span id="env-intensity-value" class="mono">1.0</span></span>
+                  <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1" />
+                </label>
+                <label class="field">
+                  <span data-i18n="pane.bgBrightness">Luminosité du fond</span>
+                  <input type="range" id="bg-brightness" min="0" max="3" step="0.05" value="1" />
+                </label>
+
+                <!-- Réglages Panorama Image -->
+                <div id="env-framing" hidden>
+                  <p id="env-file" class="hint" data-i18n="pane.noPanorama">Aucun panorama</p>
+                  <div class="row" id="env-image-tools">
+                    <button id="env-replace" class="seg" type="button" data-i18n-title="pane.envReplaceTitle" data-i18n="pane.envReplace" title="Choisir une autre image">Remplacer</button>
+                    <button id="env-clear" class="seg" type="button" data-i18n-title="pane.envClearTitle" data-i18n="pane.envClear" title="Revenir à l'éclairage studio">Retirer</button>
+                  </div>
+                  <label class="field">
+                    <span><span data-i18n="pane.envZoom">Zoom</span> <span id="zoom-value" class="mono">1.0×</span></span>
+                    <input type="range" id="env-zoom" min="1" max="4" step="0.05" value="1" />
+                  </label>
+                  <label class="field">
+                    <span><span data-i18n="pane.envRotation">Rotation</span> <span id="rot-value" class="mono">0°</span></span>
+                    <input type="range" id="env-rotation" min="-180" max="180" step="1" value="0" />
+                  </label>
+                  <label class="field">
+                    <span data-i18n="pane.envBlur">Flou</span>
+                    <input type="range" id="env-blur" min="0" max="1" step="0.01" value="0" />
+                  </label>
+                </div>
+
+                <!-- Réglages Dégradé -->
+                <div id="gradient-editor" hidden>
+                  <div id="gradient-strip" class="strip" data-i18n-title="pane.gradientStrip" title="Le dégradé, de haut en bas"></div>
+                  <div id="gradient-stops"></div>
+                  <div class="row">
+                    <button id="gradient-add" class="seg" type="button" data-i18n="pane.gradientAdd">Ajouter une couleur</button>
+                  </div>
+                  <label class="field">
+                    <span><span data-i18n="pane.gradientHue">Teinte</span> <span id="hue-value" class="mono">0°</span></span>
+                    <input type="range" id="grad-hue" min="-180" max="180" step="1" value="0" />
+                  </label>
+                </div>
+              </div>
+
+              <!-- Barre d'actions globale -->
+              <div id="decor-actions" class="decor-actions-bar">
+                <button id="decor-act-add" class="decor-act-btn" type="button" title="Ajouter une nouvelle lumière">+ Lumière</button>
+                <button id="decor-act-dup" class="decor-act-btn" type="button" title="Dupliquer la lumière sélectionnée">❐ Dupliquer</button>
+                <button id="decor-act-del" class="decor-act-btn" type="button" title="Supprimer la sélection">🗑 Supprimer</button>
+                <button id="decor-act-reset" class="decor-act-btn" type="button" title="Réinitialiser l'éclairage standard">↺ Reset</button>
               </div>
             </div>
-            <div class="row">
-              <button id="pedestal-refit" class="wide" type="button" data-i18n="pane.pedestalRefit">Replacer automatiquement</button>
-            </div>
           </div>
-        </section>
         </div>
 
         <div class="pane" data-pane="effects">
