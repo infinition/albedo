@@ -1907,6 +1907,53 @@ export class Viewer {
     return canvas.toDataURL("image/png");
   }
 
+  /**
+   * A small square of the current view, for a channel list icon.
+   *
+   * The camera stays put and the background stays: only the size changes, then
+   * it is put back. Callers apply the channel they want shown first.
+   */
+  preview(size = 32) {
+    const renderer = this.renderer;
+    const gl = renderer.getContext();
+    const before = renderer.getSize(new THREE.Vector2());
+    const ratio = renderer.getPixelRatio();
+    renderer.setPixelRatio(1);
+    renderer.setSize(size, size, false);
+    if (this.camera.isPerspectiveCamera) {
+      const aspect = this.camera.aspect;
+      this.camera.aspect = 1;
+      this.camera.updateProjectionMatrix();
+      renderer.render(this.scene, this.camera);
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+    } else {
+      renderer.render(this.scene, this.camera);
+    }
+    const px = new Uint8Array(size * size * 4);
+    gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    renderer.setPixelRatio(ratio);
+    this.resize();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      const src = (size - 1 - y) * size * 4;
+      const dst = y * size * 4;
+      for (let x = 0; x < size * 4; x += 4) {
+        image.data[dst + x] = px[src + x];
+        image.data[dst + x + 1] = px[src + x + 1];
+        image.data[dst + x + 2] = px[src + x + 2];
+        image.data[dst + x + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    return canvas.toDataURL("image/png");
+  }
+
   sceneTree(maxLines = 200) {
     const lines = [];
     const walk = (o, depth) => {

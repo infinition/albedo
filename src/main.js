@@ -993,6 +993,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     showDimensions();
     paintOrientation();
     paintParts();
+    paintChannelThumbs();
     paintSaveButtons();
     $("btn-export").disabled = false;
     $("btn-export-obj").disabled = false;
@@ -1784,8 +1785,13 @@ function stepChannel(delta) {
 for (const c of CHANNELS) {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = t(c.labelKey);
   b.dataset.id = c.id;
+  const img = document.createElement("img");
+  img.className = "channel-thumb";
+  img.alt = "";
+  const label = document.createElement("span");
+  label.textContent = t(c.labelKey);
+  b.append(img, label);
   b.addEventListener("click", () => applyChannel(c.id));
   $("channels").appendChild(b);
 }
@@ -1793,11 +1799,24 @@ for (const c of CHANNELS) {
 window.addEventListener("i18n", () => {
   for (const b of $("channels").children) {
     const c = CHANNELS.find((x) => x.id === b.dataset.id);
-    if (c) b.textContent = t(c.labelKey);
+    if (c) b.querySelector("span").textContent = t(c.labelKey);
   }
   paintViewbar();
 });
 applyChannel("shaded");
+
+/** A small preview of the model per channel, drawn in the channel list. */
+async function paintChannelThumbs() {
+  if (!viewer.current) return;
+  const prev = currentChannel;
+  for (const b of $("channels").children) {
+    const id = b.dataset.id;
+    channels.apply(id);
+    const url = viewer.preview(32);
+    b.querySelector(".channel-thumb")?.setAttribute("src", url);
+  }
+  applyChannel(prev);
+}
 
 // --- display toggles ------------------------------------------------------
 

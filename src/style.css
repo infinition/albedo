@@ -884,6 +884,18 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
   border-radius: 6px;
 }
 .grid button.active { background: var(--accent); color: #fff; }
+/* The channel list carries a small preview of the model per channel. */
+#channels button { display: flex; align-items: center; gap: 7px; }
+#channels button.active .channel-thumb { border-color: rgb(255 255 255 / 0.5); }
+.channel-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--line, #2a2e35);
+  background: #16191e;
+  object-fit: cover;
+  flex: none;
+}
 .grid.axes { grid-template-columns: repeat(3, 1fr); }
 .grid.axes button { text-align: center; font-size: 11px; padding: 5px 2px; }
 
