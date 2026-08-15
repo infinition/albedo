@@ -86,24 +86,93 @@ const SHELL = `
   <div class="rt-progress"><i data-el="fill"></i></div>
 
   <div class="rt-menu" data-el="menu" hidden>
-    <div class="rt-menu-row">
-      <button class="seg" type="button" data-el="mmDecimate" data-i18n="rt.decimate">Décimer</button>
-      <button class="seg" type="button" data-el="mmIsotropic" data-i18n="rt.rebuild">Reconstruire</button>
+    <div class="rt-menu-tabs">
+      <button class="seg active" type="button" data-mtab="remesh" data-i18n="rt.menuRemesh">Remesh</button>
+      <button class="seg" type="button" data-mtab="bake" data-i18n="rt.menuBake">Bake</button>
     </div>
-    <label class="rt-field">
-      <span data-i18n="rt.triangles">Triangles <span class="rt-num" data-el="mTargetValue">—</span></span>
-      <input type="range" data-el="mTarget" min="1" max="90" step="1" value="10" />
-    </label>
-    <label class="rt-field">
-      <span data-i18n="rt.maxDeviation">Déviation max <span class="rt-num" data-el="mMaxErrorValue">—</span></span>
-      <input type="range" data-el="mMaxError" min="0" max="50" step="1" value="0" />
-    </label>
-    <div class="rt-menu-row">
-      <button class="seg" type="button" data-mscope="all" data-i18n="rt.scopeAll">Tout</button>
-      <button class="seg" type="button" data-mscope="visible" data-i18n="rt.scopeVisible">Visible</button>
-      <button class="seg" type="button" data-mscope="picked" data-i18n="rt.scopePicked">Sélection</button>
+
+    <div data-mtabpane="remesh">
+      <div class="rt-menu-row">
+        <button class="seg" type="button" data-el="mmDecimate" data-i18n="rt.decimate">Décimer</button>
+        <button class="seg" type="button" data-el="mmIsotropic" data-i18n="rt.rebuild">Reconstruire</button>
+      </div>
+      <label class="rt-field">
+        <span data-i18n="rt.triangles">Triangles <span class="rt-num" data-el="mTargetValue">—</span></span>
+        <input type="range" data-el="mTarget" min="1" max="90" step="1" value="10" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.maxDeviation">Déviation max <span class="rt-num" data-el="mMaxErrorValue">—</span></span>
+        <input type="range" data-el="mMaxError" min="0" max="50" step="1" value="0" />
+      </label>
+      <div class="rt-menu-row">
+        <button class="seg" type="button" data-mscope="all" data-i18n="rt.scopeAll">Tout</button>
+        <button class="seg" type="button" data-mscope="visible" data-i18n="rt.scopeVisible">Visible</button>
+        <button class="seg" type="button" data-mscope="picked" data-i18n="rt.scopePicked">Sélection</button>
+      </div>
+      <label class="rt-check"><input type="checkbox" data-el="mQuads" /><span data-i18n="rt.pairQuads">Apparier en quads</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mHoles" /><span data-i18n="rt.fillHoles">Combler les trous</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mBoundary" /><span data-i18n="rt.pinBoundary">Épingler les bords</span></label>
+      <label class="rt-field">
+        <span data-i18n="rt.creaseAngle">Angle de pli <span class="rt-num" data-el="mAngleValue">—</span></span>
+        <input type="range" data-el="mAngle" min="5" max="90" step="1" value="40" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.seamCost">Coût d'une couture <span class="rt-num" data-el="mSeamValue">—</span></span>
+        <input type="range" data-el="mSeam" min="0" max="20" step="1" value="4" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.passes">Passes <span class="rt-num" data-el="mRelaxValue">—</span></span>
+        <input type="range" data-el="mRelax" min="0" max="10" step="1" value="0" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.strength">Force <span class="rt-num" data-el="mRelaxStrengthValue">—</span></span>
+        <input type="range" data-el="mRelaxStrength" min="0.05" max="1" step="0.05" value="0.5" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.smoothAngle">Angle du lissage <span class="rt-num" data-el="mRelaxAngleValue">—</span></span>
+        <input type="range" data-el="mRelaxAngle" min="20" max="150" step="5" value="75" />
+      </label>
     </div>
-    <label class="rt-check"><input type="checkbox" data-el="mQuads" /><span data-i18n="rt.pairQuads">Apparier en quads</span></label>
+
+    <div data-mtabpane="bake" hidden>
+      <label class="rt-field">
+        <span data-i18n="rt.atlasSize">Taille de l'atlas <span class="rt-num" data-el="mMapSizeValue">—</span></span>
+        <input type="range" data-el="mMapSize" min="8" max="13" step="1" value="11" />
+      </label>
+      <label class="rt-check"><input type="checkbox" data-el="mmMR" /><span data-i18n="rt.metalRough">Métal et rugosité</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mmNormal" /><span data-i18n="rt.normalMap">Normale</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mmEmissive" /><span data-i18n="rt.emissive">Émissif</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mmAo" /><span data-i18n="rt.ao">Occlusion ambiante</span></label>
+      <label class="rt-field">
+        <span data-i18n="rt.raysPerTexel">Rayons par texel <span class="rt-num" data-el="mAoSamplesValue">—</span></span>
+        <input type="range" data-el="mAoSamples" min="4" max="128" step="4" value="16" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.aoDistance">Portée de l'occlusion <span class="rt-num" data-el="mAoDistanceValue">—</span></span>
+        <input type="range" data-el="mAoDistance" min="0.01" max="1" step="0.01" value="0.15" />
+      </label>
+      <label class="rt-check"><input type="checkbox" data-el="mShowCage" /><span data-i18n="rt.drawCage">Dessiner la cage</span></label>
+      <label class="rt-field">
+        <span data-i18n="rt.cageOut">Vers l'extérieur <span class="rt-num" data-el="mCageOutValue">—</span></span>
+        <input type="range" data-el="mCageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.cageIn">Vers l'intérieur <span class="rt-num" data-el="mCageInValue">—</span></span>
+        <input type="range" data-el="mCageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.gutter">Écart entre îlots <span class="rt-num" data-el="mGutterValue">—</span></span>
+        <input type="range" data-el="mGutter" min="0" max="32" step="1" value="4" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.bleed">Bavure hors des îlots <span class="rt-num" data-el="mBleedValue">—</span></span>
+        <input type="range" data-el="mBleed" min="0" max="32" step="1" value="8" />
+      </label>
+      <label class="rt-field">
+        <span data-i18n="rt.islandAngle">Angle de rupture d'îlot <span class="rt-num" data-el="mIslandValue">—</span></span>
+        <input type="range" data-el="mIsland" min="10" max="120" step="1" value="50" />
+      </label>
+    </div>
   </div>
 </div>
 `;
@@ -1090,12 +1159,6 @@ export function createRetopo({
     // Zéro veut dire « pas de plafond », ce qui est un mot et pas un nombre.
     const cap = Number(el.maxError.value);
     el.maxErrorValue.textContent = cap === 0 ? t("rt.none") : `${(cap / 1000).toFixed(3)}`;
-    // The unfolded menu mirrors the panel, never the other way around.
-    el.mTargetValue.textContent = `${el.target.value} %`;
-    el.mMaxErrorValue.textContent = cap === 0 ? t("rt.none") : `${(cap / 1000).toFixed(3)}`;
-    el.mTarget.value = el.target.value;
-    el.mMaxError.value = el.maxError.value;
-    el.mQuads.checked = el.quads.checked;
     el.relaxStrengthValue.textContent = Number(el.relaxStrength.value).toFixed(2);
     el.cageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
     el.cageInValue.textContent = Number(el.cageIn.value).toFixed(3);
@@ -1120,6 +1183,52 @@ export function createRetopo({
     // The button says what it will do, unless it is currently the cancel button,
     // in which case what it will do is stop.
     if (!running) el.run.textContent = runLabel();
+    syncMenu();
+  }
+
+  /** Mirror the panel's controls into the unfolded menu. One direction only. */
+  function syncMenu() {
+    el.mTarget.value = el.target.value;
+    el.mMaxError.value = el.maxError.value;
+    el.mAngle.value = el.angle.value;
+    el.mSeam.value = el.seam.value;
+    el.mRelax.value = el.relax.value;
+    el.mRelaxStrength.value = el.relaxStrength.value;
+    el.mRelaxAngle.value = el.relaxAngle.value;
+    el.mMapSize.value = el.mapSize.value;
+    el.mAoSamples.value = el.aoSamples.value;
+    el.mAoDistance.value = el.aoDistance.value;
+    el.mCageOut.value = el.cageOut.value;
+    el.mCageIn.value = el.cageIn.value;
+    el.mGutter.value = el.gutter.value;
+    el.mBleed.value = el.bleed.value;
+    el.mIsland.value = el.island.value;
+
+    el.mTargetValue.textContent = `${el.target.value} %`;
+    el.mMaxErrorValue.textContent =
+      Number(el.maxError.value) === 0 ? t("rt.none") : `${(Number(el.maxError.value) / 1000).toFixed(3)}`;
+    el.mAngleValue.textContent = `${el.angle.value}°`;
+    el.mSeamValue.textContent = el.seam.value;
+    el.mRelaxValue.textContent = el.relax.value;
+    el.mRelaxStrengthValue.textContent = Number(el.relaxStrength.value).toFixed(2);
+    el.mRelaxAngleValue.textContent = `${el.relaxAngle.value}°`;
+    el.mMapSizeValue.textContent = String(mapSize());
+    el.mAoSamplesValue.textContent = el.aoSamples.value;
+    el.mAoDistanceValue.textContent = Number(el.aoDistance.value).toFixed(2);
+    el.mCageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
+    el.mCageInValue.textContent = Number(el.cageIn.value).toFixed(3);
+    el.mGutterValue.textContent = el.gutter.value;
+    el.mBleedValue.textContent = el.bleed.value;
+    el.mIslandValue.textContent = `${el.island.value}°`;
+
+    el.mQuads.checked = el.quads.checked;
+    el.mHoles.checked = el.holes.checked;
+    el.mBoundary.checked = el.boundary.checked;
+    el.mmMR.checked = el.mMR.checked;
+    el.mmNormal.checked = el.mNormal.checked;
+    el.mmEmissive.checked = el.mEmissive.checked;
+    el.mmAo.checked = el.mAo.checked;
+    el.mShowCage.checked = el.showCage.checked;
   }
 
   function refresh() {
@@ -1177,28 +1286,40 @@ export function createRetopo({
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
 
   // --- the unfolded menu --------------------------------------------------
-  // A compact mirror of the panel's method, target, deviation, scope and quads,
-  // reached by the arrow on the action bar. Each writes back to the panel's own
-  // inputs, which stay the single source of truth, then repaints.
+  // A compact mirror of the panel's controls, reached by the arrow on the action
+  // bar. Each writes back to the panel's own input, which stays the single source
+  // of truth, then repaints. Two tabs: remesh and bake.
   el.menuToggle.addEventListener("click", () => {
     const on = el.menu.hidden;
     el.menu.hidden = !on;
     el.menuToggle.setAttribute("aria-pressed", String(on));
   });
+  for (const b of el.menu.querySelectorAll("[data-mtab]")) {
+    b.addEventListener("click", () => {
+      for (const o of el.menu.querySelectorAll("[data-mtab]")) o.classList.toggle("active", o === b);
+      for (const o of el.menu.querySelectorAll("[data-mtabpane]")) o.hidden = o.dataset.mtabpane !== b.dataset.mtab;
+    });
+  }
   el.mmDecimate.addEventListener("click", () => setMethod("decimate"));
   el.mmIsotropic.addEventListener("click", () => setMethod("isotropic"));
-  el.mTarget.addEventListener("input", () => {
-    el.target.value = el.mTarget.value;
-    paint();
-  });
-  el.mMaxError.addEventListener("input", () => {
-    el.maxError.value = el.mMaxError.value;
-    paint();
-  });
-  el.mQuads.addEventListener("change", () => {
-    el.quads.checked = el.mQuads.checked;
-    paint();
-  });
+  // Sliders mirror the panel input, then repaint.
+  for (const [m, p] of [
+    ["mTarget", "target"], ["mMaxError", "maxError"], ["mAngle", "angle"],
+    ["mSeam", "seam"], ["mRelax", "relax"], ["mRelaxStrength", "relaxStrength"],
+    ["mRelaxAngle", "relaxAngle"], ["mMapSize", "mapSize"], ["mAoSamples", "aoSamples"],
+    ["mAoDistance", "aoDistance"], ["mCageOut", "cageOut"], ["mCageIn", "cageIn"],
+    ["mGutter", "gutter"], ["mBleed", "bleed"], ["mIsland", "island"],
+  ]) {
+    el[m].addEventListener("input", () => { el[p].value = el[m].value; paint(); });
+  }
+  // Checkboxes mirror the panel input, then repaint.
+  for (const [m, p] of [
+    ["mQuads", "quads"], ["mHoles", "holes"], ["mBoundary", "boundary"],
+    ["mmMR", "mMR"], ["mmNormal", "mNormal"], ["mmEmissive", "mEmissive"], ["mmAo", "mAo"],
+    ["mShowCage", "showCage"],
+  ]) {
+    el[m].addEventListener("change", () => { el[p].checked = el[m].checked; paint(); });
+  }
   for (const b of el.menu.querySelectorAll("[data-mscope]")) {
     b.addEventListener("click", () => {
       for (const o of el.menu.querySelectorAll("[data-mscope]")) o.classList.toggle("active", o === b);

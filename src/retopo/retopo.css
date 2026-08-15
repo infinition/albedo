@@ -233,6 +233,9 @@ body.retopo-open #timeline {
 .rt-menu-row .seg { flex: 1; white-space: nowrap; }
 .rt-menu .rt-field { margin-top: 0; }
 .rt-menu .rt-check { margin-top: 0; }
+.rt-menu-tabs { display: flex; gap: 4px; }
+.rt-menu-tabs .seg { flex: 1; }
+.rt-menu [data-mtabpane] { display: flex; flex-direction: column; gap: 8px; }
 
 /*
  * The bake switch sits next to the button whose cost it changes.

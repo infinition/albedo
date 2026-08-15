@@ -136,5 +136,7 @@
   "rt.scopeHintAll": "Tout le modèle, sans exception.",
   "rt.backToSource": "Retour au modèle d'origine",
   "rt.resultOf": "Résultat {n} sur {total}",
-  "rt.menuTitle": "Réglages de décimation et de projection"
+  "rt.menuTitle": "Réglages de décimation et de projection",
+  "rt.menuRemesh": "Remesh",
+  "rt.menuBake": "Bake"
 }
