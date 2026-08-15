@@ -1116,6 +1116,10 @@ select.quiet {
 select.quiet.wide { max-width: none; width: 100%; }
 
 .hint { margin: 8px 0 4px; font-size: 11px; color: var(--muted); }
+/* The Windows integration state carries a provider path, long and without a
+   single space to break on. Wrap it instead of letting it push a horizontal
+   scrollbar into the panel. */
+#shell-state { overflow-wrap: anywhere; }
 
 details summary {
   cursor: pointer;
