@@ -1500,7 +1500,7 @@ export class Viewer {
     const entry = {
       id,
       kind,
-      name: patch.name || `Lumière ${this.lights.length + 1}`,
+      name: patch.name || `light${this.lights.length + 2}`,
       colour: patch.colour || "#ffffff",
       intensity: patch.intensity ?? (kind === "directional" ? 2 : 12),
       azimuth: patch.azimuth ?? 45,

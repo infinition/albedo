@@ -3304,13 +3304,18 @@ function paintLights() {
     name.type = "button";
     name.className = "mat-name";
     name.style.cursor = "pointer";
-    name.textContent = `${entry.name} · ${{ directional: "dir", point: "pt", spot: "proj" }[entry.kind]}`;
+    name.textContent = entry.name;
+    name.title = { directional: "Directionnelle", point: "Ponctuelle", spot: "Projecteur" }[entry.kind];
     name.addEventListener("click", () => selectLight(entry.id));
+
+    const power = document.createElement("span");
+    power.className = "mat-count";
+    power.textContent = `${entry.intensity.toFixed(1)}×`;
 
     const swatch = document.createElement("span");
     swatch.style.cssText = `width:12px;height:12px;border-radius:3px;background:${entry.colour};border:1px solid var(--line)`;
 
-    row.append(on, name, swatch);
+    row.append(on, name, power, swatch);
     if (selectedLight === entry.id) row.style.background = "rgba(255,255,255,0.06)";
     list.appendChild(row);
   }
