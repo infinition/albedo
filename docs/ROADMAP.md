@@ -130,6 +130,17 @@ invisible is the reusable part.
 | "Fil de fer seul" vanished on every channel but the one it was clicked on | The button wrote `material.wireframe` on the materials then current. A channel change handed out fresh stand-ins with the property at its default, so the lines reappeared only when the original surfaced again. The state now lives in the overlay as a uniform, where the channel system cannot lose it, and it takes the same light or dark colour as the overlay |
 | The before/after curtain sat right of the slider | The shader cuts at a fraction across the canvas; the line was positioned at a fraction of its own box, `#retopo`, which spans the whole app. The moment the library took half the screen, the canvas stopped at it and the two fractions stopped meaning the same thing. The line is now placed in pixels, translated from the canvas box into its own |
 
+### The panel docked, and the library in its own width
+
+| Was | Is |
+| --- | --- |
+| The panel floated 8px off three edges with rounded corners, and the reservation was 28px wider than the panel: a band of cut model with nothing drawn in it, plus a strip of window background above, below and to the right | Flush to three edges, full height, one border on the side that has a viewport facing it, and `--panel-reserve` equal to the width so the canvas stops exactly where the panel starts |
+| The narrow-window width came from `@container stage`, which can only set the panel's own width: `--panel-reserve` is read by `#stage`, the container itself, so the panel shrank and the space kept for it did not | A `@media` on the window, which is the right thing to ask: how much room there is for a sidebar is not a question about the box the sidebar is in |
+| Framing used the bounding *sphere* against the vertical opening alone. A sphere around a standing figure is as wide as the figure is tall, and the horizontal opening was never asked at all | The eight corners in the camera's basis, and the distance each opening needs for its own extent. Measured over five cases: a cube goes from 57% to 94% of the height, and a wide flat plane in a narrow strip from **165% of the width, meaning off screen**, to 94% |
+| Opening the library over a loaded model replaced it with a folder listing | It comes up beside it at 30%, unless a width was already dragged, which is an answer the user already gave |
+| The sidebar drawer stayed open until its own button was found again | It closes when you reach past it, like every other drawer |
+| `.segment` wraps by default, which is right in the panel and wrong in a toolbar: "Textures" dropped under the search field on its own and the bar grew a line for it. Below the last breakpoint the group was hidden outright | One line, and the labels give way to icons when the bar tightens rather than the buttons giving way to nothing |
+
 ### Measurement Pitfalls, Verified
 
 - **CSS transitions do not advance in the automation panel.** It composes no
