@@ -269,17 +269,19 @@ body.peeking .lib-handle { display: block; }
   padding: 14px;
   display: grid;
   /*
-   * `min(..., 100%)` and not just the card width.
+   * A plain card floor, and the overflow clipped rather than a percentage.
    *
-   * `minmax` treats its first argument as a hard floor, so a card size larger
-   * than the column, which is what the zoom slider produces the moment the
-   * library is narrow, made a track wider than the box holding it. The grid then
-   * overflowed sideways: one column of cards sticking out past the edge, a
-   * horizontal scrollbar under a list that scrolls vertically, and the names cut
-   * off. The floor has to give way when there is less room than that, which is
-   * exactly what `min` with a percentage says.
+   * `minmax(min(var(--card), 100%), 1fr)` looked like the answer: a card size
+   * larger than the column made a track wider than the box, so the floor should
+   * give way. But a percentage inside a track of a grid nested in a flex column
+   * can resolve to zero, and `auto-fill` with a zero floor then creates as many
+   * tracks as it likes, each of no width, and the cards pile onto each other in
+   * a stack that reads as a collapsed grid. The library narrows to the drawer
+   * before the main area ever needs to go below a card, so the plain floor
+   * never overflows in practice, and when it would the overflow is clipped.
    */
-  grid-template-columns: repeat(auto-fill, minmax(min(var(--card, 132px), 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--card, 132px), 1fr));
+  overflow-x: hidden;
   gap: 12px;
   align-content: start;
 }
