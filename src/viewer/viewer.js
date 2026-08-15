@@ -114,26 +114,6 @@ export class Viewer {
     this.framing = { zoom: 1, rotation: 0, blur: 0 };
     this.solidBackground = new THREE.Color(0x14161a);
 
-    // Lights rig: contains all scene lights, starting with the primary "light"
-    this.rig = new THREE.Group();
-    this.scene.add(this.rig);
-    this.lights = [];
-    this.lightHelper = null;
-    this.selectedLight = null;
-    this._lightSeq = 0;
-
-    // Primary default light "light"
-    const primaryLight = this.addLight("directional", {
-      name: "light",
-      colour: "#ffffff",
-      intensity: 1.6,
-      azimuth: 45,
-      elevation: 35,
-      distance: 2.5,
-    });
-    this.keyLight = primaryLight.object;
-    this.selectedLight = primaryLight.id;
-
     this.grid = new THREE.GridHelper(10, 20, 0x3a4150, 0x272c35);
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.7;
@@ -155,6 +135,26 @@ export class Viewer {
 
     this.root = new THREE.Group();
     this.scene.add(this.root);
+
+    // Lights rig: contains all scene lights, starting with the primary "light"
+    this.rig = new THREE.Group();
+    this.scene.add(this.rig);
+    this.lights = [];
+    this.lightHelper = null;
+    this.selectedLight = null;
+    this._lightSeq = 0;
+
+    // Primary default light "light"
+    const primaryLight = this.addLight("directional", {
+      name: "light",
+      colour: "#ffffff",
+      intensity: 1.6,
+      azimuth: 45,
+      elevation: 35,
+      distance: 2.5,
+    });
+    this.keyLight = primaryLight.object;
+    this.selectedLight = primaryLight.id;
 
     /**
      * What the scene is made of, in the order it arrived.
@@ -1581,7 +1581,7 @@ export class Viewer {
 
   /** Put a light where its bearing, height and distance say it belongs. */
   placeLight(entry) {
-    const box = this.boxHelper.box;
+    const box = this.boxHelper?.box || new THREE.Box3();
     const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const radius = box.isEmpty() ? 1 : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3);
     const azimuth = THREE.MathUtils.degToRad(entry.azimuth);
@@ -1717,7 +1717,8 @@ export class Viewer {
       this.invalidate();
       return;
     }
-    const radius = Math.max(this.boxHelper.box.getSize(new THREE.Vector3()).length() / 20, 0.01);
+    const box = this.boxHelper?.box || new THREE.Box3();
+    const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 20, 0.01);
     if (entry.object.isDirectionalLight) {
       this.lightHelper = new THREE.DirectionalLightHelper(entry.object, radius, 0xffb454);
     } else if (entry.object.isSpotLight) {
