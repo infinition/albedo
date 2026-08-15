@@ -121,6 +121,9 @@ body.peeking .lib-handle { display: block; }
   stroke-width: 1.8;
   pointer-events: none;
 }
+/* In the sidebar the field sits between the folder tree and the tags, full
+   width, not the toolbar's flexible middle. */
+.lib-side .lib-search { flex: none; min-width: 0; max-width: none; margin: 14px 0 2px; }
 
 .lib-drawer { display: none; place-items: center; }
 

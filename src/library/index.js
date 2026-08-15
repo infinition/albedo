@@ -83,10 +83,6 @@ const SHELL = `
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <span class="lib-title">Bibliothèque</span>
-    <label class="lib-search">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-      <input type="search" placeholder="Rechercher un nom ou un tag" data-el="search" />
-    </label>
     <span class="lib-spacer"></span>
     <div class="segment" data-el="kinds"></div>
     <select class="quiet" data-el="sort">
@@ -111,6 +107,10 @@ const SHELL = `
     <div data-el="roots"></div>
     <h3>Dossiers</h3>
     <div class="lib-tree" data-el="tree"></div>
+    <label class="lib-search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input type="search" placeholder="Rechercher un nom ou un tag" data-el="search" />
+    </label>
     <h3>Tags</h3>
     <div class="lib-tags" data-el="tags"></div>
   </aside>
@@ -196,7 +196,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
    * three buttons in a third of the width.
    */
   const KIND_ICONS = {
-    all: '<path d="M4 6h16M4 12h16M4 18h16" />',
+    all: '<circle cx="8.5" cy="12" r="4.5"/><circle cx="15.5" cy="12" r="4.5"/>',
     model: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5l8 4.5 8-4.5M12 12v9" />',
     texture:
       '<rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="8.5" cy="9.5" r="1.6" />' +
