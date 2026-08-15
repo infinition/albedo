@@ -1006,6 +1006,11 @@ export class Viewer {
     this.gizmo.addEventListener("objectChange", () =>
       this.onGizmoDrag?.("move", this.gizmo.object)
     );
+    // Before the drag begins, so a duplication can swap the object out from
+    // under the handles and the drag then moves the copy, Blender style.
+    this.gizmo.addEventListener("mouseDown", () =>
+      this.onGizmoAltDrag?.(this.gizmo.object)
+    );
     // Dragging a handle must not also orbit the camera behind it
     this.gizmo.addEventListener("dragging-changed", (e) => {
       this.controls.enabled = !e.value;

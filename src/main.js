@@ -3518,6 +3518,20 @@ viewer.onGizmoDrag = (phase, object) => {
   if (object === viewer.pivotMarker) viewer.setPivot(object.position);
 };
 
+// Alt-drag duplicates: hold Alt and drag the move handle to copy the object in
+// place and move the copy, the way Blender does it.
+let altHeld = false;
+viewer.onGizmoAltDrag = (object) => {
+  if (!altHeld || editMode !== "translate" || !object || object === viewer.pivotMarker) return;
+  const clone = object.clone();
+  const entry = viewer.addPart(clone, `${selectedPart?.name || "objet"} copie`);
+  markDirty();
+  selectedPart = entry;
+  paintParts();
+  paintTree();
+  viewer.gizmo?.attach(clone);
+};
+
 // --- the numbers behind the handles ----------------------------------------
 
 /**
@@ -3896,9 +3910,11 @@ $("save-over").addEventListener("click", async () => {
 
 // Held, not toggled: the same key that snaps in every other tool
 window.addEventListener("keydown", (e) => {
+  if (e.key === "Alt") altHeld = true;
   if (editMode && e.key === "Shift") viewer.setGizmoSnap(true);
 });
 window.addEventListener("keyup", (e) => {
+  if (e.key === "Alt") altHeld = false;
   if (editMode && e.key === "Shift") viewer.setGizmoSnap(false);
 });
 
