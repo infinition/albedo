@@ -1974,6 +1974,62 @@ async function exportModel({ overwrite = false } = {}) {
 
 $("btn-export").addEventListener("click", exportModel);
 
+// --- copy and paste between documents -------------------------------------
+// A mesh (with its material) travels as a GLB held in memory, so it can cross
+// from one open file to another without touching disk. The same exporter that
+// writes a file writes the clipboard, so a pasted mesh is byte for byte what
+// an export would have produced.
+let clipboardGLB = null;
+
+async function copySelection() {
+  if (!viewer.current) return;
+  const target = selectedPart?.object || viewer.root;
+  try {
+    const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+    const result = await new GLTFExporter().parseAsync(target, { binary: true });
+    clipboardGLB = new Uint8Array(result);
+    toast(t("toast.copied"));
+  } catch (e) {
+    console.warn("[albedo] copie :", e);
+    toast(t("toast.copyFailed"));
+  }
+}
+
+async function pasteClipboard() {
+  if (!clipboardGLB || !viewer.current) return;
+  setBusy(true);
+  try {
+    const url =
+      URL.createObjectURL(new Blob([clipboardGLB], { type: "model/gltf-binary" })) + "#.glb";
+    const { object } = await loadModel(url, { renderer: viewer.renderer });
+    URL.revokeObjectURL(url);
+    normalizeMaterials(object);
+    fixColorSpaces(object);
+    ignoreDeadVertexColors(object);
+    ensureAoUv(object);
+    const entry = viewer.addPart(object, t("toast.pastedName"));
+    markDirty();
+    selectedPart = entry;
+    channels.absorb();
+    if ($("opt-wireframe").checked) await setWireframe(true, false);
+    applyChannel(currentChannel);
+    paintParts();
+    paintMaterialList();
+    paintTree();
+    showStats(viewer.stats());
+    showDimensions();
+    toast(t("toast.pasted"));
+  } catch (e) {
+    console.warn("[albedo] collage :", e);
+    toast(t("toast.pasteFailed"));
+  } finally {
+    setBusy(false);
+  }
+}
+
+$("part-copy").addEventListener("click", copySelection);
+$("part-paste").addEventListener("click", pasteClipboard);
+
 /**
  * Save the current view as a PNG.
  *
@@ -3982,9 +4038,20 @@ window.addEventListener("keydown", (e) => {
         toast(t("toast.orbit"));
       }
       break;
+    case "KeyC":
+      if (e.ctrlKey) {
+        e.preventDefault();
+        copySelection();
+      }
+      break;
     case "KeyV":
-      hud.setMode("fly");
-      toast(t("toast.fly"));
+      if (e.ctrlKey) {
+        e.preventDefault();
+        pasteClipboard();
+      } else {
+        hud.setMode("fly");
+        toast(t("toast.fly"));
+      }
       break;
     // Fly holds the mouse, so leaving it needs a key that is never a movement
     // one. Escape usually never reaches us, the webview eats it to release the
