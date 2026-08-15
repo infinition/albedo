@@ -255,6 +255,30 @@ async function restoreViewState(s) {
   paintLights();
 }
 
+/** A new scene starts from the default look, not the one left behind. */
+async function resetViewSettings() {
+  applyChannel("shaded");
+  await setWireframe(false, false);
+  await setWireOnly(false, false);
+  channels.setFlat(false);
+  $("opt-grid").checked = true;
+  viewer.setGrid(true);
+  $("opt-bounds").checked = false;
+  viewer.setBounds(false);
+  $("opt-skeleton").checked = false;
+  viewer.setSkeleton(false);
+  $("opt-exposure").value = "1";
+  viewer.setExposure(1);
+  await viewer.setEnvironment("studio");
+  viewer.setEnvironmentIntensity(1);
+  viewer.setKeyLight(true);
+  viewer.setKeyLightPower(1.6);
+  viewer.setKeyLightColour("#ffffff");
+  viewer.applyLights([]);
+  paintViewbar();
+  paintLights();
+}
+
 /** Take the live document out of the viewer and into its own holder. */
 function parkActive() {
   if (!activeDoc) return;
@@ -343,8 +367,10 @@ function newDocument({ activate = true, preview = false } = {}) {
   doc.channelState = channels.snapshot();
   channels.reset();
   doc.channelState = channels.snapshot();
-  if (activate) adoptDocument(doc);
-  else paintTabs();
+  if (activate) {
+    adoptDocument(doc);
+    void resetViewSettings();
+  } else paintTabs();
   return doc;
 }
 
