@@ -2425,10 +2425,10 @@ async function useEnvironment(kind, path, remember = true) {
 $("env-studio").addEventListener("click", () => useEnvironment("studio"));
 $("env-gradient").addEventListener("click", () => useEnvironment("gradient"));
 $("env-image").addEventListener("click", () => {
-  // Already showing a panorama: the button is how another one is chosen, so it
-  // must ask again rather than put the same file back.
-  const remembered = viewer.envKind === "image" ? null : prefs.get("environmentPath");
-  useEnvironment("image", remembered);
+  // Always ask for the file. A remembered path that has moved or been deleted
+  // would otherwise answer the click with "Panorama illisible" and never open
+  // the picker, which is the one thing the button is for.
+  useEnvironment("image", null);
 });
 $("env-replace").addEventListener("click", () => useEnvironment("image", null));
 $("env-clear").addEventListener("click", () => {
