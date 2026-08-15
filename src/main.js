@@ -136,6 +136,8 @@ function makeDocument({ title = "Nouvel onglet", path = null, preview = false } 
     held: null,
     /** Channel state while put aside; null while live. */
     channelState: null,
+    /** Look settings while put aside; null while live. */
+    viewState: null,
     /** Pose history, which is about this model and no other. */
     history: { past: [], future: [], limit: 80 },
     selection: [],
@@ -199,6 +201,60 @@ function snapThumb() {
   }
 }
 
+/** The look settings, per document: how this scene is shown. */
+function captureViewState() {
+  return {
+    channel: currentChannel,
+    wireframe: $("opt-wireframe").checked,
+    wireOnly: wireOnlyOn,
+    wireDark: $("opt-wire-dark").checked,
+    flat: channels.flat,
+    grid: $("opt-grid").checked,
+    bounds: $("opt-bounds").checked,
+    skeleton: $("opt-skeleton").checked,
+    exposure: Number($("opt-exposure").value),
+    environment: viewer.envKind,
+    environmentPath: prefs.get("environmentPath"),
+    envBackground: viewer.showEnvBackground,
+    envLighting: viewer.envLighting,
+    envIntensity: prefs.get("environmentIntensity"),
+    keyLight: prefs.get("keyLight"),
+    keyLightPower: prefs.get("keyLightPower"),
+    keyLightColour: prefs.get("keyLightColour"),
+    lights: viewer.lightState(),
+  };
+}
+
+/** Put a document's look back, without touching the persistent defaults. */
+async function restoreViewState(s) {
+  if (!s) return;
+  applyChannel(s.channel);
+  await setWireframe(s.wireframe, false);
+  await setWireOnly(s.wireOnly, false);
+  channels.setFlat(s.flat);
+  $("opt-wire-dark").checked = s.wireDark;
+  wire?.setColour(!s.wireDark);
+  $("opt-grid").checked = s.grid;
+  viewer.setGrid(s.grid);
+  $("opt-bounds").checked = s.bounds;
+  viewer.setBounds(s.bounds);
+  $("opt-skeleton").checked = s.skeleton;
+  viewer.setSkeleton(s.skeleton);
+  $("opt-exposure").value = String(s.exposure);
+  viewer.setExposure(s.exposure);
+  if (s.environment !== "studio") await useEnvironment(s.environment, s.environmentPath, false);
+  else await viewer.setEnvironment("studio");
+  viewer.showEnvBackground = s.envBackground;
+  viewer.setEnvironmentLighting(s.envLighting);
+  viewer.setEnvironmentIntensity(s.envIntensity);
+  viewer.setKeyLight(s.keyLight);
+  viewer.setKeyLightPower(s.keyLightPower);
+  viewer.setKeyLightColour(s.keyLightColour);
+  viewer.applyLights(s.lights || []);
+  paintViewbar();
+  paintLights();
+}
+
 /** Take the live document out of the viewer and into its own holder. */
 function parkActive() {
   if (!activeDoc) return;
@@ -206,6 +262,7 @@ function parkActive() {
   activeDoc.thumb = snapThumb() || activeDoc.thumb;
   activeDoc.held = viewer.detachModel();
   activeDoc.channelState = channels.snapshot();
+  activeDoc.viewState = captureViewState();
   activeDoc.path = openedPath;
   activeDoc.dirty = sceneDirty;
   activeDoc.history.past = history.past;
@@ -229,6 +286,7 @@ function adoptDocument(doc) {
     : null;
   selection.set(doc.selection || []);
   retopo?.loadState?.(doc.retopo);
+  void restoreViewState(doc.viewState);
 
   // Everything that reads the scene has to be told it changed, because nothing
   // was loaded and none of the usual load-time repaints will fire.
