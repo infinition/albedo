@@ -690,28 +690,31 @@ window.addEventListener("pointermove", (e) => {
   document.body.classList.toggle("peeking-out", inCorner);
 });
 
-const TUCK_AFTER = 15000;
-let tuckTimer = null;
+// The bar no longer hides on its own. It is one of three states, chosen by a
+// discreet corner button: horizontal (the default), vertical, or reduced to the
+// edge handle. Hovering the handle brings it back, since a control that only
+// shrinks is a control that traps.
+const ORIENTS = ["horizontal", "vertical", "reduced"];
+let orientation = "horizontal";
 
-function untuck() {
-  $("viewbar").classList.remove("tucked");
-  $("viewbar-handle").setAttribute("aria-expanded", "true");
-  clearTimeout(tuckTimer);
-  tuckTimer = setTimeout(() => {
-    // Never while the pointer is on it: the timer fires on a schedule, the
-    // pointer is a fact, and the fact wins.
-    if ($("viewbar").matches(":hover")) return untuck();
-    $("viewbar").classList.add("tucked");
-    $("viewbar-handle").setAttribute("aria-expanded", "false");
-  }, TUCK_AFTER);
+function setOrientation(next) {
+  orientation = next;
+  const bar = $("viewbar");
+  bar.classList.toggle("vertical", next === "vertical");
+  bar.classList.toggle("tucked", next === "reduced");
+  $("viewbar-handle").setAttribute("aria-expanded", String(next !== "reduced"));
+  $("viewbar-orient").setAttribute("data-orient", next);
 }
 
-for (const ev of ["pointerenter", "pointerdown", "focusin", "wheel"]) {
-  $("viewbar").addEventListener(ev, untuck, { passive: true });
+$("viewbar-orient").addEventListener("click", () => {
+  setOrientation(ORIENTS[(ORIENTS.indexOf(orientation) + 1) % ORIENTS.length]);
+});
+
+for (const ev of ["click", "pointerenter"]) {
+  $("viewbar-handle").addEventListener(ev, () => setOrientation("horizontal"));
 }
-$("viewbar-handle").addEventListener("click", untuck);
-$("viewbar-handle").addEventListener("pointerenter", untuck);
-untuck();
+
+setOrientation("horizontal");
 
 function paintViewbar() {
   /*

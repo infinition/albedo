@@ -5,6 +5,7 @@
   "bar.objet": "Objet",
   "bar.camera": "Caméra",
   "bar.handle": "Afficher les outils de vue",
+  "bar.orientTitle": "Orientation de la barre : horizontale, verticale ou réduite",
   "ch.shaded": "Rendu physique : la matière éclairée, telle qu'elle sortira",
   "ch.unlit": "Peint, sans éclairage : la texture telle qu'elle a été faite (U)",
   "ch.albedo": "Couleur de base seule, sans éclairage ni autres cartes",

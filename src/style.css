@@ -683,6 +683,19 @@ body.inspector .ov-br { opacity: 0; }
   max-width: calc(100cqw - 2 * var(--gap));
 }
 body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
+/* The orientation toggle: discreet until hovered, and the bar's three states.
+   Vertical stacks the groups; reduced reuses the tucked slide to the edge. */
+.viewbar-orient {
+  align-self: flex-start;
+  margin-left: auto;
+  opacity: 0.32;
+}
+.viewbar-orient:hover { opacity: 1; }
+#viewbar.vertical {
+  flex-direction: column;
+  align-items: flex-start;
+}
+#viewbar.vertical .viewbar-orient { margin-left: 0; }
 
 /* --- the shared toolbar grammar -------------------------------------------
  *
@@ -1320,9 +1333,9 @@ details[open] summary::before { content: "▾ "; }
  * the identifier: `.ov-view.tucked` loses on specificity to `#viewbar`, and a
  * rule that loses is a rule that does nothing at all.
  */
-#viewbar { transition: opacity 0.12s ease, transform 0.12s ease; }
+#viewbar { transition: opacity 0.18s ease, transform 0.18s ease; }
 #viewbar.tucked {
-  transition: opacity 5s ease, transform 5s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
   opacity: 0;
   transform: translateX(-115%);
   pointer-events: none;

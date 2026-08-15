@@ -5,6 +5,7 @@
   "bar.objet": "Object",
   "bar.camera": "Camera",
   "bar.handle": "Show the view tools",
+  "bar.orientTitle": "Toolbar orientation: horizontal, vertical or reduced",
   "ch.shaded": "Physical render: the lit material, as it will come out",
   "ch.unlit": "Painted, unlit: the texture as authored (U)",
   "ch.albedo": "Base colour only, no light and no other maps",
