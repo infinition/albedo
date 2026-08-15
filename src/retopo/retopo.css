@@ -46,7 +46,10 @@
    * now it follows `#inspector`'s width rather than a panel of this mode's own,
    * because there is no longer a panel of this mode's own.
    */
-  --rt-panel-w: 324px;
+  /* The one panel's width, read from where it is decided rather than copied:
+     the two drifted apart once already and the bar centred itself on a column
+     that was no longer that wide. */
+  --rt-panel-w: var(--panel-reserve, 324px);
 }
 #retopo.open { opacity: 1; }
 /*
@@ -86,17 +89,15 @@ body.peeking #retopo { left: calc(100% - var(--peek, 460px)); }
  */
 
 /*
- * The panel stops where the action bar starts.
+ * The panel no longer stops short of the action bar.
  *
- * That bar is the mode's own and it is centred at the bottom of the window, so
- * with a full height panel beside it the two overlap on a short window. The bar
- * measures itself and publishes its height on the document root; the panel reads
- * it. Reserving a guess is how a panel ends up sitting on its own buttons when
- * the bar wraps onto three rows in a narrow window.
+ * It used to lift its bottom edge by the bar's measured height, because both
+ * were centred on the window and a full height panel would have sat on the
+ * mode's own buttons. The panel is docked now: it owns its column outright, the
+ * bar is centred on the viewport beside it rather than on the window, and the
+ * two no longer share any space to fight over. Keeping the lift would leave a
+ * strip of nothing under the panel, which is the thing docking it was for.
  */
-body.retopo-open #inspector {
-  bottom: calc(var(--gap) + var(--rt-bar-h, 54px) + 10px);
-}
 
 /*
  * And so does the animation scrubber, for the same reason and by the same

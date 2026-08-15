@@ -2910,6 +2910,9 @@ async function toggleLibrary() {
       tauri,
       prefs,
       onOpen: (path, options) => openPath(path, options),
+      // Whether there is something to come back to. The library opens beside a
+      // loaded model rather than over it.
+      hasModel: () => !!viewer.current,
     });
     // The preview strip loads into this very viewer, so nothing is duplicated
     library.show();

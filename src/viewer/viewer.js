@@ -1133,11 +1133,63 @@ export class Viewer {
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const radius = Math.max(size.length() / 2, 1e-4);
+    const dir = new THREE.Vector3(1, 0.55, 1).normalize();
+
+    /*
+     * Fit the box as it actually looks from here, in both axes.
+     *
+     * This used to be the bounding *sphere* against the vertical opening alone,
+     * which is the framing that always fits and almost never fills. A sphere
+     * around a standing figure is as wide as the figure is tall, so a tall thin
+     * model was pushed back until its imaginary shoulders fitted, and it came up
+     * at about half the height it could have had. Then the horizontal opening
+     * was never asked at all, so the same distance was used in a square window
+     * and in the library's narrow strip, where width is the binding constraint
+     * and the model ended up smaller still.
+     *
+     * So: the eight corners into the camera's own basis, the half extents that
+     * come out of it, and the distance each opening needs for its own extent.
+     * The larger of the two is the one that has to be obeyed, and the depth of
+     * the box is added because the near face is closer than the centre.
+     */
+    const fwd = dir.clone().negate();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+    // A camera looking straight down has no horizon to take its right from.
+    if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+
+    let halfW = 0;
+    let halfH = 0;
+    let halfD = 0;
+    const corner = new THREE.Vector3();
+    for (let i = 0; i < 8; i++) {
+      corner.set(
+        i & 1 ? box.max.x : box.min.x,
+        i & 2 ? box.max.y : box.min.y,
+        i & 4 ? box.max.z : box.min.z
+      ).sub(center);
+      halfW = Math.max(halfW, Math.abs(corner.dot(right)));
+      halfH = Math.max(halfH, Math.abs(corner.dot(up)));
+      halfD = Math.max(halfD, Math.abs(corner.dot(fwd)));
+    }
+
     // The stored angle, not the camera's: an orthographic camera has none, and
     // both projections should sit the model at the same distance.
-    const dist = (radius / Math.sin((this.fov * Math.PI) / 360)) * 1.15;
+    const tanY = Math.tan((this.fov * Math.PI) / 360);
+    const el = this.canvas.parentElement;
+    const aspect = (el?.clientWidth || 1) / (el?.clientHeight || 1);
+    const dist =
+      Math.max(
+        halfH / tanY,
+        halfW / (tanY * Math.max(aspect, 1e-4)),
+        // A degenerate box, a single point or a flat plane seen edge on, still
+        // needs a distance that is not zero.
+        radius * 0.01
+      ) *
+        1.06 +
+      halfD;
 
-    const dir = new THREE.Vector3(1, 0.55, 1).normalize();
     this.camera.position.copy(center).addScaledVector(dir, dist);
     this.controls.target.copy(center);
     // The distance that shows the whole model, kept so zoom has something to be

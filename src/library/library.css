@@ -63,6 +63,29 @@ body.peeking .lib-handle { display: block; }
 .lib-title { font-weight: 600; letter-spacing: 0.2px; }
 .lib-spacer { flex: 1; }
 
+/*
+ * The three kinds are one control and they stay on one line.
+ *
+ * `.segment` wraps by default and it should: in the Retopo panel it is a column
+ * of fixed width and a group that wraps beats a group that overflows. In a
+ * toolbar it is the wrong answer, and it looked it: "Textures" dropped under the
+ * search field on its own, half a row below the two it belongs with, and the bar
+ * grew a line to hold the orphan. Nowrap here, and the labels give way to icons
+ * further down rather than the buttons giving way to nothing.
+ */
+.lib-bar .segment { flex: 0 0 auto; flex-wrap: nowrap; }
+.lib-bar .segment .seg { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lib-bar .segment .seg-icon {
+  display: none;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .lib-search {
   position: relative;
   display: flex;
@@ -412,8 +435,10 @@ body.peeking .lib-handle { display: block; }
   .lib-detail { flex-wrap: wrap; }
 }
 
-/* Tighter than this the kinds are the first thing to go: the format chips over
-   the grid filter the same thing and are already on screen. */
-@container library (max-width: 420px) {
-  .lib-bar .segment { display: none; }
+/* The kinds stay. They lose their words, not their buttons: see the comment
+   beside where they are built. */
+@container library (max-width: 640px) {
+  .lib-bar .segment .seg-label { display: none; }
+  .lib-bar .segment .seg-icon { display: block; }
+  .lib-bar .segment .seg { padding: 4px 9px; }
 }

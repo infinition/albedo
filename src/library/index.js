@@ -131,7 +131,7 @@ const SHELL = `
  * @param {(path: string) => Promise<void>} deps.onOpen open a file in the viewer
  * @param {object} [deps.prefs] persisted settings
  */
-export function createLibrary({ tauri, onOpen, prefs }) {
+export function createLibrary({ tauri, onOpen, prefs, hasModel }) {
   const host = document.createElement("div");
   host.id = "library";
   host.innerHTML = SHELL;
@@ -180,10 +180,37 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   };
 
   // --- kinds -------------------------------------------------------------
+  /*
+   * A word each, and a glyph each for when the words do not fit.
+   *
+   * The three of them used to be text only, in a bar that wraps, so a narrow
+   * library dropped "Textures" onto a second line under the search field: three
+   * buttons that are one choice, drawn as two rows and one orphan, and the bar
+   * grew a line to hold it. Then below the last breakpoint the whole group was
+   * hidden outright, which answers "there is no room" by taking the control
+   * away.
+   *
+   * Both are the same mistake, that a label is the control. It is not: the
+   * choice is, and it survives losing its words. The group never wraps now, and
+   * when the bar gets tight the labels go and the icons stay, which is the same
+   * three buttons in a third of the width.
+   */
+  const KIND_ICONS = {
+    all: '<path d="M4 6h16M4 12h16M4 18h16" />',
+    model: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" /><path d="M4 7.5l8 4.5 8-4.5M12 12v9" />',
+    texture:
+      '<rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="8.5" cy="9.5" r="1.6" />' +
+      '<path d="M4 16l5-4.5 4 3.5 3-2.5 4 3.5" />',
+  };
   for (const [id, label] of [["all", "Tout"], ["model", "Modèles"], ["texture", "Textures"]]) {
     const b = document.createElement("button");
     b.className = "seg" + (id === "all" ? " active" : "");
-    b.textContent = label;
+    b.innerHTML =
+      `<svg class="seg-icon" viewBox="0 0 24 24" aria-hidden="true">${KIND_ICONS[id]}</svg>` +
+      `<span class="seg-label"></span>`;
+    b.querySelector(".seg-label").textContent = label;
+    // The word disappears at narrow widths, so the tooltip carries it instead.
+    b.title = label;
     b.addEventListener("click", () => {
       state.kind = id;
       state.format = null;
@@ -828,6 +855,20 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     peekTimer = setTimeout(() => onOpen(entry.path, { keepLibrary: true }), 180);
   }
 
+  /**
+   * The split to open on, when the library arrives over a loaded model.
+   *
+   * Thirty percent to the folder list and the rest to the model: enough columns
+   * of thumbnails to pick from, and a viewport still worth looking at. Written
+   * only when the user has no remembered width of their own, because a width
+   * they dragged is an answer they already gave.
+   */
+  function sizeStripForModel() {
+    const saved = Number(prefs?.get?.("libPeekWidth")) || 0;
+    const width = saved || Math.round(window.innerWidth * 0.7);
+    document.documentElement.style.setProperty("--peek", `${width}px`);
+  }
+
   function setPeek(on, remember = true) {
     state.peek = !!on;
     document.body.classList.toggle("peeking", state.peek);
@@ -914,6 +955,27 @@ export function createLibrary({ tauri, onOpen, prefs }) {
   // Picking something is the end of browsing, so the drawer gets out of the way
   el.tree.addEventListener("click", () => host.classList.remove("browsing"));
   el.tags.addEventListener("click", () => host.classList.remove("browsing"));
+  /*
+   * And so is reaching past it.
+   *
+   * The drawer slides over the grid and it used to stay there until the same
+   * button was found again, so the first click anywhere else went into whatever
+   * the drawer was covering, or into nothing at all. Every drawer in every
+   * application closes when you reach around it; this one just never did.
+   *
+   * Captured on the host rather than on the document, so it hears the click
+   * before a card can act on it, and it costs nothing while the drawer is shut.
+   */
+  host.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (!host.classList.contains("browsing")) return;
+      if (e.target.closest(".lib-side") || e.target.closest(".lib-drawer")) return;
+      host.classList.remove("browsing");
+      el.drawer.setAttribute("aria-pressed", "false");
+    },
+    true
+  );
 
   el.grid.addEventListener("scroll", growIfNeeded, { passive: true });
   el.close.addEventListener("click", () => hide());
@@ -922,6 +984,23 @@ export function createLibrary({ tauri, onOpen, prefs }) {
     state.open = true;
     host.classList.add("open");
     document.body.classList.add("library-open");
+    /*
+     * A model already on screen is not a model you asked to leave.
+     *
+     * Opening the library used to take the whole window whenever the strip was
+     * off, which is right from an empty viewer and wrong from a model you are
+     * working on: it replaces what you were looking at with a folder listing,
+     * and getting back to it is a second click. With something loaded the
+     * library comes up beside it instead, as a column, and the model keeps most
+     * of the room.
+     *
+     * Only when the strip has never been shut by hand: closing it is a decision
+     * and it outranks this.
+     */
+    if (!state.peek && !state.peekDismissed && hasModel?.()) {
+      sizeStripForModel();
+      setPeek(true, false);
+    }
     if (state.peek) document.body.classList.add("peeking");
     el.search.focus();
     if (!state.roots.length) loadRoots();
