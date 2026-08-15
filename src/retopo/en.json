@@ -135,5 +135,6 @@
   "rt.scopeHintVisibleNone": "No material hidden: the scope changes nothing.",
   "rt.scopeHintAll": "The whole model, no exception.",
   "rt.backToSource": "Back to the original model",
-  "rt.resultOf": "Result {n} of {total}"
+  "rt.resultOf": "Result {n} of {total}",
+  "rt.menuTitle": "Decimation and projection settings"
 }

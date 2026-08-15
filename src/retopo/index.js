@@ -69,6 +69,10 @@ const SHELL = `
 <div class="rt-split" data-el="splitLine" hidden><i></i></div>
 
 <div class="rt-bar" data-el="bar">
+  <button class="tb-i rt-menu-toggle" type="button" data-el="menuToggle" aria-pressed="false"
+          data-i18n-title="rt.menuTitle" title="Réglages de décimation et de projection">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l5-5 5 5"/></svg>
+  </button>
   <label class="rt-switch" data-i18n-title="rt.projectTitle" title="Reprojeter les textures de la source sur le résultat">
     <input type="checkbox" data-el="bake" /><i></i><span data-i18n="rt.project">Projeter</span>
   </label>
@@ -80,6 +84,27 @@ const SHELL = `
   <span class="rt-note" data-el="note"></span>
   <button class="wide" type="button" data-el="close" data-i18n="rt.close">Fermer</button>
   <div class="rt-progress"><i data-el="fill"></i></div>
+
+  <div class="rt-menu" data-el="menu" hidden>
+    <div class="rt-menu-row">
+      <button class="seg" type="button" data-el="mmDecimate" data-i18n="rt.decimate">Décimer</button>
+      <button class="seg" type="button" data-el="mmIsotropic" data-i18n="rt.rebuild">Reconstruire</button>
+    </div>
+    <label class="rt-field">
+      <span data-i18n="rt.triangles">Triangles <span class="rt-num" data-el="mTargetValue">—</span></span>
+      <input type="range" data-el="mTarget" min="1" max="90" step="1" value="10" />
+    </label>
+    <label class="rt-field">
+      <span data-i18n="rt.maxDeviation">Déviation max <span class="rt-num" data-el="mMaxErrorValue">—</span></span>
+      <input type="range" data-el="mMaxError" min="0" max="50" step="1" value="0" />
+    </label>
+    <div class="rt-menu-row">
+      <button class="seg" type="button" data-mscope="all" data-i18n="rt.scopeAll">Tout</button>
+      <button class="seg" type="button" data-mscope="visible" data-i18n="rt.scopeVisible">Visible</button>
+      <button class="seg" type="button" data-mscope="picked" data-i18n="rt.scopePicked">Sélection</button>
+    </div>
+    <label class="rt-check"><input type="checkbox" data-el="mQuads" /><span data-i18n="rt.pairQuads">Apparier en quads</span></label>
+  </div>
 </div>
 `;
 
@@ -1038,6 +1063,8 @@ export function createRetopo({
     method = next;
     el.mDecimate.classList.toggle("active", next === "decimate");
     el.mIsotropic.classList.toggle("active", next === "isotropic");
+    el.mmDecimate.classList.toggle("active", next === "decimate");
+    el.mmIsotropic.classList.toggle("active", next === "isotropic");
     el.methodHint.textContent = t(METHOD_HINT[next]);
     paint();
   }
@@ -1058,6 +1085,12 @@ export function createRetopo({
     // Zéro veut dire « pas de plafond », ce qui est un mot et pas un nombre.
     const cap = Number(el.maxError.value);
     el.maxErrorValue.textContent = cap === 0 ? t("rt.none") : `${(cap / 1000).toFixed(3)}`;
+    // The unfolded menu mirrors the panel, never the other way around.
+    el.mTargetValue.textContent = `${el.target.value} %`;
+    el.mMaxErrorValue.textContent = cap === 0 ? t("rt.none") : `${(cap / 1000).toFixed(3)}`;
+    el.mTarget.value = el.target.value;
+    el.mMaxError.value = el.maxError.value;
+    el.mQuads.checked = el.quads.checked;
     el.relaxStrengthValue.textContent = Number(el.relaxStrength.value).toFixed(2);
     el.cageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
     el.cageInValue.textContent = Number(el.cageIn.value).toFixed(3);
@@ -1137,6 +1170,38 @@ export function createRetopo({
   }
   el.mDecimate.addEventListener("click", () => setMethod("decimate"));
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
+
+  // --- the unfolded menu --------------------------------------------------
+  // A compact mirror of the panel's method, target, deviation, scope and quads,
+  // reached by the arrow on the action bar. Each writes back to the panel's own
+  // inputs, which stay the single source of truth, then repaints.
+  el.menuToggle.addEventListener("click", () => {
+    const on = el.menu.hidden;
+    el.menu.hidden = !on;
+    el.menuToggle.setAttribute("aria-pressed", String(on));
+  });
+  el.mmDecimate.addEventListener("click", () => setMethod("decimate"));
+  el.mmIsotropic.addEventListener("click", () => setMethod("isotropic"));
+  el.mTarget.addEventListener("input", () => {
+    el.target.value = el.mTarget.value;
+    paint();
+  });
+  el.mMaxError.addEventListener("input", () => {
+    el.maxError.value = el.mMaxError.value;
+    paint();
+  });
+  el.mQuads.addEventListener("change", () => {
+    el.quads.checked = el.mQuads.checked;
+    paint();
+  });
+  for (const b of el.menu.querySelectorAll("[data-mscope]")) {
+    b.addEventListener("click", () => {
+      for (const o of el.menu.querySelectorAll("[data-mscope]")) o.classList.toggle("active", o === b);
+      for (const o of pane.querySelectorAll("[data-scope]")) o.classList.toggle("active", o.dataset.scope === b.dataset.mscope);
+      scope = b.dataset.mscope;
+      paintScope();
+    });
+  }
 
   // --- running ------------------------------------------------------------
 
@@ -1673,6 +1738,9 @@ export function createRetopo({
             ? plural("rt.scopeHintVisible", hidden)
             : t("rt.scopeHintVisibleNone")
           : t("rt.scopeHintAll");
+    for (const o of el.menu.querySelectorAll("[data-mscope]")) {
+      o.classList.toggle("active", o.dataset.mscope === scope);
+    }
   }
 
   for (const b of pane.querySelectorAll("[data-scope]")) {

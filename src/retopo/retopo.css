@@ -211,6 +211,29 @@ body.retopo-open #timeline {
 }
 .rt-note:empty { display: none; }
 
+/* The unfolded settings menu, reached by the arrow on the action bar. */
+.rt-menu-toggle[aria-pressed="true"] { color: var(--accent); }
+.rt-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 240px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 11px;
+  background: var(--rt-skin);
+  backdrop-filter: var(--rt-blur);
+  border: 1px solid var(--line, #2a2e35);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+.rt-menu-row { display: flex; gap: 4px; }
+.rt-menu-row .seg { flex: 1; white-space: nowrap; }
+.rt-menu .rt-field { margin-top: 0; }
+.rt-menu .rt-check { margin-top: 0; }
+
 /*
  * The bake switch sits next to the button whose cost it changes.
  *
