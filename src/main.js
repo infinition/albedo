@@ -511,7 +511,7 @@ tabs = createTabs({
   onNew: () => {
     newDocument();
     setTitle("Albedo", true);
-    toast("Nouvel onglet · dépose un fichier ou importe un objet");
+    toast(t("toast.newTab"));
   },
 });
 activeDoc = makeDocument({ title: "Albedo" });
@@ -2828,7 +2828,7 @@ void shellReady.then(async () => {
       // where to undo it. Once, on the first launch of a machine that had none.
       tauri.event.listen("shell-enabled", () => {
         refreshShellState();
-        toast("Vignettes 3D activées dans l'explorateur · Objet pour les retirer", 4000);
+        toast(t("toast.shellEnabled"), 4000);
       });
     }
   }
@@ -3554,7 +3554,7 @@ $("pivot-centre").addEventListener("click", () => {
   viewer.setPivot(viewer.geometricCentre());
   viewer.showPivot($("pivot-show").checked || pivotEditing);
   recordAfter();
-  toast("Centre à la moyenne des sommets");
+  toast(t("toast.pivotMean"));
 });
 
 $("pivot-reset").addEventListener("click", () => {
@@ -3566,7 +3566,7 @@ $("pivot-reset").addEventListener("click", () => {
   viewer.setPivot(middle);
   viewer.showPivot($("pivot-show").checked || pivotEditing);
   recordAfter();
-  toast("Centre au milieu de la boîte");
+  toast(t("toast.pivotBox"));
 });
 
 function editTarget() {
@@ -3835,7 +3835,7 @@ $("save-over").addEventListener("click", async () => {
   if (!ok) return;
   await exportModel({ overwrite: true });
   $("save-note").textContent = $("export-note").textContent;
-  toast("Fichier réécrit, sa vignette suivra");
+  toast(t("toast.overwrite"));
 });
 
 // Held, not toggled: the same key that snaps in every other tool
@@ -3959,7 +3959,7 @@ window.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.altKey) return;
       e.preventDefault();
       viewer.frameCurrent();
-      toast("Cadré · 100 %");
+      toast(t("toast.framed"));
       break;
     case "F11":
       e.preventDefault();
@@ -3979,12 +3979,12 @@ window.addEventListener("keydown", (e) => {
         openFile();
       } else {
         hud.setMode("orbit");
-        toast("Orbite");
+        toast(t("toast.orbit"));
       }
       break;
     case "KeyV":
       hud.setMode("fly");
-      toast("Vol · Échap pour sortir");
+      toast(t("toast.fly"));
       break;
     // Fly holds the mouse, so leaving it needs a key that is never a movement
     // one. Escape usually never reaches us, the webview eats it to release the
@@ -4032,7 +4032,7 @@ window.addEventListener("keydown", (e) => {
         e.preventDefault();
         newDocument();
         setTitle("Albedo", true);
-        toast("Nouvel onglet · dépose un fichier ou importe un objet");
+        toast(t("toast.newTab"));
       } else if (nav.mode === "orbit") {
         toggleTurntable();
         toast(viewer.spin ? "Rotation continue" : "Rotation arrêtée");
@@ -4049,7 +4049,7 @@ window.addEventListener("keydown", (e) => {
     case "KeyR":
       if (e.shiftKey) {
         nav.resetRoll();
-        toast("Roulis remis à plat");
+        toast(t("toast.rollReset"));
       } else setEditMode("rotate");
       break;
     case "KeyW":
