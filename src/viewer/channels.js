@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { releaseMaterials } from "./release.js";
+import { releaseMaterials, texturesOf } from "./release.js";
 
 /**
  * Inspection channels.
@@ -198,6 +198,93 @@ export class ChannelView {
     this.pristine?.clear();
     this.built.clear();
     this.mode = "shaded";
+  }
+
+  /**
+   * The scene gained or lost an object while the model itself stayed.
+   *
+   * `reset()` was being used for this and it is wrong here in a way that stays
+   * invisible for exactly as long as the shaded channel is showing. `original`
+   * is where a mesh's real material lives *while a channel stand-in is sitting
+   * on the mesh*; clearing it does not put anything back, so the very next
+   * `apply` calls `remember` on those same meshes and writes the stand-in down
+   * as if it were the file's own material. From then on the object is frozen:
+   * every later channel is built from a MeshBasicMaterial that carries one
+   * texture and none of the PBR maps, so it keeps drawing whatever channel
+   * happened to be showing at the moment the other object arrived.
+   *
+   * That is the split view disagreeing with itself after a remesh or a bake:
+   * the result follows the Couleur group because its materials were remembered
+   * correctly, and the source does not because its own were thrown away. It
+   * also costs the real materials outright, since `reset` disposes everything
+   * it forgets, and it silently un-hides every material and drops every per
+   * material choice the user had made.
+   *
+   * So: forget only the meshes that actually left, keep everything about the
+   * ones still standing, and let `apply` remember the newcomers.
+   */
+  absorb() {
+    const live = new Set();
+    this.viewer.root.traverse((o) => {
+      if (o.isMesh || o.isSkinnedMesh) live.add(o);
+    });
+
+    /** The file's own materials of the meshes that left, and their stand-ins. */
+    const gone = [];
+    for (const mesh of [...this.original.keys()]) {
+      if (live.has(mesh)) continue;
+      const held = this.original.get(mesh);
+      this.original.delete(mesh);
+      for (const m of Array.isArray(held) ? held : [held]) {
+        if (!m) continue;
+        gone.push(m);
+        // A stand-in is keyed by the uuid of what it stands in for, so a
+        // material that leaves takes its whole column of channel copies along.
+        for (const key of [...this.built.keys()]) {
+          if (!key.startsWith(`${m.uuid}|`)) continue;
+          gone.push(this.built.get(key));
+          this.built.delete(key);
+        }
+        this.materialModes.delete(m.uuid);
+        this.hiddenMaterials.delete(m.uuid);
+      }
+    }
+    if (!gone.length) {
+      this.apply(this.mode);
+      return;
+    }
+
+    /*
+     * Two ways a material that left is still needed, and both have to be
+     * checked before anything is disposed.
+     *
+     * One mesh removed from a group of several can be drawn with a material the
+     * rest of the group also carries, in which case it never left at all. And
+     * `keptTextures` only knows what is *attached*, which under any channel but
+     * shaded is the stand-ins: the real materials are set aside in `original`,
+     * so their images have to be named here or removing one part frees the
+     * textures of the parts that stayed.
+     */
+    const stays = new Set();
+    const keep = this.viewer.keptTextures();
+    if (checkerTexture) keep.add(checkerTexture);
+    const alive = [
+      ...this.original.values(),
+      ...this.built.values(),
+      ...(this.pristine?.values() || []),
+    ];
+    for (const entry of alive) {
+      for (const m of Array.isArray(entry) ? entry : [entry]) {
+        if (!m?.isMaterial) continue;
+        stays.add(m.uuid);
+        texturesOf(m, keep);
+      }
+    }
+    releaseMaterials(
+      gone.filter((m) => m?.isMaterial && !stays.has(m.uuid)),
+      keep
+    );
+    this.apply(this.mode);
   }
 
   /**

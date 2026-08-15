@@ -801,6 +801,39 @@ inherited value for everything inside it. The widening is a one time nudge from
 the module now, through the same property the handle writes, and only when the
 strip is too narrow to work in.
 
+### The two halves of the curtain showing two different channels [x]
+
+Reported as "le mode Couleur n'est pas aligne tout le temps, l'original est en
+normal map et le resultat en texture". It was, word for word, and the cause was
+one line of housekeeping in the wrong place.
+
+`ChannelView.original` is where a mesh's real material is kept *while a channel
+stand-in is sitting on the mesh*. Importing a part called `channels.reset()`,
+which is the operation for a model being thrown away: it disposes what it holds
+and clears the map, without putting anything back on the meshes. The very next
+`apply` then calls `remember` on those same meshes and writes the stand-in down
+as the file's own material. From that moment the source is frozen, because every
+later channel is built from a `MeshBasicMaterial` that carries one texture and
+none of the PBR maps. The result followed the Couleur group because its
+materials had just been remembered correctly; the source did not, because its
+own had been thrown away. Hence the split disagreeing with itself, and only ever
+after a run.
+
+The same call also un-hid every hidden material and dropped every per material
+choice, and it disposed materials that were still on screen.
+
+`absorb()` is the operation that was missing: the scene gained or lost an
+object, the model did not change. It forgets only the meshes that actually left,
+takes their stand-ins with them, and leaves everything about the ones still
+standing alone. Two subtleties are in the code and were both needed: a material
+can be shared with a mesh that stayed, and `viewer.keptTextures()` only knows
+what is *attached*, so the set aside originals have to name their own images or
+removing one part frees the textures of the parts that remain.
+
+Measured rather than asserted: the sequence is replayed on a stub viewer, with
+the old path as a witness. It prints `sourceMap: source-normal` against
+`resultMap: result-albedo` under `reset`, and both on `-albedo` under `absorb`.
+
 ---
 
 ### Phase 7: paying the rent [ ]
@@ -1002,6 +1035,14 @@ repository; this is what these items mean once the engine lives in Albedo.
 
 ### Lessons that each cost a debugging session
 
+- **A cache that holds the real thing while a stand-in is on screen must never be
+  cleared without putting the real thing back.** `channels.reset()` was reused
+  for "the scene gained a part", and it clears the map where the meshes' own
+  materials are set aside. The next repaint dutifully wrote the stand-in down as
+  the original, so the object froze on whatever channel happened to be showing.
+  Nothing threw, nothing logged, and it is invisible for as long as the shaded
+  channel is up. Two operations, two names: `reset` throws a model away,
+  `absorb` takes note that the scene changed around one.
 - **A migration belongs beside the thing it migrates, not in the middle of the
   road.** A table mapping old pane names to new ones sat inside `showPane`, where
   it caught every live call as well as the saved preference it was written for.

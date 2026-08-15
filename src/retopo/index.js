@@ -1117,6 +1117,11 @@ export function createRetopo({
     for (const part of mine) viewer.removePart(part);
     cage?.dispose();
     cage = null;
+    // The channels were holding the result's real materials on its behalf while
+    // a stand-in was on it, and `removePart` frees only what is attached. Said
+    // here rather than only at the next import, because undoing back past the
+    // first run drops a result and imports nothing after it.
+    channels?.absorb?.();
   }
 
   function paintHistory() {

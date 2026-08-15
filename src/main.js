@@ -3630,7 +3630,7 @@ function paintParts() {
       // did. The entries that named it go with it.
       forgetHistoryOf(entry.object);
       viewer.removePart(entry);
-      channels.reset();
+      channels.absorb();
       applyChannel(currentChannel);
       paintParts();
       paintMaterialList();
@@ -3763,8 +3763,9 @@ async function importPart(path) {
       setTitle(name);
       $("empty").classList.add("hidden");
     }
-    // The scene changed underneath the channel copies and the material list
-    channels.reset();
+    // The scene gained an object; the model that was already here did not
+    // change and must not be forgotten along with it.
+    channels.absorb();
     // An imported object arrives with plain indexed geometry, so it needs the
     // overlay's attributes before it can draw a single line. Without this a
     // retopology result came in mute while everything around it drew edges.
