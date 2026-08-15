@@ -32,7 +32,7 @@ export const DEFAULTS = {
   /** Only the lines, no surface: a mode of the same overlay. */
   wireOnly: false,
   /** Dark lines rather than light ones: neither works on every model. */
-  wireDark: false,
+  wireDark: true,
   /** Flat faces rather than smooth ones, for reading the topology. */
   flat: false,
   exposure: 1,

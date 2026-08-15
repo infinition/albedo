@@ -599,9 +599,10 @@ $("vb-wire-only").addEventListener("click", () => {
 });
 
 $("vb-wire-dark").addEventListener("click", async () => {
-  const dark = $("vb-wire-dark").getAttribute("aria-pressed") !== "true";
-  $("opt-wire-dark").checked = dark;
-  (await wakeWire())?.setColour(!dark);
+  // The button is now "light": dark is the default, and this switches to light.
+  const light = $("vb-wire-dark").getAttribute("aria-pressed") !== "true";
+  $("opt-wire-dark").checked = !light;
+  (await wakeWire())?.setColour(light);
   viewer.invalidate();
   paintViewbar();
 });
@@ -739,9 +740,10 @@ function paintViewbar() {
   // The light or dark choice only exists while there are lines to colour, so it
   // appears with them rather than sitting inert two thirds of the time.
   $("vb-wire-dark").hidden = !on;
-  const dark = $("opt-wire-dark").checked;
-  $("vb-wire-dark").setAttribute("aria-pressed", String(dark));
-  $("vb-wire-dark").classList.toggle("active", dark);
+  // The bar button is the light toggle: active when the lines are light.
+  const light = !$("opt-wire-dark").checked;
+  $("vb-wire-dark").setAttribute("aria-pressed", String(light));
+  $("vb-wire-dark").classList.toggle("active", light);
   // The lines only mode is the overlay's other half, lit only while the master
   // is on: the button says what is actually drawing, and the armed style comes
   // back with the master (W) instead of being forgotten.

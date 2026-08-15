@@ -16,6 +16,7 @@
   "bar.wire": "Wireframe over the surface (W)",
   "bar.wireOnly": "Wire only, no faces: see the structure through",
   "bar.wireDark": "Dark rather than light lines, for a light model",
+  "bar.wireLight": "Light rather than dark lines, for a dark model",
   "giz.translate": "Move the object (G) — click again to put the handles away",
   "giz.rotate": "Rotate the object (R) — click again to put the handles away",
   "giz.scale": "Scale the object (S) — click again to put the handles away",

@@ -1122,6 +1122,10 @@ export function createRetopo({
   window.addEventListener("resize", () => {
     syncViewport();
     paintSplit();
+    // The comparison is re-asserted, not just repainted: a resize re-runs the
+    // patched shader and can leave `uSide` at zero, which shows both topologies
+    // stacked with nothing discarded and only the line still cutting.
+    setAB(compareMode);
   });
 
   // --- painting -----------------------------------------------------------

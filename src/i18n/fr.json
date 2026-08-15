@@ -16,6 +16,7 @@
   "bar.wire": "Fil de fer par-dessus la surface (W)",
   "bar.wireOnly": "Fil de fer seul, sans les faces : voir la structure au travers",
   "bar.wireDark": "Traits sombres plutôt que clairs, pour un modèle clair",
+  "bar.wireLight": "Traits clairs plutôt que sombres, pour un modèle sombre",
   "giz.translate": "Déplacer l'objet (G) — recliquer pour ranger les poignées",
   "giz.rotate": "Tourner l'objet (R) — recliquer pour ranger les poignées",
   "giz.scale": "Redimensionner l'objet (S) — recliquer pour ranger les poignées",
