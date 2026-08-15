@@ -1231,31 +1231,15 @@ details[open] summary::before { content: "▾ "; }
      These two hold everything that reads the variable. */
   #chrome, #inspector, #toast { --gap: 10px; }
   /*
-   * Full width, but only when the *window* is what is narrow.
+   * The panel stays docked at its own width, never full width.
    *
-   * A stage under 720px means one of two very different things. Either the
-   * window itself is small, and a 324px panel beside a 300px model is worth
-   * trading for a panel that takes the width; or the library is open and the
-   * user is dragging its edge, in which case the stage is small because they
-   * chose to give the space to the folder list. Making the panel fill in that
-   * second case is what put it in front of the viewport, glued to the library,
-   * growing as the model shrank: exactly the room they were taking back.
-   *
-   * So the strip keeps a panel of a fixed width, which is the one thing the
-   * preview needs to stay a preview.
+   * It used to fill the window when the window itself was narrow, sliding up
+   * from the bottom to cover the whole viewer. That left nothing to look at
+   * behind the panel, which is the exact thing a viewer panel should never take
+   * away: the model has to stay visible beside it. So the panel keeps its docked
+   * size here, whatever made the stage narrow, and the viewer gives up that
+   * width as it does in a wide window.
    */
-  body:not(.peeking) #inspector {
-    width: auto;
-    left: var(--gap);
-    transform: translateY(calc(100% + var(--gap)));
-  }
-  body:not(.peeking) #inspector.open { transform: none; }
-  body:not(.peeking).inspector .ov-tr { right: var(--gap); }
-  /* A panel that covers the model leaves nothing to look at behind it. In the
-     strip it covers nothing, so the chrome stays: hiding it there would take
-     away the bar of the very preview being looked at. */
-  body:not(.peeking).inspector #chrome { opacity: 0; pointer-events: none; }
-  body:not(.peeking).inspector .ov-tr { opacity: 1; pointer-events: auto; }
   #timeline { width: calc(100cqw - var(--gap) * 2); }
   .ov-br { display: none; }
   .ov-tl { max-width: calc(100cqw - 150px); }
