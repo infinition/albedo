@@ -204,6 +204,10 @@ invisible is the reusable part.
 - [x] French and English, one button away. The i18n module, the language
       toggle in the tab bar, and the toolbar, the panel and the whole inspector
       read their strings from the dictionaries.
+- [x] The Retopo mode in both languages too. Its markup, its report, the run
+      button, the scope sentences and every progress line: 137 keys, audited
+      both ways. They ship in the mode's own chunk rather than in the startup
+      dictionaries, which is what keeps a thumbnail job from parsing them.
 
 ### Next / Upcoming Features
 

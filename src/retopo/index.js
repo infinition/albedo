@@ -10,7 +10,21 @@ import { ICONS } from "./icons.js";
  * cannot end up driving two different copies of the same state.
  */
 import { selection } from "../selection.js";
+import { applyStaticIn, register, t } from "../i18n/index.js";
+import rtFr from "./fr.json";
+import rtEn from "./en.json";
 import "./retopo.css";
+
+/*
+ * This mode's strings live with this mode.
+ *
+ * Static imports, so they are part of this chunk and not of the startup one:
+ * the two dictionaries in `src/i18n` are loaded before the window exists, and
+ * putting a hundred and thirty seven retopology keys in them was sixteen
+ * kilobytes parsed by every Explorer thumbnail job. Registered at module scope
+ * so the first `t()` below already has them.
+ */
+register({ fr: rtFr, en: rtEn });
 
 /**
  * The Retopo mode.
@@ -55,17 +69,16 @@ const SHELL = `
 <div class="rt-split" data-el="splitLine" hidden><i></i></div>
 
 <div class="rt-bar" data-el="bar">
-  <label class="rt-switch" title="Reprojeter les textures de la source sur le résultat">
-    <input type="checkbox" data-el="bake" /><i></i><span>Projeter</span>
+  <label class="rt-switch" data-i18n-title="rt.projectTitle" title="Reprojeter les textures de la source sur le résultat">
+    <input type="checkbox" data-el="bake" /><i></i><span data-i18n="rt.project">Projeter</span>
   </label>
-  <button class="tb-i" type="button" data-el="undo" data-icon="undo" title="Annuler le dernier résultat" disabled></button>
-  <button class="tb-i" type="button" data-el="redo" data-icon="redo" title="Refaire" disabled></button>
+  <button class="tb-i" type="button" data-el="undo" data-icon="undo" data-i18n-title="rt.undo" title="Annuler le dernier résultat" disabled></button>
+  <button class="tb-i" type="button" data-el="redo" data-icon="redo" data-i18n-title="rt.redo" title="Refaire" disabled></button>
   <span class="rt-note" data-el="history"></span>
   <button class="wide" type="button" data-el="run">Décimer</button>
-  <button class="wide" type="button" data-el="rebake" disabled
-          title="Refaire seulement les cartes, sans retoucher la géométrie">Cuire</button>
+  <button class="wide" type="button" data-el="rebake" disabled>Cuire</button>
   <span class="rt-note" data-el="note"></span>
-  <button class="wide" type="button" data-el="close">Fermer</button>
+  <button class="wide" type="button" data-el="close" data-i18n="rt.close">Fermer</button>
   <div class="rt-progress"><i data-el="fill"></i></div>
 </div>
 `;
@@ -88,33 +101,33 @@ const SHELL = `
 /** Two data views, painted over the shaded render rather than replacing it. */
 const BAR_COLOUR = `
   <button class="tb-i" type="button" data-colour="charts" data-icon="charts" data-el="btnCharts" disabled
-          title="Îlots de l'atlas : une couleur par îlot d'UV"></button>
+          data-i18n-title="rt.chartsTitle" title="Îlots de l'atlas : une couleur par îlot d'UV"></button>
   <button class="tb-i" type="button" data-colour="deviation" data-icon="deviation" data-el="btnDeviation" disabled
-          title="Écart au modèle d'origine : du bleu au rouge"></button>
+          data-i18n-title="rt.deviationTitle" title="Écart au modèle d'origine : du bleu au rouge"></button>
 `;
 
 /** Two ways of looking through or at a surface, while judging its topology. */
 const BAR_LAYERS = `
   <button class="tb-i tb-t" type="button" data-el="opaque" data-icon="opaque" aria-pressed="false"
-          title="Forcer la surface opaque, pour que le fil de fer cesse de la traverser"></button>
+          data-i18n-title="rt.opaqueTitle" title="Forcer la surface opaque, pour que le fil de fer cesse de la traverser"></button>
   <button class="tb-i tb-t" type="button" data-el="xray" data-icon="xray" aria-pressed="false"
-          title="Rayons X : voir la face arrière au travers de la proche"></button>
+          data-i18n-title="rt.xrayTitle" title="Rayons X : voir la face arrière au travers de la proche"></button>
 `;
 
 /** A group of its own: what the viewport holds, source or result or both. */
 const BAR_SCENE = `
 <div class="tb-group">
-  <span class="tb-label">Scène</span>
+  <span class="tb-label" data-i18n="rt.scene">Scène</span>
   <div class="tb-row">
-    <div class="tb-plate" role="radiogroup" aria-label="Ce qui est dans la scène">
-      <button class="tb-i" type="button" data-ab="source" data-icon="cmpSource" title="La source seule"></button>
-      <button class="tb-i" type="button" data-ab="result" data-icon="cmpResult" title="Le résultat seul"></button>
-      <button class="tb-i active" type="button" data-ab="both" data-icon="cmpBoth" title="Les deux dans la scène"></button>
-      <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
-      <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" title="Fantôme : source en transparence sur le résultat"></button>
+    <div class="tb-plate" role="radiogroup" data-i18n-aria="rt.sceneAria" aria-label="Ce qui est dans la scène">
+      <button class="tb-i" type="button" data-ab="source" data-icon="cmpSource" data-i18n-title="rt.abSource" title="La source seule"></button>
+      <button class="tb-i" type="button" data-ab="result" data-icon="cmpResult" data-i18n-title="rt.abResult" title="Le résultat seul"></button>
+      <button class="tb-i active" type="button" data-ab="both" data-icon="cmpBoth" data-i18n-title="rt.abBoth" title="Les deux dans la scène"></button>
+      <button class="tb-i" type="button" data-ab="split" data-icon="cmpSplit" data-i18n-title="rt.abSplit" title="Rideau déplaçable : source à gauche, résultat à droite"></button>
+      <button class="tb-i" type="button" data-ab="ghost" data-icon="cmpGhost" data-i18n-title="rt.abGhost" title="Fantôme : source en transparence sur le résultat"></button>
     </div>
     <button class="tb-i tb-t" type="button" data-el="peek" data-icon="peek" aria-pressed="false"
-            title="Maintenir pour voir la source, relâcher pour le résultat (X)"></button>
+            data-i18n-title="rt.peekTitle" title="Maintenir pour voir la source, relâcher pour le résultat (X)"></button>
   </div>
 </div>
 `;
@@ -122,10 +135,10 @@ const BAR_SCENE = `
 /** The four numbers you check between every run. */
 const BAR_HUD = `
 <dl class="tb-counts" data-el="hud">
-  <div><dt>Source</dt><dd data-el="hudSource">—</dd></div>
-  <div><dt>Résultat</dt><dd data-el="hudResult">—</dd></div>
-  <div><dt>Réduction</dt><dd data-el="hudCut">—</dd></div>
-  <div><dt>Quads</dt><dd data-el="hudQuads">—</dd></div>
+  <div><dt data-i18n="rt.hudSource">Source</dt><dd data-el="hudSource">—</dd></div>
+  <div><dt data-i18n="rt.hudResult">Résultat</dt><dd data-el="hudResult">—</dd></div>
+  <div><dt data-i18n="rt.hudCut">Réduction</dt><dd data-el="hudCut">—</dd></div>
+  <div><dt data-i18n="rt.hudQuads">Quads</dt><dd data-el="hudQuads">—</dd></div>
 </dl>
 `;
 
@@ -145,16 +158,16 @@ const BAR_HUD = `
  */
 const PANEL = `
 <section data-el="resultSection" hidden>
-  <h2>Bilan</h2>
+  <h2 data-i18n="rt.reportTitle">Bilan</h2>
   <p class="rt-hint rt-err" data-el="err" hidden></p>
   <div data-el="report"></div>
   <div data-el="devTools" class="rt-off">
-    <p class="rt-sub">Échelle de l'écart</p>
+    <p class="rt-sub" data-i18n="rt.devScale">Échelle de l'écart</p>
     <label class="rt-field">
-      <span>Rouge à <span class="rt-num" data-el="devScaleValue">—</span></span>
+      <span><span data-i18n="rt.redAt">Rouge à</span> <span class="rt-num" data-el="devScaleValue">—</span></span>
       <input type="range" data-el="devScale" min="0.1" max="4" step="0.1" value="1" />
     </label>
-    <p class="rt-hint">Multiplicateur sur le pire écart du calcul, pas une
+    <p class="rt-hint" data-i18n="rt.devScaleHint">Multiplicateur sur le pire écart du calcul, pas une
       distance absolue : « de combien ça a bougé » ne veut dire quelque chose
       que rapporté à ce que ça pouvait bouger. À 1 la couleur la plus chaude
       tombe exactement sur le pire sommet ; en dessous la rampe sature et les
@@ -164,72 +177,72 @@ const PANEL = `
 </section>
 
 <section>
-  <h2>Méthode</h2>
-  <div class="segment" role="group" aria-label="Méthode">
-    <button class="seg active" type="button" data-el="mDecimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
-    <button class="seg" type="button" data-el="mIsotropic" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
+  <h2 data-i18n="rt.method">Méthode</h2>
+  <div class="segment" role="group" data-i18n-aria="rt.method" aria-label="Méthode">
+    <button class="seg active" type="button" data-el="mDecimate" data-i18n-title="rt.decimateTitle" data-i18n="rt.decimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
+    <button class="seg" type="button" data-el="mIsotropic" data-i18n-title="rt.rebuildTitle" data-i18n="rt.rebuild" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
   </div>
   <label class="rt-field">
-    <span>Triangles <span class="rt-num" data-el="targetValue">—</span></span>
+    <span><span data-i18n="rt.triangles">Triangles</span> <span class="rt-num" data-el="targetValue">—</span></span>
     <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
   </label>
   <p class="rt-hint" data-el="methodHint"></p>
 
-  <p class="rt-sub">Déviation maximum</p>
+  <p class="rt-sub" data-i18n="rt.maxDev">Déviation maximum</p>
   <label class="rt-field">
-    <span>Plafond <span class="rt-num" data-el="maxErrorValue">aucun</span></span>
+    <span><span data-i18n="rt.cap">Plafond</span> <span class="rt-num" data-el="maxErrorValue">aucun</span></span>
     <input type="range" data-el="maxError" min="0" max="50" step="1" value="0" />
   </label>
-  <p class="rt-hint">La deuxième condition d'arrêt, et celle qui compte quand
+  <p class="rt-hint" data-i18n="rt.maxDevHint">La deuxième condition d'arrêt, et celle qui compte quand
     on cherche une qualité plutôt qu'un budget : la décimation s'arrête quand
     la prochaine fusion déplacerait la surface de plus que ça. C'est la
     différence entre « fais-en 5 000 triangles » et « fais-le aussi petit que
     possible sans que ça se voie ». À zéro, seul le budget décide.</p>
 
-  <p class="rt-sub">Portée</p>
-  <div class="segment" role="group" aria-label="Portée">
-    <button class="seg active" type="button" data-scope="all" title="Tout le modèle">Tout</button>
-    <button class="seg" type="button" data-scope="visible" title="Seulement ce qui n'est pas masqué dans l'onglet Scène">Visible</button>
-    <button class="seg" type="button" data-scope="picked" title="Seulement ce qui est sélectionné dans l'onglet Scène">Sélection</button>
+  <p class="rt-sub" data-i18n="rt.scope">Portée</p>
+  <div class="segment" role="group" data-i18n-aria="rt.scope" aria-label="Portée">
+    <button class="seg active" type="button" data-scope="all" data-i18n-title="rt.scopeAllTitle" data-i18n="rt.scopeAll" title="Tout le modèle">Tout</button>
+    <button class="seg" type="button" data-scope="visible" data-i18n-title="rt.scopeVisibleTitle" data-i18n="rt.scopeVisible" title="Seulement ce qui n'est pas masqué dans l'onglet Scène">Visible</button>
+    <button class="seg" type="button" data-scope="picked" data-i18n-title="rt.scopePickedTitle" data-i18n="rt.scopePicked" title="Seulement ce qui est sélectionné dans l'onglet Scène">Sélection</button>
   </div>
   <p class="rt-hint" data-el="scopeHint"></p>
 
-  <p class="rt-sub">Quads</p>
-  <label class="rt-check"><input type="checkbox" data-el="quads" /><span>Apparier les triangles en quads</span></label>
-  <p class="rt-hint">glTF n'a pas de quads, donc l'appairage voyage à côté du
+  <p class="rt-sub" data-i18n="rt.quadsTitle">Quads</p>
+  <label class="rt-check"><input type="checkbox" data-el="quads" /><span data-i18n="rt.pairQuads">Apparier les triangles en quads</span></label>
+  <p class="rt-hint" data-i18n="rt.quadsHint">glTF n'a pas de quads, donc l'appairage voyage à côté du
     fichier comme un masque de diagonale, un entier par triangle.</p>
 </section>
 
 <section>
-  <h2>Nettoyage</h2>
-  <label class="rt-check"><input type="checkbox" data-el="holes" /><span>Combler les trous d'abord</span></label>
-  <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span>Épingler les bords ouverts</span></label>
+  <h2 data-i18n="rt.cleanup">Nettoyage</h2>
+  <label class="rt-check"><input type="checkbox" data-el="holes" /><span data-i18n="rt.fillHoles">Combler les trous d'abord</span></label>
+  <label class="rt-check"><input type="checkbox" data-el="boundary" checked /><span data-i18n="rt.pinBoundary">Épingler les bords ouverts</span></label>
   <label class="rt-field">
-    <span>Angle de pli <span class="rt-num" data-el="angleValue">40°</span></span>
+    <span><span data-i18n="rt.creaseAngle">Angle de pli</span> <span class="rt-num" data-el="angleValue">40°</span></span>
     <input type="range" data-el="angle" min="5" max="90" step="1" value="40" />
   </label>
   <label class="rt-field">
-    <span>Coût d'une couture <span class="rt-num" data-el="seamValue">4</span></span>
+    <span><span data-i18n="rt.seamCost">Coût d'une couture</span> <span class="rt-num" data-el="seamValue">4</span></span>
     <input type="range" data-el="seam" min="0" max="20" step="1" value="4" />
   </label>
-  <p class="rt-hint">Une arête plus pliée que l'angle compte comme un pli et
+  <p class="rt-hint" data-i18n="rt.creaseHint">Une arête plus pliée que l'angle compte comme un pli et
     résiste. Le coût d'une couture protège les bords d'UV, dont la rupture se
     voit dans la texture bien avant de se voir dans la forme.</p>
 
-  <p class="rt-sub">Lissage</p>
+  <p class="rt-sub" data-i18n="rt.smoothing">Lissage</p>
   <label class="rt-field">
-    <span>Passes <span class="rt-num" data-el="relaxValue">0</span></span>
+    <span><span data-i18n="rt.passes">Passes</span> <span class="rt-num" data-el="relaxValue">0</span></span>
     <input type="range" data-el="relax" min="0" max="10" step="1" value="0" />
   </label>
   <label class="rt-field">
-    <span>Force <span class="rt-num" data-el="relaxStrengthValue">0.50</span></span>
+    <span><span data-i18n="rt.strength">Force</span> <span class="rt-num" data-el="relaxStrengthValue">0.50</span></span>
     <input type="range" data-el="relaxStrength" min="0.05" max="1" step="0.05" value="0.5" />
   </label>
   <label class="rt-field">
-    <span>Angle de pli du lissage <span class="rt-num" data-el="relaxAngleValue">75°</span></span>
+    <span><span data-i18n="rt.smoothAngle">Angle de pli du lissage</span> <span class="rt-num" data-el="relaxAngleValue">75°</span></span>
     <input type="range" data-el="relaxAngle" min="20" max="150" step="5" value="75" />
   </label>
-  <p class="rt-hint">Chaque passe est reprojetée sur la source, sinon une sphère
+  <p class="rt-hint" data-i18n="rt.smoothHint">Chaque passe est reprojetée sur la source, sinon une sphère
     dégonfle un peu à chaque fois. Cet angle n'est pas celui du dessus, et c'est
     voulu : un maillage réduit cinquante fois est facetté partout, donc l'angle
     qui veut dire « pli » pour un décimateur veut dire « tout le modèle » pour
@@ -237,39 +250,39 @@ const PANEL = `
 </section>
 
 <section>
-  <h2>Cartes</h2>
-  <p class="rt-hint">Le maillage réduit porte encore la disposition d'UV de
+  <h2 data-i18n="rt.maps">Cartes</h2>
+  <p class="rt-hint" data-i18n="rt.mapsHint">Le maillage réduit porte encore la disposition d'UV de
     l'original, et passé un certain point cette disposition ne décrit plus la
     surface sur laquelle elle est posée. L'interrupteur est dans la barre du
     bas, à côté du bouton dont il change le coût.</p>
 
   <div data-el="bakeTools">
     <label class="rt-field">
-      <span>Taille de l'atlas <span class="rt-num" data-el="mapSizeValue">2048</span></span>
+      <span><span data-i18n="rt.atlasSize">Taille de l'atlas</span> <span class="rt-num" data-el="mapSizeValue">2048</span></span>
       <input type="range" data-el="mapSize" min="8" max="13" step="1" value="11" />
     </label>
 
-    <p class="rt-sub">Cartes produites</p>
-    <label class="rt-check"><input type="checkbox" checked disabled /><span>Couleur de base</span></label>
-    <label class="rt-check"><input type="checkbox" data-el="mMR" checked /><span>Métal et rugosité</span></label>
-    <label class="rt-check"><input type="checkbox" data-el="mNormal" checked /><span>Normale</span></label>
-    <label class="rt-check"><input type="checkbox" data-el="mEmissive" checked /><span>Émissif</span></label>
-    <label class="rt-check"><input type="checkbox" data-el="mAo" /><span>Occlusion ambiante</span></label>
-    <p class="rt-hint">La couleur de base seule ne suffit pas : sans métal ni
+    <p class="rt-sub" data-i18n="rt.mapsMade">Cartes produites</p>
+    <label class="rt-check"><input type="checkbox" checked disabled /><span data-i18n="rt.baseColor">Couleur de base</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mMR" checked /><span data-i18n="rt.metalRough">Métal et rugosité</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mNormal" checked /><span data-i18n="rt.normalMap">Normale</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mEmissive" checked /><span data-i18n="rt.emissive">Émissif</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="mAo" /><span data-i18n="rt.ao">Occlusion ambiante</span></label>
+    <p class="rt-hint" data-i18n="rt.mapsChoiceHint">La couleur de base seule ne suffit pas : sans métal ni
       rugosité, tout le résultat hérite d'une seule paire de scalaires, et une
       boucle en laiton sur un manche en bois revient en bois mat. L'émissif est
       abandonné tout seul quand rien n'émet.</p>
 
     <div data-el="aoTools">
       <label class="rt-field">
-        <span>Rayons par texel <span class="rt-num" data-el="aoSamplesValue">16</span></span>
+        <span><span data-i18n="rt.raysPerTexel">Rayons par texel</span> <span class="rt-num" data-el="aoSamplesValue">16</span></span>
         <input type="range" data-el="aoSamples" min="4" max="128" step="4" value="16" />
       </label>
       <label class="rt-field">
-        <span>Portée de l'occlusion <span class="rt-num" data-el="aoDistanceValue">0.15</span></span>
+        <span><span data-i18n="rt.aoDistance">Portée de l'occlusion</span> <span class="rt-num" data-el="aoDistanceValue">0.15</span></span>
         <input type="range" data-el="aoDistance" min="0.01" max="1" step="0.01" value="0.15" />
       </label>
-      <p class="rt-hint">Courte, seuls les creux s'assombrissent ; longue, toute
+      <p class="rt-hint" data-i18n="rt.aoHint">Courte, seuls les creux s'assombrissent ; longue, toute
         la silhouette s'ombre elle-même. La séquence de tirage est déterministe,
         donc comparer deux réglages n'est pas une devinette.</p>
     </div>
@@ -277,37 +290,37 @@ const PANEL = `
 </section>
 
 <section>
-  <h2>Atlas</h2>
+  <h2 data-i18n="rt.atlas">Atlas</h2>
   <div data-el="atlasTools">
-    <p class="rt-sub">Cage</p>
-    <label class="rt-check"><input type="checkbox" data-el="showCage" /><span>Dessiner la cage</span></label>
-    <p class="rt-hint">Une distance de cage ne veut rien dire tant qu'on n'a pas
+    <p class="rt-sub" data-i18n="rt.cage">Cage</p>
+    <label class="rt-check"><input type="checkbox" data-el="showCage" /><span data-i18n="rt.drawCage">Dessiner la cage</span></label>
+    <p class="rt-hint" data-i18n="rt.cageHint">Une distance de cage ne veut rien dire tant qu'on n'a pas
       vu la coque qu'elle décrit : trop courte, les rayons manquent ce qui
       dépasse du maillage réduit ; trop longue, ils vont chercher la pièce d'à
       côté et cuisent un chambranle sur une porte.</p>
     <label class="rt-field">
-      <span>Vers l'extérieur <span class="rt-num" data-el="cageOutValue">0.020</span></span>
+      <span><span data-i18n="rt.cageOut">Vers l'extérieur</span> <span class="rt-num" data-el="cageOutValue">0.020</span></span>
       <input type="range" data-el="cageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
     </label>
     <label class="rt-field">
-      <span>Vers l'intérieur <span class="rt-num" data-el="cageInValue">0.020</span></span>
+      <span><span data-i18n="rt.cageIn">Vers l'intérieur</span> <span class="rt-num" data-el="cageInValue">0.020</span></span>
       <input type="range" data-el="cageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
     </label>
 
-    <p class="rt-sub">Atlas</p>
+    <p class="rt-sub" data-i18n="rt.atlas">Atlas</p>
     <label class="rt-field">
-      <span>Écart entre îlots <span class="rt-num" data-el="gutterValue">4</span></span>
+      <span><span data-i18n="rt.gutter">Écart entre îlots</span> <span class="rt-num" data-el="gutterValue">4</span></span>
       <input type="range" data-el="gutter" min="0" max="32" step="1" value="4" />
     </label>
     <label class="rt-field">
-      <span>Bavure hors des îlots <span class="rt-num" data-el="bleedValue">8</span></span>
+      <span><span data-i18n="rt.bleed">Bavure hors des îlots</span> <span class="rt-num" data-el="bleedValue">8</span></span>
       <input type="range" data-el="bleed" min="0" max="32" step="1" value="8" />
     </label>
     <label class="rt-field">
-      <span>Angle de rupture d'îlot <span class="rt-num" data-el="islandValue">50°</span></span>
+      <span><span data-i18n="rt.islandAngle">Angle de rupture d'îlot</span> <span class="rt-num" data-el="islandValue">50°</span></span>
       <input type="range" data-el="island" min="10" max="120" step="1" value="50" />
     </label>
-    <p class="rt-hint">Ce sont deux choses différentes et les deux comptent :
+    <p class="rt-hint" data-i18n="rt.atlasHint">Ce sont deux choses différentes et les deux comptent :
       l'écart est du vide entre les îlots pour qu'aucun niveau de mip ne les
       mélange, la bavure est de la couleur peinte au-delà de chaque bord pour
       que le filtrage n'aille jamais chercher le fond.</p>
@@ -414,8 +427,45 @@ export function createRetopo({
     }
   }
 
+  /**
+   * This mode's own three roots, translated.
+   *
+   * Not `applyStatic`, which walks the document: none of these markup blocks
+   * were in the document when the language was chosen. The pane and the shell
+   * arrive with the lazy chunk, long after startup, and `held` is a detached div
+   * that keeps the lent bar groups whenever the mode is closed. Called once now
+   * so a window already switched to English does not open a French panel, and
+   * again on every toggle for as long as the module is loaded.
+   */
+  const translate = () => {
+    for (const root of [host, pane, held]) applyStaticIn(root);
+  };
+  translate();
+  /*
+   * On a language change, the markup is only half the screen.
+   *
+   * The run button's label, the method explanation, the scope sentence, the
+   * reason a dead button is dead and the whole report are written by this
+   * module, so no attribute can carry them and `applyStaticIn` cannot reach
+   * them. They are repainted from the functions that produce them, which is the
+   * only way they cannot drift from what a fresh run would say.
+   *
+   * Only on the event, never at setup: everything named here is declared below
+   * and would still be in its dead zone at this point in the file.
+   */
+  window.addEventListener("i18n", () => {
+    translate();
+    el.run.textContent = runLabel();
+    el.methodHint.textContent = t(METHOD_HINT[method]);
+    paintScope();
+    refresh();
+    if (lastReport) reportOn(lastReport.r, lastReport.bakeOnly);
+  });
+
   let source = 0;
   let last = null;
+  /** The arguments the report was last drawn from, so it can be redrawn. */
+  let lastReport = null;
   let running = false;
   let open = false;
   let method = "decimate";
@@ -439,15 +489,7 @@ export function createRetopo({
   /** Index of the result currently in the scene, or -1 for the bare source. */
   let cursor = -1;
 
-  const METHOD_HINT = {
-    decimate:
-      "L'erreur quadrique met les triangles là où la silhouette en a besoin, pas " +
-      "régulièrement. C'est ce que veut un accessoire figé.",
-    isotropic:
-      "Des arêtes de longueur égale et une valence de six, ce qui donne des boucles " +
-      "prévisibles autour d'une articulation. C'est ce que veut un modèle qui va se " +
-      "déformer ou se subdiviser, et c'est aussi ce dont l'appairage en quads a besoin.",
-  };
+  const METHOD_HINT = { decimate: "rt.hintDecimate", isotropic: "rt.hintIsotropic" };
 
   /** The drawn bake cage, rebuilt with each result. */
   let cage = null;
@@ -509,7 +551,7 @@ export function createRetopo({
     const f = Number(el.devScale.value);
     wireU.uDevScale.value = devMax > 0 ? f / devMax : 0;
     el.devScaleValue.textContent = devMax > 0
-      ? `${(devMax / f).toPrecision(3)} unité`
+      ? `${(devMax / f).toPrecision(3)} ${t("rt.unit")}`
       : "—";
     viewer.invalidate?.();
   }
@@ -600,17 +642,28 @@ export function createRetopo({
    */
   const say2 = (text) => text && toast?.(text);
 
-  const LABELS = {
-    charts: "Îlots de l'atlas",
-    deviation: "Écart au modèle d'origine",
-  };
+  /**
+   * Un nombre et sa phrase, au singulier ou au pluriel.
+   *
+   * Deux cles plutot qu'un accord calcule : le francais accorde trois mots dans
+   * « 2 elements selectionnes » et l'anglais un seul, donc une regle qui marche
+   * dans une langue produit une faute dans l'autre. Ecrire les deux phrases est
+   * plus court que la regle qui les rate.
+   */
+  const plural = (key, n) => t(n > 1 ? key + "N" : key).replace("{n}", fr(n));
+
+  /** Where the history cursor is, in words. */
+  const resultOf = () =>
+    t("rt.resultOf").replace("{n}", String(cursor + 1)).replace("{total}", String(history.length));
+
+  const LABELS = { charts: "rt.chartsLabel", deviation: "rt.deviationLabel" };
 
   const AB_LABELS = {
-    source: "Source seule",
-    result: "Résultat seul",
-    both: "Source et résultat",
-    split: "Rideau : glisse la ligne",
-    ghost: "Fantôme : source en transparence",
+    source: "rt.abSourceSay",
+    result: "rt.abResultSay",
+    both: "rt.abBothSay",
+    split: "rt.abSplitSay",
+    ghost: "rt.abGhostSay",
   };
 
   /**
@@ -630,7 +683,7 @@ export function createRetopo({
     wireU.uView.value = COLOUR_VIEWS[name] || 0;
     applyChannel?.("shaded");
     viewer.invalidate?.();
-    say2(LABELS[name] || name);
+    say2(LABELS[name] ? t(LABELS[name]) : name);
   }
 
   for (const b of held.querySelectorAll("[data-colour]")) {
@@ -721,7 +774,7 @@ export function createRetopo({
       }
     });
     viewer.invalidate?.();
-    say2(on ? "Surface forcée opaque" : "Transparence du modèle rendue");
+    say2(t(on ? "rt.opaqueOn" : "rt.opaqueOff"));
   });
 
   el.xray.addEventListener("click", () => {
@@ -861,8 +914,8 @@ export function createRetopo({
       // picture. Saying so beats letting someone click all five and conclude the
       // buttons are dead.
       say2(parts.length > 1
-        ? AB_LABELS[b.dataset.ab]
-        : "Rien à comparer tant qu'il n'y a pas de résultat");
+        ? t(AB_LABELS[b.dataset.ab])
+        : t("rt.nothingToCompare"));
     });
   }
 
@@ -985,7 +1038,7 @@ export function createRetopo({
     method = next;
     el.mDecimate.classList.toggle("active", next === "decimate");
     el.mIsotropic.classList.toggle("active", next === "isotropic");
-    el.methodHint.textContent = METHOD_HINT[next];
+    el.methodHint.textContent = t(METHOD_HINT[next]);
     paint();
   }
 
@@ -1004,7 +1057,7 @@ export function createRetopo({
     el.mapSizeValue.textContent = String(mapSize());
     // Zéro veut dire « pas de plafond », ce qui est un mot et pas un nombre.
     const cap = Number(el.maxError.value);
-    el.maxErrorValue.textContent = cap === 0 ? "aucun" : `${(cap / 1000).toFixed(3)}`;
+    el.maxErrorValue.textContent = cap === 0 ? t("rt.none") : `${(cap / 1000).toFixed(3)}`;
     el.relaxStrengthValue.textContent = Number(el.relaxStrength.value).toFixed(2);
     el.cageOutValue.textContent = Number(el.cageOut.value).toFixed(3);
     el.cageInValue.textContent = Number(el.cageIn.value).toFixed(3);
@@ -1036,27 +1089,28 @@ export function createRetopo({
     // Never disabled while running: it is the cancel button then.
     el.run.disabled = running ? false : source === 0 || !tauri;
     el.run.title = running
-      ? "Tuer le calcul en cours"
+      ? t("rt.killRun")
       : source === 0
-        ? "Ouvre un modèle d'abord"
+        ? t("rt.openFirst")
         : "";
     paintHistory();
     el.rebake.disabled = !lastRun || running || !tauri;
     el.rebake.title = lastRun
-      ? "Refaire seulement les cartes, sans retoucher la géométrie"
-      : "Il faut un résultat avant de pouvoir le cuire";
+      ? t("rt.rebakeTitle")
+      : t("rt.rebakeNeedsResult");
 
     // A dead button should say why it is dead, in the bar rather than in a
     // tooltip nobody hovers. "Nothing happens" is not a diagnosis anyone should
     // have to make from the outside.
     if (!running) {
       const why = !tauri
-        ? "Pont natif absent : ouvert hors de l'application."
+        ? t("rt.noBridge")
         : source === 0
-          ? "Aucun modèle chargé."
+          ? t("rt.noModel")
           : "";
-      if (why || el.note.textContent.startsWith("Aucun") || el.note.textContent.startsWith("Pont")) {
+      if (why || el.note.dataset.why === "1") {
         say(why);
+        if (why) el.note.dataset.why = "1";
       }
     }
 
@@ -1066,8 +1120,8 @@ export function createRetopo({
     el.sourceNote.textContent = !source
       ? ""
       : isGltf(p)
-        ? "Le moteur lira le fichier d'origine directement."
-        : "La scène sera exportée en glTF avant d'être lue, ce qui prend un moment sur un gros modèle.";
+        ? t("rt.readsDirectly")
+        : t("rt.willExport");
     paint();
   }
 
@@ -1156,8 +1210,8 @@ export function createRetopo({
   }
 
   const runLabel = () => {
-    const verb = method === "isotropic" ? "Reconstruire" : "Décimer";
-    return el.bake.checked ? `${verb} et projeter` : verb;
+    const verb = t(method === "isotropic" ? "rt.rebuild" : "rt.decimate");
+    return el.bake.checked ? `${verb} ${t("rt.andProject")}` : verb;
   };
 
   /** The bake half of the request, shared by a full run and a bake on its own. */
@@ -1186,6 +1240,11 @@ export function createRetopo({
    * collapse unless the numbers are on screen.
    */
   function reportOn(r, bakeOnly = false) {
+    // Kept so a language change can rewrite the same report rather than an
+    // approximation of it: a bake and a decimation do not have the same rows,
+    // and replaying one as the other would put invented geometry numbers on a
+    // run that never touched the geometry.
+    lastReport = { r, bakeOnly };
     /*
      * Rows, not a paragraph.
      *
@@ -1198,32 +1257,32 @@ export function createRetopo({
     const add = (label, value, tone = "") => rows.push({ label, value, tone });
 
     if (!bakeOnly) {
-      add("Triangles", `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)}`);
-      add("Réduction", `${(100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(1)} %`, "good");
-      add("Durée", `${(r.millis / 1000).toFixed(2)} s`);
-      add("Déviation max", `${r.deviationMax.toPrecision(3)} unité`);
+      add(t("rt.triangles"), `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)}`);
+      add(t("rt.hudCut"), `${(100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(1)} %`, "good");
+      add(t("rt.duration"), `${(r.millis / 1000).toFixed(2)} s`);
+      add(t("rt.maxDeviation"), `${r.deviationMax.toPrecision(3)} ${t("rt.unit")}`);
       if (r.holesFilled || r.holesLeft) {
-        add("Trous comblés", fr(r.holesFilled));
+        add(t("rt.holesFilled"), fr(r.holesFilled));
         // A hole left open is one the bake will project straight through.
-        if (r.holesLeft) add("Trous laissés", fr(r.holesLeft), "warn");
+        if (r.holesLeft) add(t("rt.holesLeft"), fr(r.holesLeft), "warn");
       }
-      if (r.collapses) add("Fusions", fr(r.collapses));
+      if (r.collapses) add(t("rt.collapses"), fr(r.collapses));
       // A large refusal count next to a barely moved triangle count is a guard
       // firing on every candidate, and it looks exactly like a mesh that had
       // nothing left to collapse unless the numbers are side by side.
-      if (r.rejectedTopology) add("Refus topologie", fr(r.rejectedTopology), r.rejectedTopology > r.collapses ? "warn" : "");
-      if (r.rejectedFlip) add("Refus retournement", fr(r.rejectedFlip), r.rejectedFlip > r.collapses ? "warn" : "");
+      if (r.rejectedTopology) add(t("rt.rejectedTopology"), fr(r.rejectedTopology), r.rejectedTopology > r.collapses ? "warn" : "");
+      if (r.rejectedFlip) add(t("rt.rejectedFlip"), fr(r.rejectedFlip), r.rejectedFlip > r.collapses ? "warn" : "");
       // The mean, never the worst: the worst triangle sits on a crease, which
       // relaxation pins on purpose, so it barely moves even when the mesh
       // improved everywhere else.
       if (r.aspectAfter > 0) {
-        add("Rapport d'aspect moyen", `${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}`,
+        add(t("rt.aspect"), `${r.aspectBefore.toFixed(2)} → ${r.aspectAfter.toFixed(2)}`,
             r.aspectAfter < r.aspectBefore ? "good" : "");
       }
-      if (r.quads) add("Quads", `${fr(r.quads)} · ${(r.quadFraction * 100).toFixed(0)} %`, "good");
+      if (r.quads) add(t("rt.hudQuads"), `${fr(r.quads)} · ${(r.quadFraction * 100).toFixed(0)} %`, "good");
     } else {
-      add("Cuisson", `${(r.millis / 1000).toFixed(2)} s`);
-      add("Géométrie", "inchangée");
+      add(t("rt.bakeTime"), `${(r.millis / 1000).toFixed(2)} s`);
+      add(t("rt.geometry"), t("rt.unchanged"));
     }
 
     let atlas = [];
@@ -1231,15 +1290,15 @@ export function createRetopo({
       const total = r.hits + r.misses;
       const miss = total ? (r.misses / total) * 100 : 0;
       atlas = [
-        { label: "Îlots", value: fr(r.charts), tone: "" },
-        { label: "Occupation", value: `${(r.utilisation * 100).toFixed(0)} %`,
+        { label: t("rt.islands"), value: fr(r.charts), tone: "" },
+        { label: t("rt.utilisation"), value: `${(r.utilisation * 100).toFixed(0)} %`,
           tone: r.utilisation > 0.6 ? "good" : "warn" },
         // A miss is a ray that fell back to the nearest surface point instead of
         // finding the high poly. A few are normal; a lot means the cage is too
         // tight for this pair of meshes.
-        { label: "Rayons manqués", value: `${miss.toFixed(1)} %`,
+        { label: t("rt.missedRays"), value: `${miss.toFixed(1)} %`,
           tone: miss > 15 ? "bad" : miss > 6 ? "warn" : "good" },
-        { label: "Cartes", value: r.maps.join(", "), tone: "" },
+        { label: t("rt.maps"), value: r.maps.join(", "), tone: "" },
       ];
     }
 
@@ -1249,7 +1308,7 @@ export function createRetopo({
     el.report.innerHTML =
       `<div class="rt-stats">${paint(rows)}</div>` +
       (atlas.length
-        ? `<p class="rt-stats-head">Atlas</p><div class="rt-stats">${paint(atlas)}</div>`
+        ? `<p class="rt-stats-head">${t("rt.atlas")}</p><div class="rt-stats">${paint(atlas)}</div>`
         : "");
     showReport();
   }
@@ -1272,6 +1331,11 @@ export function createRetopo({
   /** The bar, the fill and the note, in one place so they cannot disagree. */
   function say(text, fraction) {
     el.note.textContent = text || "";
+    // Whoever writes the note owns it. `refresh` re-marks it straight after
+    // when the text is its own, so "may I clear this" stays a question about
+    // who wrote the line. It used to be answered by matching the first word of
+    // it, which stopped working the moment the line could be in two languages.
+    delete el.note.dataset.why;
     el.bar.classList.toggle("busy", running);
     if (typeof fraction === "number") el.fill.style.width = `${Math.round(fraction * 100)}%`;
   }
@@ -1291,7 +1355,7 @@ export function createRetopo({
     // red and shouting about it would be reporting their own decision back to
     // them as a fault.
     if (text.trim() === "annulé") {
-      say("Calcul annulé.");
+      say(t("rt.cancelled"));
       return;
     }
     console.error("[retopo]", e);
@@ -1299,7 +1363,7 @@ export function createRetopo({
     el.err.hidden = false;
     showReport();
     say("");
-    toast?.("La retopologie a échoué", 2600);
+    toast?.(t("rt.failed"), 2600);
   }
 
   /**
@@ -1410,7 +1474,7 @@ export function createRetopo({
     // carries the whole model: a restricted run has to go through the exporter.
     if (isGltf(p) && scope === "all") return p;
 
-    say("Export de la scène…", 0);
+    say(t("rt.exporting"), 0);
     // The group, not the object inside it: the orientation buttons and the edit
     // handles both write to the group.
     const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
@@ -1441,19 +1505,19 @@ export function createRetopo({
       el.rebake.disabled = true;
       el.err.hidden = true;
       el.fill.style.width = "0%";
-      say("Préparation…", 0);
+      say(t("rt.preparing"), 0);
       onBusy?.(true);
 
       const dirs = await tauri.core.invoke("retopo_workdir");
       const input = await inputFor(dirs);
 
-      const verb = method === "isotropic" ? "Reconstruction" : "Décimation";
+      const verb = t(method === "isotropic" ? "rt.rebuilding" : "rt.decimating");
       say(`${verb}…`, 0);
       stop = await tauri.event.listen("retopo://progress", (e) => {
         const f = e.payload || 0;
         // The engine apportions its own bar by what each stage costs, so the
         // wording follows the fraction rather than being timed here.
-        const what = !el.bake.checked || f < 0.5 ? verb : "Projection des textures";
+        const what = !el.bake.checked || f < 0.5 ? verb : t("rt.projecting");
         say(`${what}… ${Math.round(f * 100)} %`, f);
       });
 
@@ -1477,7 +1541,7 @@ export function createRetopo({
         },
       });
 
-      say("Chargement du résultat…", 1);
+      say(t("rt.loadingResult"), 1);
       // The previous result leaves before the new one arrives. Without this a
       // second run stacked a second low poly on the first, so the scene held
       // three meshes claiming to be two and every count above was a lie.
@@ -1497,7 +1561,7 @@ export function createRetopo({
       reportOn(r);
 
       const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
-      toast?.(`${fr(r.outputTriangles)} triangles, ${cut} % de moins`);
+      toast?.(t("rt.ranTriangles").replace("{n}", fr(r.outputTriangles)).replace("{cut}", cut));
       say("");
     } catch (e) {
       fail(e);
@@ -1530,13 +1594,13 @@ export function createRetopo({
       el.rebake.disabled = true;
       el.err.hidden = true;
       el.fill.style.width = "0%";
-      say("Projection des textures…", 0);
+      say(`${t("rt.projecting")}…`, 0);
       onBusy?.(true);
 
       const dirs = await tauri.core.invoke("retopo_workdir");
       stop = await tauri.event.listen("retopo://progress", (e) => {
         const f = e.payload || 0;
-        say(`Projection des textures… ${Math.round(f * 100)} %`, f);
+        say(`${t("rt.projecting")}… ${Math.round(f * 100)} %`, f);
       });
 
       const r = await tauri.core.invoke("retopo_bake", {
@@ -1546,7 +1610,7 @@ export function createRetopo({
         request: bakeRequest(),
       });
 
-      say("Chargement du résultat…", 1);
+      say(t("rt.loadingResult"), 1);
       /*
        * A bake replaces the result; it does not add one.
        *
@@ -1564,7 +1628,7 @@ export function createRetopo({
       if (cursor >= 0) history[cursor] = { ...history[cursor], path: dirs.rebake };
       last = { ...last, ...r, outputTriangles: r.outputTriangles || last.outputTriangles };
       reportOn(r, true);
-      toast?.(`Cartes refaites en ${(r.millis / 1000).toFixed(1)} s`);
+      toast?.(t("rt.rebaked").replace("{s}", (r.millis / 1000).toFixed(1)));
       say("");
     } catch (e) {
       fail(e);
@@ -1602,13 +1666,13 @@ export function createRetopo({
     el.scopeHint.textContent =
       scope === "picked"
         ? n
-          ? `${n} élément${n > 1 ? "s" : ""} sélectionné${n > 1 ? "s" : ""} dans l'onglet Scène.`
-          : "Rien de sélectionné dans l'onglet Scène : la portée ne change rien."
+          ? plural("rt.scopeHintPicked", n)
+          : t("rt.scopeHintPickedNone")
         : scope === "visible"
           ? hidden
-            ? `${hidden} matière${hidden > 1 ? "s" : ""} masquée${hidden > 1 ? "s" : ""}, laissée${hidden > 1 ? "s" : ""} tranquille.`
-            : "Aucune matière masquée : la portée ne change rien."
-          : "Tout le modèle, sans exception.";
+            ? plural("rt.scopeHintVisible", hidden)
+            : t("rt.scopeHintVisibleNone")
+          : t("rt.scopeHintAll");
   }
 
   for (const b of pane.querySelectorAll("[data-scope]")) {
@@ -1621,11 +1685,11 @@ export function createRetopo({
 
   el.undo.addEventListener("click", async () => {
     await step(-1);
-    say2(cursor < 0 ? "Retour au modèle d'origine" : `Résultat ${cursor + 1} sur ${history.length}`);
+    say2(cursor < 0 ? t("rt.backToSource") : resultOf());
   });
   el.redo.addEventListener("click", async () => {
     await step(1);
-    say2(`Résultat ${cursor + 1} sur ${history.length}`);
+    say2(resultOf());
   });
 
   el.devScale.addEventListener("input", syncDevScale);
@@ -1633,8 +1697,8 @@ export function createRetopo({
   el.showCage.addEventListener("change", () => {
     syncCage();
     say2(el.showCage.checked
-      ? cage ? "Cage affichée" : "La cage a besoin d'un résultat"
-      : "Cage masquée");
+      ? cage ? t("rt.cageOn") : t("rt.cageNeedsResult")
+      : t("rt.cageOff"));
   });
   el.cageOut.addEventListener("input", syncCage);
 

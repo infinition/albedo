@@ -33,6 +33,25 @@ export function currentLang() {
   return lang;
 }
 
+/**
+ * Fold another module's dictionary into these ones.
+ *
+ * A mode that arrives as a lazy chunk brings its own strings with it. Leaving
+ * them in the two startup dictionaries measurably broke the rule this whole
+ * application is built around: `fr.json` and `en.json` are imported at startup,
+ * so the retopology prose, hint paragraphs and all, was parsed by every process
+ * that opened the window, including every Explorer thumbnail job. Sixteen
+ * kilobytes of it, for a mode most of those processes never reach.
+ *
+ * The keys travel with the code that says them instead, and land here the
+ * moment that code is loaded.
+ */
+export function register(tables) {
+  for (const [l, table] of Object.entries(tables)) {
+    if (D[l]) Object.assign(D[l], table);
+  }
+}
+
 /** The string for the current language, French when the key is missing. */
 export function t(key) {
   const s = D[lang]?.[key];
@@ -50,18 +69,31 @@ export function initLang() {
   document.documentElement.lang = lang;
 }
 
-/** Re-read every static string in the markup. */
-export function applyStatic() {
-  for (const el of document.querySelectorAll("[data-i18n]")) {
+/**
+ * Re-read every static string under one root.
+ *
+ * A root rather than the document, because not every surface is in the
+ * document. A mode that arrives as a lazy chunk builds its markup long after
+ * startup, and the groups it lends the shared bar sit in a detached div while
+ * the mode is closed: `document.querySelectorAll` cannot see either, so both
+ * would keep the language they were written in whatever the toggle says.
+ */
+export function applyStaticIn(root) {
+  for (const el of root.querySelectorAll("[data-i18n]")) {
     el.textContent = t(el.dataset.i18n);
   }
-  for (const el of document.querySelectorAll("[data-i18n-title]")) {
+  for (const el of root.querySelectorAll("[data-i18n-title]")) {
     el.title = t(el.dataset.i18nTitle);
   }
-  for (const el of document.querySelectorAll("[data-i18n-aria]")) {
+  for (const el of root.querySelectorAll("[data-i18n-aria]")) {
     el.setAttribute("aria-label", t(el.dataset.i18nAria));
   }
-  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
+  for (const el of root.querySelectorAll("[data-i18n-placeholder]")) {
     el.placeholder = t(el.dataset.i18nPlaceholder);
   }
+}
+
+/** Re-read every static string in the markup. */
+export function applyStatic() {
+  applyStaticIn(document);
 }

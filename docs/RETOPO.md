@@ -1060,8 +1060,43 @@ repository; this is what these items mean once the engine lives in Albedo.
   Fine at a million triangles, not at ten. This matters more inside Albedo than
   it did in plancton, because Albedo may already be holding a large scene.
 
+### The mode, in two languages [x]
+
+137 keys: the markup through `data-i18n`, and everything the module writes
+itself through `t()`, meaning the report rows, the run button's label, the scope
+sentences, the progress lines and the reason a dead button is dead. Audited both
+ways: every key cited exists in both dictionaries, every key defined is cited
+somewhere, and no placeholder appears on one side of a pair and not the other.
+
+Three things this cost that are worth keeping.
+
+`applyStatic` walks the document, and none of this mode's markup is in the
+document when the language is chosen. The pane and the shell arrive with the
+lazy chunk, and the groups lent to the shared bar sit in a detached div whenever
+the mode is closed. `applyStaticIn(root)` is the same function taking a root, and
+the mode translates its own three.
+
+The bar's note used to decide whether it was allowed to clear itself by matching
+the first word of the line it was showing. That works in exactly one language.
+The real question is who wrote the line, so it is a marker on the element now,
+set by the writer and cleared by whoever writes next.
+
+And the keys had to move out of `src/i18n`. Those two dictionaries are imported
+at startup, so shipping the retopology prose in them put sixteen kilobytes of
+hint paragraphs into every process that opens the window, thumbnail jobs
+included. They live in `src/retopo/fr.json` and `en.json` now, folded in by
+`register()` when the chunk loads. Measured: the startup bundle is 152,488 bytes
+with the split against 168,230 without it, for 152,340 before the work started.
+
+---
+
 ### Lessons that each cost a debugging session
 
+- **A dictionary is code, and it lands in whatever chunk imports it.** The
+  strings of a lazy mode belong with that mode, not in the startup dictionaries,
+  or the chunk boundary holds for the logic and leaks for the prose. The cost is
+  invisible in every functional test and shows up in one `grep` of the built
+  bundle.
 - **A cache that holds the real thing while a stand-in is on screen must never be
   cleared without putting the real thing back.** `channels.reset()` was reused
   for "the scene gained a part", and it clears the map where the meshes' own
