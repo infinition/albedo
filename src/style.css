@@ -263,6 +263,40 @@ body.clean #inspector { opacity: 0; pointer-events: none; }
 }
 .tabs-rail::-webkit-scrollbar { height: 0; }
 
+/*
+ * The two chevrons, as quiet as a control can be while still being one.
+ *
+ * They sit outside the rail rather than over it: floating them on top would
+ * cover the first and last tab, which are the two the arrows exist to reach.
+ * Dim until pointed at, because on a strip that fits they never appear at all
+ * and on one that does not they should not compete with the tabs.
+ */
+.tabs-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.tabs-arrow:hover { color: var(--fg); background: rgba(255, 255, 255, 0.08); opacity: 1; }
+.tabs-arrow svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .tabs-tab {
   display: flex;
   align-items: center;
