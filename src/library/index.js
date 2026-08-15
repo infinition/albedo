@@ -107,18 +107,19 @@ const SHELL = `
     <div data-el="roots"></div>
     <h3>Dossiers</h3>
     <div class="lib-tree" data-el="tree"></div>
-    <label class="lib-search">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-      <input type="search" placeholder="Rechercher un nom ou un tag" data-el="search" />
-    </label>
-    <h3>Tags</h3>
-    <div class="lib-tags" data-el="tags"></div>
   </aside>
 
   <main class="lib-main">
     <div class="lib-filters" data-el="formats"></div>
     <div class="lib-grid" data-el="grid"></div>
     <div class="lib-detail" data-el="detail"></div>
+    <div class="lib-bottom">
+      <label class="lib-search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input type="search" placeholder="Rechercher un nom ou un tag" data-el="search" />
+      </label>
+      <div class="lib-tags" data-el="tags"></div>
+    </div>
   </main>
 
   <div class="lib-handle" data-el="handle" title="Largeur de l'aperçu"></div>

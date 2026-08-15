@@ -121,9 +121,19 @@ body.peeking .lib-handle { display: block; }
   stroke-width: 1.8;
   pointer-events: none;
 }
-/* In the sidebar the field sits between the folder tree and the tags, full
-   width, not the toolbar's flexible middle. */
-.lib-side .lib-search { flex: none; min-width: 0; max-width: none; margin: 14px 0 2px; }
+/* Search and tags live in a bottom bar, anchored under the grid, not in the
+   left sidebar: filtering is a thing you do to the whole library, so it sits
+   where the results are. */
+.lib-bottom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.lib-bottom .lib-search { flex: 1 1 160px; min-width: 140px; max-width: none; margin: 0; }
+.lib-bottom .lib-tags { flex: 1 1 200px; min-width: 0; }
 
 .lib-drawer { display: none; place-items: center; }
 
