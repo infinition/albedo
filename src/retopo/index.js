@@ -368,6 +368,11 @@ function countTriangles(root) {
 }
 
 const fr = (n) => n.toLocaleString("fr-FR");
+/** Compact for the floating bar's counters: 1 500 000 reads as 1.5M there. */
+const abbr = (n) =>
+  n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M`
+  : n >= 1_000 ? `${+(n / 1_000).toFixed(1)}K`
+  : String(n);
 const isGltf = (p) => /\.(glb|gltf)$/i.test(p || "");
 
 export function createRetopo({
@@ -1104,8 +1109,8 @@ export function createRetopo({
     el.atlasTools.classList.toggle("rt-off", !el.bake.checked);
     el.aoTools.classList.toggle("rt-off", !el.mAo.checked);
 
-    setStat(el.hudSource, source ? fr(source) : null);
-    setStat(el.hudResult, last ? fr(last.outputTriangles) : null);
+    setStat(el.hudSource, source ? abbr(source) : null);
+    setStat(el.hudResult, last ? abbr(last.outputTriangles) : null);
     setStat(
       el.hudCut,
       last ? `${(100 - (last.outputTriangles / last.inputTriangles) * 100).toFixed(1)} %` : null

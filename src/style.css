@@ -707,6 +707,18 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
   padding: 0;
   gap: 2px;
 }
+/* The counters stack into one column too, each pair label-beside-value, so the
+   four fit the narrow bar instead of running off it. */
+#viewbar.vertical .tb-counts {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+#viewbar.vertical .tb-counts > div {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
 #viewbar.reduced {
   background: none;
   border: none;
