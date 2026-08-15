@@ -33,8 +33,13 @@
   grid-template-areas: "bar bar" "side main";
 }
 #library.open { opacity: 1; pointer-events: auto; }
-/* With the preview on, the library stops at the strip the viewer draws in */
-body.peeking #library { right: var(--peek, 460px); }
+/* With the preview on, the library stops at the strip the viewer draws in.
+   The strip is `--peek-fit`, the clamped form of the dragged `--peek`: the two
+   edges have to meet, so the library reads the clamped value, not the raw one.
+   Reading `--peek` raw left the strip with a floor and the library without one,
+   and shrinking the window collapsed the library to the left while the strip
+   held its minimum. */
+body.peeking #library { right: var(--peek-fit, 460px); }
 
 .lib-handle {
   position: absolute;
