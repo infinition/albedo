@@ -253,6 +253,8 @@ function adoptDocument(doc) {
   $("tree").textContent = viewer.current ? viewer.sceneTree() : "";
   buildAnimationUi(viewer.clips || []);
   $("btn-export").disabled = !viewer.current;
+  $("btn-export-obj").disabled = !viewer.current;
+  $("btn-export-stl").disabled = !viewer.current;
   $("btn-snapshot").disabled = !viewer.current;
   retopo?.refresh();
   paintTabs();
@@ -986,6 +988,8 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     paintParts();
     paintSaveButtons();
     $("btn-export").disabled = false;
+    $("btn-export-obj").disabled = false;
+    $("btn-export-stl").disabled = false;
     $("btn-snapshot").disabled = false;
     paintShotPreview();
     // The cut is expressed against the model's own extent, so a new one has to
@@ -1922,30 +1926,51 @@ $("clip-at").addEventListener("input", (e) => {
  * a NIF from 2003 or a binary USD crate becomes a file any modern tool opens.
  * The scene furniture is left out, only what was loaded is written.
  */
-async function exportModel({ overwrite = false } = {}) {
+async function exportModel(format = "glb", { overwrite = false } = {}) {
   if (!viewer.current) return;
   const note = $("export-note");
   note.textContent = "Export en cours…";
   try {
-    const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-    // The group, not the object inside it. The orientation buttons and the
-    // handles both write to the group, so exporting the object alone wrote out
-    // a model still lying on its side after it had been stood up.
-    const result = await new GLTFExporter().parseAsync(viewer.root, {
-      binary: true,
-      animations: viewer.clips || [],
-      // Skinned models need their bones, and three drops them otherwise
-      includeCustomExtensions: true,
-    });
-    const bytes = new Uint8Array(result);
-    const name = (currentTitle || "modele").replace(/\.[^.]+$/, "") + ".glb";
+    const stem = (currentTitle || "modele").replace(/\.[^.]+$/, "");
+    let bytes;
+    let ext;
+    let mime;
+
+    if (format === "obj") {
+      const { OBJExporter } = await import("three/examples/jsm/exporters/OBJExporter.js");
+      bytes = new TextEncoder().encode(new OBJExporter().parse(viewer.root));
+      ext = "obj";
+      mime = "text/plain";
+    } else if (format === "stl") {
+      const { STLExporter } = await import("three/examples/jsm/exporters/STLExporter.js");
+      const result = new STLExporter().parse(viewer.root, { binary: true });
+      bytes = new Uint8Array(result.buffer);
+      ext = "stl";
+      mime = "model/stl";
+    } else {
+      const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+      // The group, not the object inside it. The orientation buttons and the
+      // handles both write to the group, so exporting the object alone wrote out
+      // a model still lying on its side after it had been stood up.
+      bytes = new Uint8Array(
+        await new GLTFExporter().parseAsync(viewer.root, {
+          binary: true,
+          animations: viewer.clips || [],
+          // Skinned models need their bones, and three drops them otherwise
+          includeCustomExtensions: true,
+        })
+      );
+      ext = "glb";
+      mime = "model/gltf-binary";
+    }
+    const name = `${stem}.${ext}`;
 
     if (tauri) {
       const path = overwrite
         ? openedPath
         : await tauri.dialog.save({
             defaultPath: name,
-            filters: [{ name: "glTF binaire", extensions: ["glb"] }],
+            filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
           });
       if (!path) {
         note.textContent = "";
@@ -1953,11 +1978,10 @@ async function exportModel({ overwrite = false } = {}) {
       }
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(path, bytes);
-      // The work is on disk, so leaving no longer throws it away.
       clearDirty();
       note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
     } else {
-      const url = URL.createObjectURL(new Blob([bytes], { type: "model/gltf-binary" }));
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
       const a = document.createElement("a");
       a.href = url;
       a.download = name;
@@ -1968,11 +1992,13 @@ async function exportModel({ overwrite = false } = {}) {
     }
   } catch (e) {
     note.textContent = `Export impossible : ${e.message || e}`;
-    console.warn("[albedo] export glTF:", e);
+    console.warn(`[albedo] export ${format}:`, e);
   }
 }
 
-$("btn-export").addEventListener("click", exportModel);
+$("btn-export").addEventListener("click", () => exportModel("glb"));
+$("btn-export-obj").addEventListener("click", () => exportModel("obj"));
+$("btn-export-stl").addEventListener("click", () => exportModel("stl"));
 
 // --- copy and paste between documents -------------------------------------
 // A mesh (with its material) travels as a GLB held in memory, so it can cross

@@ -47,6 +47,8 @@
   "pan.spacemouse": "Connect a SpaceMouse",
   "pan.scene": "Scene",
   "pan.export": "Export as glTF",
+  "pan.exportObj": "OBJ",
+  "pan.exportStl": "STL",
   "pan.snapshot": "Save an image",
   "tab.scene": "Scene",
   "lang.toEn": "Switch to English",
