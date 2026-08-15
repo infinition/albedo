@@ -691,9 +691,9 @@ window.addEventListener("pointermove", (e) => {
 });
 
 // The bar no longer hides on its own. It is one of three states, chosen by a
-// discreet corner button: horizontal (the default), vertical, or reduced to the
-// edge handle. Hovering the handle brings it back, since a control that only
-// shrinks is a control that traps.
+// discreet corner button: horizontal (the default), vertical, or reduced to
+// that button alone, floating. Hovering it brings the bar back, since a control
+// that only shrinks is a control that traps.
 const ORIENTS = ["horizontal", "vertical", "reduced"];
 let orientation = "horizontal";
 
@@ -701,18 +701,16 @@ function setOrientation(next) {
   orientation = next;
   const bar = $("viewbar");
   bar.classList.toggle("vertical", next === "vertical");
-  bar.classList.toggle("tucked", next === "reduced");
-  $("viewbar-handle").setAttribute("aria-expanded", String(next !== "reduced"));
+  bar.classList.toggle("reduced", next === "reduced");
   $("viewbar-orient").setAttribute("data-orient", next);
 }
 
 $("viewbar-orient").addEventListener("click", () => {
   setOrientation(ORIENTS[(ORIENTS.indexOf(orientation) + 1) % ORIENTS.length]);
 });
-
-for (const ev of ["click", "pointerenter"]) {
-  $("viewbar-handle").addEventListener(ev, () => setOrientation("horizontal"));
-}
+$("viewbar-orient").addEventListener("pointerenter", () => {
+  if (orientation === "reduced") setOrientation("horizontal");
+});
 
 setOrientation("horizontal");
 
