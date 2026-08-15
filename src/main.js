@@ -3353,6 +3353,15 @@ for (const [id, command, said] of [
   });
 }
 
+$("shell-shortcut").addEventListener("click", async () => {
+  try {
+    await tauri.core.invoke("shell_desktop_shortcut");
+    toast(t("toast.shortcutOn"));
+  } catch {
+    toast(t("toast.shortcutOff"));
+  }
+});
+
 // --- undo ------------------------------------------------------------------
 
 const poseOf = (o) => ({

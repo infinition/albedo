@@ -30,7 +30,7 @@ retopo-bake = { path = "crates/retopo-bake" }
 # can offer it without an installer.
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.5"
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Console"] }
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Shell"] }
 
 [profile.release]
 codegen-units = 1

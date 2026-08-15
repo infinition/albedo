@@ -161,6 +161,52 @@ pub fn shell_integration_disable() -> Result<Integration, String> {
     Ok(shell_integration())
 }
 
+/// A desktop shortcut to the stable AppData copy.
+///
+/// Pointed at the renderer copy rather than this executable, because that copy
+/// does not move when the portable file is moved. If the copy does not exist yet
+/// it is made first, which is the same sync the integration runs on startup.
+#[tauri::command]
+pub fn shell_desktop_shortcut() -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::{Interface, PCWSTR, w};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::System::Com::IPersistFile;
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+
+    let target = sync_renderer_copy().unwrap_or_else(current_exe);
+
+    let desktop = windows_registry::CURRENT_USER
+        .open("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders")
+        .ok()
+        .and_then(|k| k.get_string("Desktop").ok())
+        .ok_or("dossier du bureau introuvable")?;
+    let lnk = Path::new(&desktop).join("Albedo.lnk");
+
+    let mut target_wide: Vec<u16> = target.as_os_str().encode_wide().collect();
+    target_wide.push(0);
+    let mut lnk_wide: Vec<u16> = lnk.as_os_str().encode_wide().collect();
+    lnk_wide.push(0);
+
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+            .map_err(|e| format!("ShellLink : {e}"))?;
+        link.SetPath(PCWSTR(target_wide.as_ptr()))
+            .map_err(|e| format!("chemin : {e}"))?;
+        // The icon comes from the executable, index zero. Description is polish.
+        let _ = link.SetIconLocation(PCWSTR(target_wide.as_ptr()), 0);
+        let _ = link.SetDescription(w!("Albedo"));
+        let persist: IPersistFile = link.cast().map_err(|e| format!("IPersistFile : {e}"))?;
+        persist
+            .Save(PCWSTR(lnk_wide.as_ptr()), true)
+            .map_err(|e| format!("enregistrement : {e}"))?;
+    }
+    Ok(())
+}
+
 /// Deliberately outside the key the integration itself uses, because removing
 /// the integration removes that one whole: the record of having asked has to
 /// outlive the answer, or every launch would ask again.
@@ -212,11 +258,48 @@ fn sync_renderer_copy() -> Option<PathBuf> {
     }
 }
 
+/// Refresh the extracted provider DLL when this build's own is newer, and only
+/// then.
+///
+/// The DLL is baked into this executable, so the on-disk copy is current when
+/// its length matches the embedded one: a build that changed the provider at all
+/// changed its size, which is the same metadata answer the renderer copy uses.
+/// Written beside and renamed, so Explorer never loads a half written DLL.
+fn sync_provider_dll() {
+    let Some(embedded) = PROVIDER else { return };
+    // A DLL beside the executable belongs to an installation, which manages its
+    // own updates. Only the extracted copy, the one a portable executable
+    // registered, is ours to refresh.
+    if current_exe().with_file_name("albedo_thumbnails.dll").is_file() {
+        return;
+    }
+    let target = extracted_path();
+    if let Ok(meta) = std::fs::metadata(&target) {
+        if target.is_file() && meta.len() as usize == embedded.len() {
+            return;
+        }
+    }
+    let Some(dir) = target.parent() else { return };
+    if std::fs::create_dir_all(dir).is_err() {
+        return;
+    }
+    let part = target.with_extension("part");
+    if std::fs::write(&part, embedded).is_err() {
+        return;
+    }
+    // A render in flight holds the old DLL; keeping what works beats failing,
+    // and the next launch tries again.
+    if std::fs::rename(&part, &target).is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+}
+
 /// Point the provider at the copy, or at this executable if copying failed.
 ///
 /// Always rewritten, because the one thing that must never happen is Explorer
 /// calling a path that no longer holds anything.
 fn record_renderer() {
+    sync_provider_dll();
     let target = sync_renderer_copy().unwrap_or_else(current_exe);
     if let Ok(key) = windows_registry::CURRENT_USER.create(KEY) {
         let _ = key.set_string("Renderer", &target.to_string_lossy());

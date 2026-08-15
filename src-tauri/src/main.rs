@@ -433,7 +433,8 @@ fn main() {
             save_prefs,
             shell::shell_integration,
             shell::shell_integration_enable,
-            shell::shell_integration_disable
+            shell::shell_integration_disable,
+            shell::shell_desktop_shortcut
         ])
         .setup(move |app| {
             // The window is declared hidden so a thumbnail render never flashes
