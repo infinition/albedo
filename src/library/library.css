@@ -262,7 +262,18 @@ body.peeking .lib-handle { display: block; }
   overscroll-behavior: contain;
   padding: 14px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card, 132px), 1fr));
+  /*
+   * `min(..., 100%)` and not just the card width.
+   *
+   * `minmax` treats its first argument as a hard floor, so a card size larger
+   * than the column, which is what the zoom slider produces the moment the
+   * library is narrow, made a track wider than the box holding it. The grid then
+   * overflowed sideways: one column of cards sticking out past the edge, a
+   * horizontal scrollbar under a list that scrolls vertically, and the names cut
+   * off. The floor has to give way when there is less room than that, which is
+   * exactly what `min` with a percentage says.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--card, 132px), 100%), 1fr));
   gap: 12px;
   align-content: start;
 }

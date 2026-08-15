@@ -82,7 +82,7 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | Retopo stays a lazy chunk after the merge | [x] | 7 chunks and 720,060 bytes at startup, 16 bytes more than before the merge. The mode's own chunk went from 38,001 to 36,133 bytes |
 | The view bar tucks itself away | [x] | Fifteen seconds of quiet, five seconds to leave, an eighth of a second to come back. Measured with the transition cut, see the pitfall below |
 | Full screen hides every overlay | [ ] | Written and checked in the preview; the Tauri window call itself is not exercised |
-| Panel flush with the right edge | [x] | 8 pixels from the window edge at 1280, with and without the library |
+| Panel docked, flush with three edges | [x] | Full height, no gap, no rounded corners, one border on the viewport side. `--panel-reserve` is both its width and what the canvas gives up, so the two cannot drift apart the way they had |
 | Canvas stops at the library, not under it | [x] | Stage left edge lands exactly on the library's right edge at a 800 pixel split |
 | Scrubber clear of the Retopo action bar | [x] | Lifted by the bar's own measured height, so it survives the bar wrapping |
 | Layout follows its own box, not the window | [x] | Fifty widths from 300 to 1280, viewer and library, nothing overflowing its box |
@@ -93,7 +93,10 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | Overwrite the original | [ ] | Written and permitted, exercised only through the save-as path in a browser |
 | Several models in one scene | [x] | Statistics, box and memory add up on import and come back exactly on removal |
 | Import through the file dialog | [ ] | Written; the dialog needs the shell, so only the viewer side was exercised |
-| Library sidebar becomes a drawer when tight | [x] | Below 760 pixels of library, whatever the window measures |
+| Library sidebar becomes a drawer when tight | [x] | Below 760 pixels of library, whatever the window measures, and it closes when you reach past it |
+| The split survives the window being resized | [x] | Clamped in CSS with a floor on both sides, so it re-evaluates on every relayout instead of holding a pixel count taken once |
+| Tabs keep their names while there is room | [x] | Names come off only when the row overflows, measured after layout; chevrons appear only when there is somewhere to scroll |
+| Framing fills the box it is given | [x] | Five cases: a cube 57% to 94% of the height, and a wide flat plane in a narrow strip from 165% of the width, meaning off screen, to 94% |
 
 ### Shell Integration
 
@@ -140,6 +143,11 @@ invisible is the reusable part.
 | Opening the library over a loaded model replaced it with a folder listing | It comes up beside it at 30%, unless a width was already dragged, which is an answer the user already gave |
 | The sidebar drawer stayed open until its own button was found again | It closes when you reach past it, like every other drawer |
 | `.segment` wraps by default, which is right in the panel and wrong in a toolbar: "Textures" dropped under the search field on its own and the bar grew a line for it. Below the last breakpoint the group was hidden outright | One line, and the labels give way to icons when the bar tightens rather than the buttons giving way to nothing |
+| `--peek` is a pixel width, written once when the divider is dragged and read for ever after. Narrowing the window did not narrow the strip: the stage kept its 1500px and the library was handed the remainder, down to 80px of crushed toolbar and then nothing | A `clamp` with a floor on both sides, which re-evaluates on every relayout and cannot fall out of step with the value the drag writes. The drag uses the same two floors, since a divider that goes where the stylesheet then pulls it back from is a divider arguing with the cursor |
+| Dragging the divider all the way over clamps at 220px, and that clamp was **saved and restored in every session after**. The strip came back as a 220px slot whatever the window, for ever, from one careless drag | A saved width is kept while it leaves the viewer a usable share, which a 40% library is well inside. Below that the 70/30 default answers instead: the edge of a drag is not a preference |
+| From an empty viewer the library owns the window, and clicking a card opened the strip without saying how wide, so it took whatever the last session had left: a sliver at the right edge with the model loading behind the folder list | Sized at the same moment `show` sizes it, and a preview already on screen is refitted, since opening the strip over it leaves the camera fitted to a window that has become a column. Only a preview: a document being worked on has a camera someone put where they wanted it |
+| The grid asked for `minmax(var(--card), 1fr)`, and `minmax` treats its first argument as a hard floor. A card size larger than the column, which is what the zoom slider produces as soon as the library is narrow, made a track wider than the box holding it | `minmax(min(var(--card), 100%), 1fr)`. The floor gives way when there is less room than that, instead of the grid overflowing sideways with a horizontal scrollbar under a list that scrolls vertically |
+| Any tab carrying a snapshot and not holding focus lost its name, room or no room. In a wide window with two files that threw away the one thing a tab exists to carry, and a picture tells two variants of one model apart about as well as no label does | Measured rather than assumed: everything is drawn with its name and the names only come off if the row does not fit. Two chevrons appear when there is somewhere to scroll, outside the rail rather than over it, since floating them on top would cover the first and last tab, the two they exist to reach |
 
 ### Measurement Pitfalls, Verified
 
@@ -154,6 +162,18 @@ invisible is the reusable part.
 - **`onOpenChange` swallows its errors.** A change to it stopped `#retopo`
   mounting with nothing in the console. Check `document.getElementById("retopo")`
   after opening the mode.
+- **A pixel width written once is not a layout.** `--peek` was set by the drag
+  handle and never confronted with the window again, so every later resize of
+  the window was a resize of one half only. Anything a user drags has to be
+  clamped where it is *read*, not only where it is written, or the value outlives
+  the conditions it was chosen under. The same fault, in a second form, is a
+  clamped drag value being saved: the edge of a drag is not a preference.
+- **`minmax` and `flex-wrap` both fail loudly in one direction and silently in
+  the other.** A `minmax` floor wider than its container overflows rather than
+  shrinking, and `.segment`'s wrap is right in a panel and wrong in a toolbar.
+  Neither throws, neither logs, and both look like the box is broken rather than
+  the rule. Check them at the narrow end of every box they live in, not only at
+  the window's narrow end.
 
 ---
 
