@@ -131,7 +131,7 @@ const SHELL = `
  * @param {(path: string) => Promise<void>} deps.onOpen open a file in the viewer
  * @param {object} [deps.prefs] persisted settings
  */
-export function createLibrary({ tauri, onOpen, prefs, hasModel }) {
+export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
   const host = document.createElement("div");
   host.id = "library";
   host.innerHTML = SHELL;
@@ -672,6 +672,17 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel }) {
          */
         if (!state.peek && !state.peekDismissed) {
           /*
+           * The strip has to have its width before it has its model.
+           *
+           * Coming from an empty viewer the library owns the whole window, and
+           * opening the strip without saying how wide left it on whatever the
+           * last session had written: a sliver at the right edge with the model
+           * loading behind the folder list. `show` already sizes it when there
+           * is a model to keep beside it, and this is the same moment for the
+           * case where the model arrives second.
+           */
+          sizeStripForModel();
+          /*
            * `setPeek` peeks on its way in, so this must not peek again.
            *
            * `peek` opens with `clearTimeout(peekTimer)` and then returns early
@@ -865,7 +876,22 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel }) {
    */
   function sizeStripForModel() {
     const saved = Number(prefs?.get?.("libPeekWidth")) || 0;
-    const width = saved || Math.round(window.innerWidth * 0.7);
+    /*
+     * A remembered width is an answer, until it stops being one.
+     *
+     * Drag the divider all the way over and it clamps at 220px, which is then
+     * saved and restored in every session after: the strip came back as a
+     * two hundred pixel slot whatever the window, and a model previewed into it
+     * showed about one leg. That is not a width someone chose for looking at
+     * models, it is the edge of the drag, and treating it as a preference meant
+     * the application never recovered from one careless drag.
+     *
+     * So a saved width is kept whenever it leaves the viewer a usable share, and
+     * a 40 percent library is well inside that. Below it, the default answers
+     * instead.
+     */
+    const usable = saved >= window.innerWidth * 0.3 ? saved : 0;
+    const width = usable || Math.round(window.innerWidth * 0.7);
     document.documentElement.style.setProperty("--peek", `${width}px`);
   }
 
@@ -881,6 +907,16 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel }) {
     if (remember) prefs?.set?.("libPeek", state.peek);
     // The viewer sizes itself to its box, which just changed
     window.dispatchEvent(new Event("resize"));
+    /*
+     * And a preview already on screen was framed for the box it had before.
+     *
+     * Opening the strip over a model loaded a moment earlier leaves the camera
+     * fitted to a window that is now a column, so the model sits mostly outside
+     * it. Only a preview is refitted: a document being worked on has a camera
+     * someone put where they wanted it, and moving that would be worse than any
+     * framing.
+     */
+    if (state.peek) refit?.();
     if (state.peek && state.selected) peek(state.selected);
   }
 
@@ -895,7 +931,12 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel }) {
     e.preventDefault();
     el.handle.setPointerCapture(e.pointerId);
     const move = (ev) => {
-      const width = Math.min(window.innerWidth - 320, Math.max(220, window.innerWidth - ev.clientX));
+      // The same two floors the stylesheet clamps to. Dragging past a limit the
+      // stylesheet then puts back is a divider that argues with the cursor.
+      const width = Math.min(
+        window.innerWidth - 280,
+        Math.max(280, window.innerWidth - ev.clientX)
+      );
       document.documentElement.style.setProperty("--peek", `${Math.round(width)}px`);
       window.dispatchEvent(new Event("resize"));
     };

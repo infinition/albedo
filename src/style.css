@@ -122,6 +122,24 @@ body {
 }
 /* The preview strip: the library gives up its right edge and the viewer, the
    real one with its own controls, draws there. Nothing is duplicated. */
+/*
+ * The split, kept inside the window whatever the window does.
+ *
+ * `--peek` is a pixel width, written once when the divider is dragged and then
+ * read for ever. Nothing was re-reading it against the window, so narrowing the
+ * window did not narrow the strip: the stage kept its fifteen hundred pixels and
+ * the library was handed whatever was left, which went to eighty pixels of
+ * crushed toolbar and then to nothing. Resizing a window is not a request to
+ * destroy one half of it.
+ *
+ * A clamp rather than a listener, because it re-evaluates on every relayout for
+ * free and cannot fall out of step with the value the drag writes. Both sides
+ * keep a floor: below these there is no grid worth showing and no model worth
+ * looking at, so there is no reading of the drag that should produce either.
+ */
+body.peeking {
+  --peek-fit: clamp(280px, var(--peek, 50%), calc(100vw - 280px));
+}
 body.peeking #stage {
   left: auto;
   /* See the rule below: with the panel out as well, this width is wrong by
@@ -129,7 +147,7 @@ body.peeking #stage {
   /* Half the window by default, and draggable from there. A preview strip that
      starts narrow makes you resize it every session; half is the honest split
      between "what is in the folder" and "what is in this file". */
-  width: var(--peek, 50%);
+  width: var(--peek-fit);
 }
 /*
  * With the panel out too, the strip has to be that much narrower.
@@ -145,7 +163,11 @@ body.peeking #stage {
  * Taking the reservation out of the width instead pins the left edge back where
  * the library ends, which is the edge that actually has to line up.
  */
-body.peeking.inspector #stage { width: calc(var(--peek, 50%) - var(--panel-reserve)); }
+/* The `max` is not decoration: at the strip's floor the reservation is wider
+   than the strip, and a negative width lays the canvas out backwards. */
+body.peeking.inspector #stage {
+  width: max(200px, calc(var(--peek-fit) - var(--panel-reserve)));
+}
 
 #view {
   display: block;

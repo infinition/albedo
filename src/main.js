@@ -2913,6 +2913,12 @@ async function toggleLibrary() {
       // Whether there is something to come back to. The library opens beside a
       // loaded model rather than over it.
       hasModel: () => !!viewer.current,
+      // Refit a preview when the strip changes shape under it. Only a preview:
+      // a document being worked on has a camera someone chose.
+      refit: () => {
+        if (!viewer.current || !activeDoc?.preview) return;
+        requestAnimationFrame(() => viewer.frame(viewer.sceneBox()));
+      },
     });
     // The preview strip loads into this very viewer, so nothing is duplicated
     library.show();
