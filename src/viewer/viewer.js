@@ -1343,6 +1343,19 @@ export class Viewer {
     this.invalidate();
   }
 
+  /** Delete one mesh, whether it is a part or a mesh nested inside one. */
+  removeMesh(node) {
+    const entry = this.parts.find((p) => p.object === node);
+    if (entry) {
+      this.removePart(entry);
+      return;
+    }
+    if (this.gizmo && this.gizmo.object === node) this.setGizmo(null);
+    node.parent?.remove(node);
+    releaseSubtree(node, this.keptTextures());
+    this.invalidate();
+  }
+
 
   /**
    * Take the whole model out of the scene without releasing any of it.

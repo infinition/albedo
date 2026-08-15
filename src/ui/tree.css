@@ -87,6 +87,22 @@
 }
 .tree-eye:hover { color: var(--fg, #e6e9ef); background: rgb(255 255 255 / 0.08); }
 .tree-eye.off { color: var(--accent, #7cc4ff); }
+.tree-trash {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #8b929c);
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tree-row:hover .tree-trash { opacity: 1; }
+.tree-trash:hover { color: var(--bad, #ff8b7a); background: rgb(255 255 255 / 0.08); }
 
 .tree-list .mat-chip { width: 18px; height: 18px; border-radius: 4px; flex: none; }
 .tree-list .mat-chip.small { width: 14px; height: 14px; border-radius: 3px; }

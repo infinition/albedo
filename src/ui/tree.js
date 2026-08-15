@@ -146,6 +146,7 @@ export function createTree({ host, viewer, channels, swapTexture, onNotice }) {
         paint();
       })
     );
+    row.appendChild(trash(mesh));
     group.appendChild(row);
 
     if (!opened.has(mesh.id)) return group;
@@ -246,6 +247,24 @@ export function createTree({ host, viewer, channels, swapTexture, onNotice }) {
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       act();
+    });
+    return b;
+  }
+
+  /** Delete a mesh from the scene, whatever its depth in the file. */
+  function trash(mesh) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tree-trash";
+    b.title = "Supprimer ce maillage";
+    b.textContent = "🗑";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      viewer.removeMesh(mesh.node);
+      selection.delete(mesh.id);
+      notice(`${mesh.name} supprimé`);
+      viewer.invalidate?.();
+      paint();
     });
     return b;
   }
