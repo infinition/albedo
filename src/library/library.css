@@ -258,12 +258,13 @@ body.peeking .lib-handle { display: block; }
 .lib-grid {
   flex: 1;
   min-height: 0;
-  /* The grid is a flex child, and a flex child without this refuses to shrink
-     below the min-content of its cards. The percentage in the track floor then
-     resolves against a width the grid will not actually take, and a narrow
-     library collapses the columns onto each other while its box stays put. */
+  /* The grid is a flex child of a column, so its width comes from `stretch`,
+     not from a percentage: `width: 100%` here can resolve to `auto` when the
+     column's own width is still being resolved, and a grid sized to its
+     content with a card floor ends up with no tracks at all, cards piling at
+     the left of a box that is perfectly sized. */
   min-width: 0;
-  width: 100%;
+  align-self: stretch;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 14px;
