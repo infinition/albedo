@@ -181,6 +181,29 @@ invisible is the reusable part.
 - [x] Chrome that gets out of the way: a bar that tucks itself after fifteen
       seconds, and a full screen that hides every overlay with a corner to come
       back through.
+- [x] The engine vendored into this repository. The retopo crates live under
+      `src-tauri/crates/` as `retopo-core`, `retopo-remesh` and `retopo-bake`,
+      with their manifests frozen: no external checkout has to exist at a fixed
+      path any more, and the GitHub release workflow can actually build.
+- [x] Shell initialisation off the critical path. The two round trips that used
+      to gate `src/main.js` live behind a deferred `shellReady`; every listener
+      attaches at once, and `prefs`, the post chain and the light rig wait on
+      that promise alone.
+- [x] "Fil de fer seul" as a mode of the overlay. One wire system, one colour:
+      it survives every channel, follows the light or dark choice, and W cuts
+      and restores it in the armed style.
+- [x] Keyboard shortcuts that follow the printed letter. The layout is read
+      from the first press of W or A, and on AZERTY Ctrl+Z undoes instead of
+      closing the document.
+- [x] Flat shading and a clay look in the Colour group. One toggle for smooth
+      or faceted, and a clay button that cycles lit gray, unlit gray, back.
+- [x] Before/after comparison that lines up. The curtain is placed in pixels
+      over the canvas, not in a fraction of an overlay that no longer matches
+      it, and a hold button or the X key peek at the source in the same look as
+      the result.
+- [x] French and English, one button away. The i18n module, the language
+      toggle in the tab bar, and the toolbar, the panel and the whole inspector
+      read their strings from the dictionaries.
 
 ### Next / Upcoming Features
 

@@ -4,6 +4,12 @@ How the retopology and baking engine becomes a third mode in Albedo, beside the
 inspector and the library. What Albedo already provides for free, what has to be
 rebuilt, and what must not be broken on the way.
 
+> **Update, vendoring.** The engine crates no longer come from plancton by an
+> absolute path. They live in this repository, under `src-tauri/crates/`, as
+> `retopo-core`, `retopo-remesh` and `retopo-bake`, with frozen manifests. The
+> rest of this document still speaks of plancton as the source; the mechanism it
+> describes is unchanged, only the crate names and the location moved.
+
 Legend: **[x]** done and measured, **[~]** in progress, **[ ]** planned.
 
 ---
