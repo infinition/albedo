@@ -834,6 +834,33 @@ Measured rather than asserted: the sequence is replayed on a stub viewer, with
 the old path as a witness. It prints `sourceMap: source-normal` against
 `resultMap: result-albedo` under `reset`, and both on `-albedo` under `absorb`.
 
+### The curtain that only cut on one channel [x]
+
+Underneath the previous one, and only visible once it was fixed. Which side of
+the split an object draws on is `uSide`, a uniform held in the *material's*
+`userData`, and a channel replaces every material in the scene with a stand-in
+that has never been told anything. The cut then read zero on both halves, so
+source and result each drew everywhere: on screen, the two meshes superimposed
+on both sides of the line, on every channel except the one the comparison had
+been set under.
+
+Not a listener on the Couleur group, because a channel is changed from the Vue
+pane, from that group, from the number keys and from code, and only one of those
+routes goes through a click. `ChannelView.afterApply` is called at the end of
+every `apply`, which is the single place all of them meet; the mode registers
+`setAB(compareMode)` there while it is open and drops it on close, so a viewer
+that never opens Retopo never pays for it.
+
+Closing the mode was the other half of the same fact: the materials stay on the
+meshes when the bar goes away, so closing on the curtain left half the model
+discarded in a viewer with no line, no A/B buttons and nothing to say why. `hide`
+lifts the cut by hand now and leaves `compareMode` alone, which is what the mode
+reopens on.
+
+Witnessed the same way, with the real shader patch rather than an imitation:
+`{"source":0,"result":0}` after a channel switch without the hook, `-1` and `1`
+with it, on every channel tried.
+
 ---
 
 ### Phase 7: paying the rent [ ]
@@ -1043,6 +1070,12 @@ repository; this is what these items mean once the engine lives in Albedo.
   Nothing threw, nothing logged, and it is invisible for as long as the shaded
   channel is up. Two operations, two names: `reset` throws a model away,
   `absorb` takes note that the scene changed around one.
+- **State kept on a material is state a channel switch throws away.** Every
+  inspection channel hands out fresh stand-ins, so anything written onto a
+  material by something else vanishes silently: the wireframe patch went that
+  way first, the curtain's cut went the same way second. Whatever has to survive
+  belongs either on the object, in a shared uniform, or in a hook that runs
+  after every `apply`. There is now exactly one such hook, for that reason.
 - **A migration belongs beside the thing it migrates, not in the middle of the
   road.** A table mapping old pane names to new ones sat inside `showPane`, where
   it caught every live call as well as the saved preference it was written for.

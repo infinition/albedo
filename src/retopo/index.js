@@ -1666,6 +1666,23 @@ export function createRetopo({
       }
       dressScene();
       paintScope();
+      /*
+       * Put the comparison back after every channel switch.
+       *
+       * Which side of the curtain an object draws on is a uniform carried by
+       * its material, and a channel replaces every material in the scene with a
+       * stand-in that has never been told. The cut then reads zero on both
+       * halves, so source and result each draw everywhere and the split looks
+       * like one mesh laid over another. `setAB` is the whole answer and it is
+       * idempotent, so re-running it is exactly the repair.
+       *
+       * Registered here and dropped in `hide`, so a viewer that never opens the
+       * mode never pays for it.
+       */
+      if (channels) channels.afterApply = () => setAB(compareMode);
+      // And once now, because reopening the mode has to find the comparison it
+      // was left on rather than a bar claiming a curtain that is not cutting.
+      setAB(compareMode);
       onOpenChange?.(true);
       syncViewport();
       refresh();
@@ -1678,6 +1695,23 @@ export function createRetopo({
       host.classList.remove("open");
       document.body.classList.remove("retopo-open");
       if (tab) tab.hidden = true;
+      if (channels) channels.afterApply = null;
+      /*
+       * The cut outlives this mode's chrome, so it has to be lifted by hand.
+       *
+       * `uSide` is on the materials and the materials stay on the meshes when
+       * the bar goes away. Closing on the curtain therefore left half the model
+       * discarded in a viewer that has no line, no A/B buttons and nothing at
+       * all to say why. `compareMode` is deliberately not touched: it is what
+       * the mode reopens on.
+       */
+      for (const p of viewer.parts || []) {
+        p.object.visible = true;
+        setSide(p.object, 0);
+      }
+      unghost();
+      el.splitLine.hidden = true;
+      viewer.invalidate?.();
       /*
        * The lent groups come back out, and the data view goes with them.
        *

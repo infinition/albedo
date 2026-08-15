@@ -111,6 +111,22 @@ export class ChannelView {
      * vanished on ten of the eleven channels and nothing anywhere said why.
      */
     this.wire = null;
+    /**
+     * Called once every time the materials on the meshes have been replaced.
+     *
+     * Some state belongs to the *material* and is decided by something else
+     * entirely, which means a channel switch silently throws it away. The
+     * curtain is the case that proved it: which side of the split an object
+     * draws on lives in `userData.uSide`, so the moment a channel handed out
+     * fresh stand-ins both halves went back to "draw everywhere" and the two
+     * meshes appeared superimposed on both sides of the line.
+     *
+     * A hook rather than a listener on the buttons, because a channel is
+     * changed from the Vue pane, from the Couleur group, from the number keys
+     * and from code, and only one of those routes goes through a click. This is
+     * the single place they all end up.
+     */
+    this.afterApply = null;
   }
 
   /**
@@ -598,6 +614,9 @@ export class ChannelView {
       const source = this.original.get(o);
       o.material = Array.isArray(source) ? source.map(make) : make(source);
     });
+    // Before the repaint, so nothing is ever shown with the state of the
+    // materials that were just replaced.
+    this.afterApply?.();
     this.viewer.invalidate();
   }
 
