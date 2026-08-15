@@ -3794,6 +3794,7 @@ async function importPart(path) {
     applyChannel(currentChannel);
     paintParts();
     paintMaterialList();
+    paintTree();
     showStats(viewer.stats());
     showDimensions();
     if (editMode) setEditMode(editMode);
