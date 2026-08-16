@@ -854,18 +854,58 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
   padding: 0;
   gap: 2px;
 }
-/* The counters stack into one column too, each pair label-beside-value, so the
-   four fit the narrow bar instead of running off it. */
+/*
+ * The bar never runs off the screen.
+ *
+ * Upright it is a column of every group it holds, and on a short window that
+ * column is simply taller than the viewport: the last groups were below the
+ * bottom edge with no way to reach them. It is capped at the height it has and
+ * scrolls inside itself, which is what any list too long for its box does.
+ */
+#viewbar.vertical {
+  /*
+   * A percentage of the box it is positioned in, and *not* `cqh`.
+   *
+   * `#stage` declares `container-type: inline-size`, which registers a width
+   * container and no height one — so `cqh` has nothing to resolve against and
+   * silently produced a cap larger than the window. The bar is absolutely
+   * positioned, so a percentage resolves against its containing block, and the
+   * two constants subtracted here are exactly the ones `.ov-view` uses to place
+   * its own top edge.
+   */
+  max-height: calc(100% - (var(--gap) + 48px) - var(--gap));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+#viewbar.vertical::-webkit-scrollbar { width: 6px; }
+#viewbar.vertical::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.16);
+  border-radius: 3px;
+}
+
+/*
+ * The counters lose their words when the bar is a rail.
+ *
+ * "RÉDUCTION" is nine characters, and it was the widest thing in the bar — so
+ * four numbers nobody reads letter by letter were setting the width of a column
+ * of sixteen-pixel glyphs. The values stay, in order, and each carries its own
+ * name as a tooltip; the order is the sentence: source, result, cut, quads.
+ */
 #viewbar.vertical .tb-counts {
   flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
 }
 #viewbar.vertical .tb-counts > div {
   flex-direction: row;
   align-items: baseline;
+  justify-content: flex-end;
   gap: 6px;
 }
+#viewbar.vertical .tb-counts dt { display: none; }
+#viewbar.vertical .tb-counts dd { font-size: 10.5px; }
 #viewbar.reduced {
   background: none;
   border: none;

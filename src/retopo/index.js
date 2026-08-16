@@ -1327,6 +1327,19 @@ export function createRetopo({
     el.atlasTools.classList.toggle("rt-off", !el.bake.checked);
     el.aoTools.classList.toggle("rt-off", !el.mAo.checked);
 
+    /*
+     * Each counter carries its own name, because the rail hides the words.
+     *
+     * Upright, the bar drops the `dt` labels — "RÉDUCTION" was the widest thing
+     * in a column of sixteen-pixel glyphs — so the only place left to say what a
+     * number is, is the tooltip. Read from the label rather than written twice,
+     * so a language change carries it.
+     */
+    for (const row of el.hud.querySelectorAll("div")) {
+      const name = row.querySelector("dt")?.textContent;
+      if (name) row.title = name;
+    }
+
     setStat(el.hudSource, source ? abbr(source) : null);
     setStat(el.hudResult, last ? abbr(last.outputTriangles) : null);
     setStat(
