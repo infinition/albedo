@@ -414,7 +414,6 @@ function adoptDocument(doc) {
   $("btn-export").disabled = !viewer.current;
   $("btn-export-obj").disabled = !viewer.current;
   $("btn-export-stl").disabled = !viewer.current;
-  $("btn-snapshot").disabled = !viewer.current;
   retopo?.refresh();
   paintTabs();
 }
@@ -1173,7 +1172,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     $("btn-export").disabled = false;
     $("btn-export-obj").disabled = false;
     $("btn-export-stl").disabled = false;
-    $("btn-snapshot").disabled = false;
+
     paintShotPreview();
     // The cut is expressed against the model's own extent, so a new one has to
     // recompute where the plane actually falls.
@@ -2497,7 +2496,7 @@ async function saveSnapshot() {
   }
 }
 
-$("btn-snapshot").addEventListener("click", saveSnapshot);
+$("btn-snapshot")?.addEventListener("click", saveSnapshot);
 
 // --- photo ----------------------------------------------------------------
 //
@@ -2724,7 +2723,11 @@ function wakeTree() {
         swapTexture,
         onNotice: toast,
         actions: {
-          addLight: () => $("decor-act-add")?.click(),
+          addLight: () => {
+            const entry = viewer.addLight("directional", {});
+            saveLights();
+            selection.choose(decorId("light", entry.id), "light");
+          },
           pickPedestal: () => $("btn-pedestal")?.click(),
           removePedestal: () => dropPedestal(),
           setBackground: (kind) => useEnvironment(kind),
@@ -4004,9 +4007,9 @@ function updateDecorSelectedLabel() {
     const entry =
       viewer.lights.find((l) => l.id === decorSelection.id) || viewer.lights[0];
     if (entry) {
-      label.textContent = `Selected: ${entry.name} (${LIGHT_KIND_LABELS[entry.kind] || entry.kind})`;
+      label.textContent = `${entry.name} (${LIGHT_KIND_LABELS[entry.kind] || entry.kind})`;
     } else {
-      label.textContent = `Selected: Lumière`;
+      label.textContent = `Lumière`;
     }
   } else if (decorSelection.type === "pedestal") {
     const pName = prefs?.get?.("pedestal")
@@ -4014,7 +4017,7 @@ function updateDecorSelectedLabel() {
       : viewer.pedestal
       ? "Socle 3D"
       : "Aucun socle";
-    label.textContent = `Selected: Socle (${pName})`;
+    label.textContent = `Socle (${pName})`;
   } else if (decorSelection.type === "background") {
     const bName =
       viewer.envKind === "image"
@@ -4024,7 +4027,7 @@ function updateDecorSelectedLabel() {
         : viewer.envKind === "gradient"
         ? "Dégradé"
         : "Studio";
-    label.textContent = `Selected: Fond (${bName})`;
+    label.textContent = `Fond (${bName})`;
   }
 }
 

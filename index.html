@@ -574,6 +574,10 @@
               </div>
 
               <!-- Paramètres Lumière -->
+              <h2>
+                <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3 11v1h6v-1a6 6 0 0 0-3-11z"/></svg>
+                <span data-i18n="pane.lights">Lumière</span>
+              </h2>
               <div id="decor-params-light" class="decor-param-section">
                 <div class="decor-param-grid">
                   <label class="field">
@@ -620,6 +624,10 @@
               </div>
 
               <!-- Paramètres Socle -->
+              <h2>
+                <svg viewBox="0 0 24 24"><path d="M4 17h16M7 17V9h10v8"/><path d="M9 9V6h6v3"/></svg>
+                <span data-i18n="pane.stand">Socle</span>
+              </h2>
               <div id="decor-params-pedestal" class="decor-param-section" hidden>
                 <p id="pedestal-file" class="hint" data-i18n="pane.noStand">Aucun socle</p>
                 <!--
@@ -647,6 +655,10 @@
               </div>
 
               <!-- Paramètres Fonds -->
+              <h2>
+                <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M3 15l5-4 4 3 3-2 6 5"/></svg>
+                <span data-i18n="pane.backgrounds">Fond</span>
+              </h2>
               <div id="decor-params-background" class="decor-param-section" hidden>
                 <div class="row">
                   <div class="segment" role="group" data-i18n-aria="pane.environment" aria-label="Environnement">
@@ -757,11 +769,16 @@
                 </div>
               </div>
 
-              <!-- Barre d'actions globale -->
+              <!--
+                Only what the list above cannot already do.
+
+                Adding and deleting a light were here *and* on the list at the
+                same time: the Lumières group carries a plus, and every row
+                carries a bin. Duplicating a light and resetting the whole rig
+                have no equivalent there, so those two stay.
+              -->
               <div id="decor-actions" class="decor-actions-bar">
-                <button id="decor-act-add" class="decor-act-btn" type="button" title="Ajouter une nouvelle lumière">+ Lumière</button>
                 <button id="decor-act-dup" class="decor-act-btn" type="button" title="Dupliquer la lumière sélectionnée">❐ Dupliquer</button>
-                <button id="decor-act-del" class="decor-act-btn" type="button" title="Supprimer la sélection">🗑 Supprimer</button>
                 <button id="decor-act-reset" class="decor-act-btn" type="button" title="Réinitialiser l'éclairage standard">↺ Reset</button>
               </div>
             </div>
@@ -1080,7 +1097,13 @@
           <div class="row">
             <button id="btn-export-obj" class="seg" type="button" disabled data-i18n="pan.exportObj">OBJ</button>
             <button id="btn-export-stl" class="seg" type="button" disabled data-i18n="pan.exportStl">STL</button>
-            <button id="btn-snapshot" class="seg" type="button" disabled data-i18n="pan.snapshot">Image</button>
+            <!--
+              No "Image" here. It wrote a PNG of the viewport, which is what the
+              Caméra tab does — except that tab also carries the format, the
+              size, the multiplier and what goes in the frame. Two buttons for
+              one act, one of them ignoring every setting the other offers.
+            -->
+
           </div>
           <p id="export-note" class="hint"></p>
           <!--
