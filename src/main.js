@@ -1413,11 +1413,20 @@ const SELECTION_PANES = new Set(["matter", "scene", "retopo", "object"]);
  * One subscription rather than a call after each of the dozen places that
  * change it: the list that forgets to repaint is the one nobody notices until a
  * row stays lit on a material that is no longer chosen.
+ *
+ * A pinned part is cleared here too. It used to survive every later pick made
+ * anywhere else, because only the parts list itself ever unset it: choosing a
+ * mesh in the tree, or a surface in the viewport, changed `selection` and left
+ * `selectedPart` exactly as it was, so `editTarget` kept answering with the old
+ * part and the handles never moved. The parts list still gets its pin, by
+ * setting it back *after* it clears the selection below.
  */
 selection.subscribe(() => {
+  selectedPart = null;
   paintMaterialList();
   paintTree();
   retopo?.onSelection?.();
+  if (editMode) setEditMode(editMode);
 });
 
 function highlightSelection() {
@@ -2783,13 +2792,18 @@ function applyPrefs() {
   $("fov-value").textContent = `${p.fov}°`;
   viewer.setFov(p.fov);
   if (p.projection !== "perspective") setProjection(p.projection, false);
+  // Never read before: the checkbox stayed at the markup's unchecked default
+  // (light lines) however dark the saved preference said, and `wakeWire` only
+  // asks the checkbox, never `prefs`, when the wireframe first turns on.
+  $("opt-wire-dark").checked = p.wireDark;
+  wire?.setColour(!p.wireDark);
   if (p.pedestal) usePedestal(p.pedestal, false);
   if (p.lights) viewer.applyLights(p.lights);
   // Setting `value` fires no input event, so the readouts would still be
   // showing the markup's defaults and quietly disagreeing with the sliders.
   refreshSliderValues();
   paintDecorTree();
-  selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 });
+  selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 }, { showHelper: false });
 }
 
 /** The tuning of a device outlives the session that found it. */
@@ -3348,7 +3362,10 @@ function updateLightControls(entry) {
   }
 }
 
-function selectDecorItem(sel) {
+// The initial selection at load is only for the panel, so it must not draw
+// the light helper: that line in the viewport should appear from a click,
+// never sit there before anyone touched the light list.
+function selectDecorItem(sel, { showHelper = true } = {}) {
   decorSelection = sel;
   updateDecorSelectedLabel();
 
@@ -3364,11 +3381,13 @@ function selectDecorItem(sel) {
       viewer.lights.find((l) => l.id === sel.id) || viewer.lights[0];
     if (entry) {
       decorSelection.id = entry.id;
-      viewer.showLightHelper(entry.id);
-      updateLightControls(entry);
-      if (decorGizmoMode) {
-        viewer.setGizmo(decorGizmoMode, null, entry.object);
+      if (showHelper) {
+        viewer.showLightHelper(entry.id);
+        if (decorGizmoMode) {
+          viewer.setGizmo(decorGizmoMode, null, entry.object);
+        }
       }
+      updateLightControls(entry);
     }
   } else if (sel.type === "pedestal") {
     viewer.showLightHelper(null);
@@ -3753,7 +3772,7 @@ viewer.onLightChange = (entry) => {
   paintDecorTree();
 };
 
-selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 });
+selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 }, { showHelper: false });
 
 
 
@@ -4177,8 +4196,11 @@ function paintParts() {
     name.textContent = entry.name || "(sans nom)";
     name.title = "Viser cet objet avec les poignées";
     name.addEventListener("click", () => {
-      selectedPart = selectedPart === entry ? null : entry;
+      const next = selectedPart === entry ? null : entry;
+      // After: `selectMaterial(null)` fires the selection subscription, which
+      // clears `selectedPart` on every change so a stale pick cannot outlive it.
       selectMaterial(null);
+      selectedPart = next;
       paintParts();
       if (editMode) setEditMode(editMode);
       else paintEditTarget();
