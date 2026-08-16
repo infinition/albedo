@@ -2034,11 +2034,21 @@ for (const c of CHANNELS) {
   label.textContent = t(c.labelKey);
   b.append(img, label);
   b.addEventListener("click", () => applyChannel(c.id));
-  // Drawn when it is looked at, not when the model loads. See `channelThumb`.
-  b.addEventListener("pointerenter", () => channelThumb(c.id));
-  // A pointer never arrives on a touch screen or from the keyboard, so focus
-  // counts as looking at it too.
-  b.addEventListener("focus", () => channelThumb(c.id));
+  /*
+   * Hovering shows the channel on the model itself.
+   *
+   * The tile is twenty-eight pixels, which is enough to tell one channel from
+   * another and nowhere near enough to *read* one: whether a roughness map is
+   * usable, whether a normal map is inverted, whether the UVs are a mess are all
+   * questions about the model at full size. So the pointer applies it to the
+   * viewport for as long as it stays, and the previous one comes back when it
+   * leaves — a look costs no click and no undo.
+   */
+  b.addEventListener("pointerenter", () => peekChannel(c.id));
+  b.addEventListener("pointerleave", () => peekChannel(null));
+  // A pointer never arrives on a touch screen or from the keyboard.
+  b.addEventListener("focus", () => peekChannel(c.id));
+  b.addEventListener("blur", () => peekChannel(null));
   $("channels").appendChild(b);
 }
 // The channel list is built once but its words change with the language.
@@ -2052,44 +2062,81 @@ window.addEventListener("i18n", () => {
 applyChannel("shaded");
 
 /**
- * One channel's preview, drawn the first time anybody looks at that channel.
+ * Show a channel on the model while the pointer is over its tile.
  *
- * It used to draw all thirteen at once, on every load. Each one swaps a
- * stand-in material onto every mesh in the scene, renders the model offscreen,
- * and swaps back: thirteen full material passes and thirteen renders before the
- * first frame of a model somebody may only have wanted to look at. On a heavy
- * file that is the whole of the delay between dropping it and seeing it.
+ * Only the picture changes: `channels.apply` rather than `applyChannel`, so the
+ * toolbar, the panel, the wireframe and `currentChannel` are all left alone. A
+ * peek that edited the state would be a click, and leaving the tile would have
+ * to undo something rather than simply stop.
  *
- * Drawn on hover instead, once, and kept. Hovering is the moment the picture is
- * about to be useful, and it is also the only moment anyone can tell it was not
- * there a second ago.
+ * `null` puts back whatever is actually chosen — read at that moment rather than
+ * remembered on entry, so clicking a tile while hovering it leaves the new
+ * channel on instead of reverting to the one before.
  */
-const channelThumbs = new Set();
+let peeking = null;
 
-function channelThumb(id) {
-  if (!viewer.current || channelThumbs.has(id)) return;
-  const button = $("channels").querySelector(`[data-id="${id}"]`);
-  if (!button) return;
-  channelThumbs.add(id);
-  const prev = currentChannel;
-  // Through `channels.apply` rather than `applyChannel`: the latter repaints the
-  // toolbar, the panel and the wireframe, which for a 32 pixel picture that is
-  // about to be undone is a great deal of work about nothing.
-  channels.apply(id);
-  button.querySelector(".channel-thumb")?.setAttribute("src", viewer.preview(32));
-  channels.apply(prev);
+function peekChannel(id) {
+  if (!viewer.current) return;
+  if (id === peeking) return;
+  peeking = id;
+  channels.apply(id || currentChannel);
   viewer.invalidate();
 }
 
-/** A new model invalidates every preview: they are pictures of the old one. */
+/**
+ * A preview of the model per channel, all thirteen.
+ *
+ * Each one swaps a stand-in material onto every mesh, renders offscreen at
+ * thirty-two pixels, and swaps back — so drawing all of them in the same breath
+ * as the load is thirteen material passes between dropping a file and seeing it.
+ * They are drawn *after* the load instead, one per turn of the event loop, which
+ * costs the same total and none of it before the model is on screen.
+ *
+ * On a timer rather than on `requestAnimationFrame`. This is work, not
+ * animation: rendering here is on demand, so there is no frame to hang it off,
+ * and rAF stops firing altogether in a background tab — a load in a tab nobody
+ * is looking at would come back to thirteen blank tiles that never fill.
+ *
+ * Cancelled and restarted on the next load: they are pictures of a model that is
+ * no longer there.
+ */
+let thumbRun = 0;
+
+function paintChannelThumbs() {
+  const run = ++thumbRun;
+  const ids = CHANNELS.map((c) => c.id);
+  const step = () => {
+    // A newer load, or a closed document.
+    if (run !== thumbRun || !viewer.current) return;
+    // A peek is in progress: a preview drawn now would be a picture of the peek
+    // on every remaining tile. Wait it out rather than racing it.
+    if (peeking) {
+      setTimeout(step, 120);
+      return;
+    }
+    const id = ids.shift();
+    if (!id) return;
+    const button = $("channels").querySelector(`[data-id="${id}"]`);
+    if (button) {
+      channels.apply(id);
+      button.querySelector(".channel-thumb")?.setAttribute("src", viewer.preview(32));
+    }
+    if (ids.length) setTimeout(step, 0);
+    else {
+      channels.apply(currentChannel);
+      viewer.invalidate();
+    }
+  };
+  setTimeout(step, 0);
+}
+
+/** A new model: blank every tile, then fill them again behind the first frame. */
 function forgetChannelThumbs() {
-  channelThumbs.clear();
+  thumbRun++;
   for (const b of $("channels").children) {
     b.querySelector(".channel-thumb")?.removeAttribute("src");
   }
-  // The one already in force is the one on screen, so it costs nothing to know
-  // and is the only one that would look wrong left blank.
-  channelThumb(currentChannel);
+  if (viewer.current) paintChannelThumbs();
 }
 
 // --- display toggles ------------------------------------------------------
@@ -2649,6 +2696,9 @@ function wakeTree() {
           },
           onLightsChanged: () => saveLights(),
           onLightRenamed: () => saveLights(),
+          // Framing what was just chosen. Not for a ctrl-click, which is
+          // building a set rather than looking at one thing.
+          focus: ({ object, point } = {}) => viewer.focusOn(object, { point }),
           fogState: () => ({
             on: !!postState.fog?.on,
             colour: postState.fog?.colour || "#aebdd0",
@@ -3336,7 +3386,27 @@ async function toggleLibrary() {
     library = createLibrary({
       tauri,
       prefs,
-      onOpen: (path, options) => openPath(path, options),
+      /*
+       * The library opens a file, unless it was opened *to import one*.
+       *
+       * Importing had one route: the system file dialog, which means knowing
+       * where the asset lives on disk. The library is the thing that already
+       * knows — it is a browsable, tagged, thumbnailed index of exactly these
+       * files — and it was reachable for opening and not for importing, which is
+       * the same act with a different destination.
+       *
+       * A flag rather than a second library: it is one screen, one scan and one
+       * set of thumbnails, and standing a second copy of it up to answer a
+       * slightly different question would be a second copy to keep in step.
+       */
+      onOpen: (path, options) => {
+        if (!importing) return openPath(path, options);
+        // A peek is a hover, not a choice: it must not import anything.
+        if (options?.keepLibrary) return Promise.resolve();
+        importing = false;
+        library?.hide();
+        return importPart(path);
+      },
       // Whether there is something to come back to. The library opens beside a
       // loaded model rather than over it.
       hasModel: () => !!viewer.current,
@@ -4375,6 +4445,9 @@ function editTarget() {
     const node = meshByUuid(picked[0]);
     if (node) return node;
   }
+  // The stand is a thing with a transform like any other, and choosing it in
+  // the list is a statement about which object the handles are for.
+  if (selection.primary?.kind === "stand" && viewer.pedestal) return viewer.pedestal;
   const uuid = selection.material;
   const meshes = uuid ? channels.usersOf(uuid).meshes : [];
   return meshes.length === 1 ? meshes[0] : viewer.root;
@@ -4413,12 +4486,22 @@ function paintEditTarget() {
 function paintTransformPanel() {
   const block = $("xform-block");
   if (!block) return;
-  const kind = selection.primary?.kind;
-  // Meshes and stands are things with a transform. A material is a property of
-  // one, a backdrop has no position at all, and a light is placed by bearing and
-  // height rather than by coordinates — so none of the three gets fields that
-  // would either lie or do nothing.
-  const has = viewer.current && (kind === "mesh" || kind === "stand" || !!selectedPart);
+  /*
+   * Asked of `editTarget`, not of the kind of the selection.
+   *
+   * Clicking a surface in the viewport selects a *material* — that is what the
+   * Matière panel is for — so a kind check said "not a mesh" and hid the
+   * coordinates on the most ordinary gesture there is. But `editTarget` already
+   * resolves a material to the single mesh carrying it, which is the object the
+   * handles were going to move anyway. One answer to "what am I acting on",
+   * asked once, and the numbers follow it.
+   *
+   * `viewer.root` is not one: it is the fallback for a material spread over
+   * eight meshes, and showing the whole scene's transform as though it were the
+   * thing just clicked would be a lie in nine characters.
+   */
+  const target = viewer.current ? editTarget() : null;
+  const has = !!target && target !== viewer.root;
   block.hidden = !has;
   if (has) {
     paintEditTarget();
@@ -4680,14 +4763,62 @@ async function importPart(path, label) {
   }
 }
 
-$("part-import").addEventListener("click", async () => {
+/** True while the library is standing in for the file dialog. */
+let importing = false;
+
+async function importFromDisk() {
   if (!viewer.current) return;
   const picked = await tauri?.dialog?.open({
     multiple: false,
     filters: [{ name: "Modèles 3D", extensions: SUPPORTED }],
   });
   if (picked) await importPart(picked);
-});
+}
+
+/*
+ * Two ways in, on a plate under the import glyph.
+ *
+ * From the disk, which is what it always did and is the only answer for a file
+ * that is not in a library. And from the library, which is the answer for
+ * everything that *is*: it already holds the scan, the tags and the thumbnails,
+ * so choosing what to import there is choosing by looking rather than by
+ * remembering a path.
+ */
+{
+  const button = $("part-import");
+  const menu = $("import-menu");
+  const show = (on) => {
+    menu.hidden = !on;
+    button.setAttribute("aria-expanded", String(!!on));
+  };
+  button.addEventListener("click", (e) => {
+    if (!viewer.current) return;
+    e.stopPropagation();
+    show(menu.hidden);
+  });
+  $("import-disk").addEventListener("click", () => {
+    show(false);
+    void importFromDisk();
+  });
+  $("import-library").addEventListener("click", async () => {
+    show(false);
+    importing = true;
+    await toggleLibrary();
+    if (!library?.isOpen) library?.show();
+    toast("Choisis un modèle à importer");
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (menu.hidden || menu.contains(e.target) || button.contains(e.target)) return;
+    show(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!menu.hidden) show(false);
+    // Leaving the library by any route cancels the import it was opened for,
+    // or the next ordinary browse would swallow a click as an import.
+    importing = false;
+  });
+}
 
 $("save-transform").addEventListener("click", async () => {
   $("save-note").textContent = "";

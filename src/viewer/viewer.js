@@ -257,6 +257,19 @@ export class Viewer {
         this.perspective.position.copy(target).addScaledVector(offset, scale);
         this.perspective.updateMatrixWorld();
       }
+      /*
+       * The distance that counts as "framed" moves with the lens.
+       *
+       * Zoom is reported as the framed distance over the current one, and a
+       * 10° lens simply *is* further away for the same picture. Left alone, the
+       * reference stayed where a 45° lens had put it and the readout climbed to
+       * 800% on a camera that had not been zoomed at all — the number went up
+       * because the lens changed, which is precisely what it must never say.
+       *
+       * Scaled by the same factor as the camera, so a lens change is 0% of a
+       * zoom and every zoom after it is measured against the right reference.
+       */
+      if (this.framedDistance) this.framedDistance *= scale;
     }
     if (this.camera.isOrthographicCamera) this.syncOrtho();
     this.controls?.update?.();
@@ -1384,6 +1397,38 @@ export class Viewer {
     const d = this.camera.position.distanceTo(this.controls.target);
     if (!(d > 0)) return null;
     return Math.round((this.framedDistance / d) * 100);
+  }
+
+  /**
+   * Put one thing in the middle of the view, at a size worth looking at.
+   *
+   * Choosing a row in a list of forty meshes tells you which one it is and
+   * nothing about *where* it is: on a character, a row called `Object_31` may be
+   * a buckle behind the arm. Framing it is the answer, and it is the same
+   * framing the whole model gets, given a smaller box.
+   *
+   * A point rather than a box for the things that have no size — a light, the
+   * fog's anchor — with a span taken from the scene, so the camera ends up near
+   * enough to see the handles and far enough not to be inside them.
+   */
+  focusOn(object, { point = null, span = 0 } = {}) {
+    let box;
+    if (point) {
+      const reach = span || Math.max(this.sceneBox().getSize(new THREE.Vector3()).length() / 8, 0.1);
+      box = new THREE.Box3().setFromCenterAndSize(
+        point.clone(),
+        new THREE.Vector3(reach, reach, reach)
+      );
+    } else if (object) {
+      box = new THREE.Box3().setFromObject(object);
+    }
+    if (!box || box.isEmpty()) return false;
+    // A degenerate box — a plane, a single vertex — frames to an infinite zoom.
+    const size = box.getSize(new THREE.Vector3());
+    const floor = Math.max(size.length(), 1e-3) * 0.05;
+    box.expandByVector(new THREE.Vector3(floor, floor, floor));
+    this.frame(box);
+    return true;
   }
 
   /** Everything in the scene, not just the file that was opened. */

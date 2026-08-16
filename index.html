@@ -417,9 +417,17 @@
             </div>
             <span class="mini-sep"></span>
 
-            <button id="part-import" class="mini" type="button" data-i18n-title="pane.importTitle" title="Importer un objet">
-              <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
-            </button>
+            <div class="mini-menu">
+              <button id="part-import" class="mini" type="button" aria-expanded="false" data-i18n-title="pane.importTitle" title="Importer un objet">
+                <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
+              </button>
+              <div id="import-menu" class="mini-pop" hidden>
+                <p class="mini-pop-title" data-i18n="pane.importTitle">Importer un objet</p>
+                <button id="import-disk" class="wide" type="button" data-i18n="pane.importDisk">Depuis l'ordinateur</button>
+                <button id="import-library" class="wide" type="button" data-i18n="pane.importLibrary">Depuis la bibliothèque</button>
+                <p class="hint" data-i18n="pane.importHint">La bibliothèque se referme sur le modèle choisi.</p>
+              </div>
+            </div>
             <button id="part-copy" class="mini" type="button" data-i18n-title="pane.copyTitle" title="Copier (Ctrl+C)">
               <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
             </button>

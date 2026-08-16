@@ -191,11 +191,40 @@ export function renameNode(root, node, next, { byHand = true } = {}) {
  * about the original.
  */
 export function propagate(root, high) {
-  const low = lowPolyOf(root, high);
-  if (!low || meta(low).derived === false) return;
+  /*
+   * Found by the back-link rather than by following the forward one.
+   *
+   * `meta(high).low` holds one uuid, and a result can be more than one node —
+   * the part group and the mesh inside it at least, sometimes several meshes.
+   * Following the forward pointer renamed whichever had been linked last and
+   * left the rest, which on the ordinary path meant renaming the group nobody
+   * sees while the row on screen kept its old name.
+   */
   const wanted = lowName(high.name);
-  if (wanted === low.name) return;
-  low.name = uniqueName(wanted, takenNames(root, low));
+  const taken = takenNames(root, null);
+  const derived = [];
+  root?.traverse?.((o) => {
+    if (o === high) return;
+    const m = meta(o);
+    if (m.high === high.uuid && m.derived !== false) derived.push(o);
+  });
+  /*
+   * The meshes are served first, and that ordering is the whole of the fix.
+   *
+   * A result is a part group holding a mesh, and both are derived, so both want
+   * the same name and one of them has to take a number. Left to the traversal
+   * order it was the group — which nothing displays — so the row on screen read
+   * `Casque_LP.001` next to an invisible `Casque_LP`. The list shows meshes, so
+   * meshes get the clean name and the group takes whatever is left.
+   */
+  derived.sort((a, b) => (b.isMesh || b.isSkinnedMesh ? 1 : 0) - (a.isMesh || a.isSkinnedMesh ? 1 : 0));
+  // Their current names come out of the pool first, or each would collide with
+  // the name it is about to stop using.
+  for (const low of derived) taken.delete(low.name);
+  for (const low of derived) {
+    low.name = uniqueName(wanted, taken);
+    taken.add(low.name);
+  }
 }
 
 /**
@@ -220,6 +249,29 @@ export function nameResult(root, object, sources, fallback = "modele") {
   if (list.length === 1) {
     object.name = uniqueName(lowName(list[0].name || fallback), takenNames(root, object));
     link(list[0], object);
+    /*
+     * The meshes inside get the name too, and their own link.
+     *
+     * The result arrives as a group holding one mesh, and it was only the
+     * *group* that was named and linked. The outliner lists meshes, not part
+     * groups, so the row still read whatever the engine's glb happened to call
+     * it — and renaming the high poly propagated to a name nothing displayed.
+     * The link is what a rename walks, so it has to reach the thing on screen.
+     */
+    const taken = takenNames(root, object);
+    taken.add(object.name);
+    let n = 0;
+    object.traverse?.((o) => {
+      if (o === object || (!o.isMesh && !o.isSkinnedMesh)) return;
+      // One mesh takes the group's own name; a second and third are numbered
+      // from it, so a result that came back split still reads as one family.
+      o.name = n === 0 ? object.name : uniqueName(object.name, taken);
+      taken.add(o.name);
+      link(list[0], o);
+      n++;
+    });
+    // The last one linked wins the reverse pointer, so it points at the mesh a
+    // rename should follow rather than at the group nobody sees.
     return object.name;
   }
 

@@ -258,5 +258,8 @@
   "pane.colour": "Couleur",
   "pane.recentre": "Recentrer",
   "pan.graph": "Graphe du fichier",
-  "pan.saveTitle": "Enregistrer"
+  "pan.saveTitle": "Enregistrer",
+  "pane.importDisk": "Depuis l'ordinateur",
+  "pane.importLibrary": "Depuis la bibliothèque",
+  "pane.importHint": "La bibliothèque se referme sur le modèle choisi."
 }

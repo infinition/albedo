@@ -2206,3 +2206,6 @@ body.immersive.peeking-out #tabbar { opacity: 1; pointer-events: auto; }
   background: rgba(255, 139, 122, 0.08);
 }
 
+
+.mini-pop .wide { margin-top: 5px; }
+.mini-pop .hint { margin: 7px 0 0; }

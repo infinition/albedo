@@ -335,9 +335,11 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       power.textContent = entry.intensity.toFixed(1);
       row.appendChild(power);
 
-      row.addEventListener("click", (e) =>
-        selection.choose(id, "light", e.ctrlKey || e.metaKey)
-      );
+      row.addEventListener("click", (e) => {
+        selection.choose(id, "light", e.ctrlKey || e.metaKey);
+        // A light has no size, so its marker's place is what gets framed.
+        if (!(e.ctrlKey || e.metaKey)) actions.focus?.({ point: entry.object.position });
+      });
       row.appendChild(
         eye(entry.enabled, entry.enabled ? "Éteindre" : "Allumer", () => {
           viewer.setLight(entry.id, { enabled: !entry.enabled });
@@ -440,7 +442,10 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     row.appendChild(
       nameCell(stand.name || "Socle", (next) => renameNode(viewer.root, stand, next))
     );
-    row.addEventListener("click", (e) => selection.choose(id, "stand", e.ctrlKey || e.metaKey));
+    row.addEventListener("click", (e) => {
+      selection.choose(id, "stand", e.ctrlKey || e.metaKey);
+      if (!(e.ctrlKey || e.metaKey)) actions.focus?.({ object: stand });
+    });
     row.appendChild(
       eye(stand.visible, stand.visible ? "Masquer le socle" : "Afficher le socle", () => {
         stand.visible = !stand.visible;
@@ -490,9 +495,12 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     num.textContent = fr(mesh.triangles);
     row.appendChild(num);
     row.title = `${mesh.name} · ${fr(mesh.triangles)} triangles`;
-    row.addEventListener("click", (e) =>
-      selection.choose(mesh.id, "mesh", e.ctrlKey || e.metaKey)
-    );
+    row.addEventListener("click", (e) => {
+      selection.choose(mesh.id, "mesh", e.ctrlKey || e.metaKey);
+      // Choosing a row says which one it is and nothing about where. On a model
+      // of forty meshes that is the question the click was asking.
+      if (!(e.ctrlKey || e.metaKey)) actions.focus?.({ object: mesh.node });
+    });
     row.appendChild(
       eye(mesh.visible, mesh.visible ? "Masquer ce maillage" : "Afficher ce maillage", () => {
         mesh.node.visible = !mesh.node.visible;

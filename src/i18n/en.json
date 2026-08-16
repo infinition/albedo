@@ -258,5 +258,8 @@
   "pane.colour": "Colour",
   "pane.recentre": "Recentre",
   "pan.graph": "File graph",
-  "pan.saveTitle": "Save"
+  "pan.saveTitle": "Save",
+  "pane.importDisk": "From this computer",
+  "pane.importLibrary": "From the library",
+  "pane.importHint": "The library closes on the model you pick."
 }
