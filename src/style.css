@@ -1485,6 +1485,40 @@ label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
 .mat-name.selected { color: var(--fg); }
 .mat-row .seg { padding: 3px 8px; font-size: 11px; }
 
+/*
+ * The two controls a material row carries, at the end of it.
+ *
+ * They used to be a three button segment — PBR, Unlit, Masqué — which on a
+ * narrow column took more width than the name did. The mode is one button that
+ * shows where it is, and hiding is the same eye as the outliner's, because
+ * hiding a material in one list and in the other is the same act on the same
+ * thing and should not have two faces.
+ */
+.mat-tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.mat-mode {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-width: 42px;
+}
+.mat-mode:hover { color: var(--fg); background: rgb(255 255 255 / 0.06); }
+/* Unlit is the departure from the default, so it is the one that shows. */
+.mat-mode.unlit {
+  color: #ffd9a0;
+  border-color: color-mix(in srgb, #ffd9a0 50%, transparent);
+  background: color-mix(in srgb, #ffd9a0 15%, transparent);
+}
+/* Hidden rows stay listed, dimmed: dropping them would make the list disagree
+   with the model about what exists. */
+.mat-row.muted { opacity: 0.45; }
+
 /* Textures of the selected material */
 .maps {
   margin: 2px 0 8px 8px;

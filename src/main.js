@@ -1923,36 +1923,48 @@ function paintMaterialList() {
     count.textContent = triangles ? triangles.toLocaleString("fr-FR") : "";
     count.title = triangles ? `${triangles.toLocaleString("fr-FR")} triangles` : "";
 
+    /*
+     * One button for the mode, not two.
+     *
+     * A segment holding PBR and Unlit spends the width of both on a choice with
+     * two positions, on every row, in a column 276 pixels wide — so the names,
+     * which are the only thing telling one row from another, were squeezed to
+     * eight characters and an ellipsis. One button showing where it currently is
+     * says the same thing and gives the width back.
+     */
     const group = document.createElement("div");
-    group.className = "segment";
-    for (const [mode, text] of [["shaded", "PBR"], ["unlit", "Unlit"]]) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "seg";
-      b.textContent = text;
-      const active = channels.channelFor({ uuid }, currentChannel === "unlit" ? "unlit" : "shaded");
-      b.classList.toggle("active", !hidden && active === mode);
-      b.addEventListener("click", () => {
-        channels.setMaterialHidden(uuid, false);
-        channels.setMaterialMode(uuid, mode);
-        paintMaterialList();
-      });
-      group.appendChild(b);
-    }
+    group.className = "mat-tools";
+    const mode = channels.channelFor({ uuid }, currentChannel === "unlit" ? "unlit" : "shaded");
+    const lit = document.createElement("button");
+    lit.type = "button";
+    lit.className = "mat-mode" + (mode === "unlit" ? " unlit" : "");
+    lit.textContent = mode === "unlit" ? "Unlit" : "PBR";
+    lit.title =
+      mode === "unlit"
+        ? "Texture telle quelle. Cliquer pour éclairer ce matériau."
+        : "Éclairé par la scène. Cliquer pour l'afficher tel quel.";
+    lit.addEventListener("click", () => {
+      channels.setMaterialHidden(uuid, false);
+      channels.setMaterialMode(uuid, mode === "unlit" ? "shaded" : "unlit");
+      paintMaterialList();
+    });
+    group.appendChild(lit);
+
     // Nothing here repairs a broken material, but a slab across a face can at
-    // least be taken out of the way while the rest is inspected.
+    // least be taken out of the way while the rest is inspected. The same eye as
+    // the outliner's, because it is the same act on the same thing.
     const hide = document.createElement("button");
     hide.type = "button";
-    hide.className = "seg";
-    hide.textContent = "Masqué";
-    hide.title = "Retirer ce matériau de la vue";
-    hide.classList.toggle("active", hidden);
+    hide.className = "tree-eye" + (hidden ? " off" : "");
+    hide.textContent = hidden ? "◌" : "◉";
+    hide.title = hidden ? "Réafficher ce matériau" : "Retirer ce matériau de la vue";
     hide.addEventListener("click", () => {
       channels.setMaterialHidden(uuid, !hidden);
       paintMaterialList();
     });
     group.appendChild(hide);
 
+    row.classList.toggle("muted", hidden);
     row.append(chip, label, count, group);
     holder.appendChild(row);
     if (uuid === selection.material) holder.appendChild(textureBlock(uuid));
