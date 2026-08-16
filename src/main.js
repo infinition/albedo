@@ -4802,11 +4802,13 @@ function setEditMode(mode) {
   }
 }
 
+// The Objet pane's own segment is gone; `?.` because these ids no longer exist
+// and this loop is kept only so a future panel can opt back in by name.
 for (const [id, mode] of [
   ["edit-off", null], ["edit-translate", "translate"],
   ["edit-rotate", "rotate"], ["edit-scale", "scale"],
 ]) {
-  $(id).addEventListener("click", () => setEditMode(mode));
+  $(id)?.addEventListener("click", () => setEditMode(mode));
 }
 
 /*

@@ -1034,16 +1034,18 @@
 
         <div class="pane" data-pane="object">
         <section>
-          <h2 data-i18n="pane.edit">Édition</h2>
-          <div class="segment" role="group" data-i18n-aria="pane.editTool" aria-label="Outil de transformation">
-            <button id="edit-off" class="seg active" type="button" data-i18n-title="pane.editOffTitle" data-i18n="pane.editOff" title="Quitter le mode édition (Échap)">Aucun</button>
-            <button id="edit-translate" class="seg" type="button" data-i18n-title="pane.editMoveTitle" data-i18n="pane.editMove" title="Déplacer (G)">Déplacer</button>
-            <button id="edit-rotate" class="seg" type="button" data-i18n-title="pane.editRotateTitle" data-i18n="pane.editRotate" title="Tourner (R)">Tourner</button>
-            <button id="edit-scale" class="seg" type="button" data-i18n-title="pane.editScaleTitle" data-i18n="pane.editScale" title="Redimensionner (S)">Échelle</button>
-          </div>
-          <!-- The keys are on the buttons' own tooltips; a paragraph repeating
-               them sat above the controls it described, every session, for ever. -->
-          <p class="hint" data-i18n="pane.editHint">Maj pendant le glisser : par crans. Clique une surface pour n'agir que sur elle.</p>
+          <h2 data-i18n="pan.scene">Scène</h2>
+          <!--
+            No transform segment here any more.
+
+            Déplacer / Tourner / Échelle existed in five places at once: the bar
+            over the model, this segment, the new row under the scene list, and
+            one set each on the light and the stand. Three of the five call the
+            same `setEditMode`, so this one was the same control drawn a third
+            time, in the tab furthest from the thing it moves. The two that
+            remain elsewhere are *not* duplicates yet — they aim at a light and
+            at the stand, which `editTarget` cannot yet resolve.
+          -->
           <div id="parts-list"></div>
           <!--
             The numbers, the handles, the pivot, importing, copying and undoing
