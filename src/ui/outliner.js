@@ -52,6 +52,9 @@ const BACKDROPS = [
   { kind: "image", label: "Image", hint: "Panorama 360, HDR ou image" },
 ];
 
+/** What the environment's own light looks like, per source. */
+const ENV_TINT = { studio: "#e8ecf4", gradient: "#9fb4d0", image: "#ffd9a0" };
+
 const LIGHT_GLYPH = { directional: "☀", point: "●", spot: "▼" };
 const LIGHT_LABEL = { directional: "Directionnelle", point: "Ponctuelle", spot: "Projecteur" };
 
@@ -303,8 +306,60 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
   // Lumières
   // ---------------------------------------------------------------------------
 
+  /**
+   * What the environment contributes, listed among the lights.
+   *
+   * The studio probe lights every scene by default and had no row here, only an
+   * entry under Fonds — so "why is my model still lit with every light off" had
+   * nowhere to be answered, and the one source doing most of the work was the
+   * one thing in the application you could not point at.
+   *
+   * It is not the Fonds row said twice. That one answers *what is behind*; this
+   * one answers *what lights*, and for the studio those are completely
+   * different: it lights and shows nothing at all. They share a selection id
+   * because they are one object with two questions asked of it, so choosing
+   * either opens the same dials.
+   *
+   * Written for all three sources rather than for the studio alone: an HDR's
+   * contribution deserves the same row, and a rule with one exception in it is a
+   * rule somebody has to remember.
+   */
+  function environmentRow() {
+    const kind = viewer.envKind || "studio";
+    const source = BACKDROPS.find((b) => b.kind === kind) || BACKDROPS[0];
+    const on = viewer.envLighting !== false;
+    const id = decorId("bg", kind);
+
+    const row = document.createElement("div");
+    row.className = "tree-row tree-child" + (selection.has(id) ? " picked" : "") + (on ? "" : " muted");
+    row.appendChild(caret(id, false));
+
+    const bulb = document.createElement("span");
+    bulb.className = "tree-bulb";
+    bulb.style.background = ENV_TINT[kind] || "#e8ecf4";
+    bulb.textContent = "◍";
+    bulb.title = "La lumière qui vient de l'environnement";
+    row.appendChild(bulb);
+
+    row.appendChild(nameCell("Environnement", null));
+    const which = document.createElement("span");
+    which.className = "tree-num";
+    which.textContent = source.label;
+    row.appendChild(which);
+    row.title = `${source.label} — ${source.hint}`;
+
+    row.addEventListener("click", (e) => selection.choose(id, "bg", e.ctrlKey || e.metaKey));
+    row.appendChild(
+      eye(on, on ? "Éteindre l'environnement" : "Rallumer l'environnement", () => {
+        actions.setEnvLighting?.(!on);
+        paint();
+      })
+    );
+    return row;
+  }
+
   function lightRows() {
-    return (viewer.lights || []).map((entry) => {
+    return [environmentRow(), ...(viewer.lights || []).map((entry) => {
       const id = decorId("light", entry.id);
       const row = document.createElement("div");
       row.className =
@@ -335,11 +390,13 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       power.textContent = entry.intensity.toFixed(1);
       row.appendChild(power);
 
-      row.addEventListener("click", (e) => {
-        selection.choose(id, "light", e.ctrlKey || e.metaKey);
-        // A light has no size, so its marker's place is what gets framed.
-        if (!(e.ctrlKey || e.metaKey)) actions.focus?.({ point: entry.object.position });
-      });
+      // No framing on a light. A mesh is somewhere in a model and finding it is
+      // the question the click was asking; a light is somewhere around it, and
+      // swinging the camera off the subject to look at a marker loses the one
+      // thing you were judging the light *by*.
+      row.addEventListener("click", (e) =>
+        selection.choose(id, "light", e.ctrlKey || e.metaKey)
+      );
       row.appendChild(
         eye(entry.enabled, entry.enabled ? "Éteindre" : "Allumer", () => {
           viewer.setLight(entry.id, { enabled: !entry.enabled });
@@ -357,7 +414,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         })
       );
       return row;
-    });
+    })];
   }
 
   // ---------------------------------------------------------------------------
@@ -442,10 +499,9 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     row.appendChild(
       nameCell(stand.name || "Socle", (next) => renameNode(viewer.root, stand, next))
     );
-    row.addEventListener("click", (e) => {
-      selection.choose(id, "stand", e.ctrlKey || e.metaKey);
-      if (!(e.ctrlKey || e.metaKey)) actions.focus?.({ object: stand });
-    });
+    // Same as a light: the stand is scenery around the subject, and framing it
+    // takes the subject off screen.
+    row.addEventListener("click", (e) => selection.choose(id, "stand", e.ctrlKey || e.metaKey));
     row.appendChild(
       eye(stand.visible, stand.visible ? "Masquer le socle" : "Afficher le socle", () => {
         stand.visible = !stand.visible;

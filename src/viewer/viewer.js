@@ -843,13 +843,29 @@ export class Viewer {
     if (!this.scene.environment) this.applyLighting();
   }
 
+  /**
+   * Decide what lights the model, and only that.
+   *
+   * **The studio probe obeys the switch now.** It did not: whatever `envLighting`
+   * said, an environment that was not an image or a gradient fell through to
+   * `studio()`, so turning the environment light off left the scene lit by the
+   * generated room exactly as before. The control was hidden in the interface
+   * for precisely that reason — a checkbox that does nothing is worse than none
+   * — and hiding it left the one light source in the application that could not
+   * be switched off, which is also the one lighting every scene by default.
+   *
+   * Off means off: `scene.environment` becomes null and the punctual lights are
+   * on their own. A polished metal goes black under that, which is not a bug but
+   * the answer to "what is my rig actually doing", and the only way to see it.
+   */
   applyLighting() {
     const source =
       this.envKind === "image" ? this.panoramaSource : this.envKind === "gradient" ? this.gradient : null;
-    const wanted = source && this.envLighting !== false ? source : null;
+    const lighting = this.envLighting !== false;
+    const wanted = source && lighting ? source : null;
 
     if (this.envMap && this.envMap !== this.studioMap) this.envMap.dispose();
-    this.envMap = wanted ? this.pmrem.fromEquirectangular(wanted).texture : this.studio();
+    this.envMap = wanted ? this.pmrem.fromEquirectangular(wanted).texture : lighting ? this.studio() : null;
     this.scene.environment = this.envMap;
     this.invalidate();
   }

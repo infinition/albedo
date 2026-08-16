@@ -2699,6 +2699,10 @@ function wakeTree() {
           // Framing what was just chosen. Not for a ctrl-click, which is
           // building a set rather than looking at one thing.
           focus: ({ object, point } = {}) => viewer.focusOn(object, { point }),
+          setEnvLighting: (on) => {
+            $("env-lighting").checked = on;
+            viewer.setEnvironmentLighting(on);
+          },
           fogState: () => ({
             on: !!postState.fog?.on,
             colour: postState.fog?.colour || "#aebdd0",
@@ -2766,6 +2770,28 @@ const fileLabel = (path) => (path || "").split(/[\\/]/).pop() || path;
 const PANORAMA_KINDS = ["hdr", "exr", "png", "jpg", "jpeg", "webp"];
 
 /**
+ * Which of the backdrop's controls apply to the source in force.
+ *
+ * "Fond visible" is hidden for the studio, because it does nothing there.
+ * `applyBackground` has three branches and the studio matches none of them:
+ * ticked or not, it lands on the same solid colour. The studio *is* a probe with
+ * no picture — that is what distinguishes it from the other two — so a control
+ * asking whether to draw it was a switch between a thing and itself.
+ *
+ * "Éclaire la scène" stays for every source and now means something for all
+ * three: the probe obeys it as of `applyLighting`.
+ *
+ * Called from wherever the panel can become visible rather than only from
+ * `useEnvironment`. Switching *to* the studio ran that function; starting a
+ * session already in it did not, so the dead control was on screen for exactly
+ * the people who never changed the backdrop.
+ */
+function paintEnvControls(kind = viewer.envKind || "studio") {
+  $("env-background").closest("label").hidden = kind === "studio";
+  $("env-lighting").closest("label").hidden = false;
+}
+
+/**
  * Switch what lights the scene and what sits behind it.
  *
  * `path` names a file to load. `ask` forces the picker, which is what the
@@ -2817,7 +2843,7 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
   $("env-image-tools").hidden = kind !== "image";
   $("env-framing").hidden = kind !== "image";
   // The studio probe is the lighting: asking whether it lights would be odd
-  $("env-lighting").closest("label").hidden = kind === "studio";
+  paintEnvControls(kind);
   if (!remember) return;
   prefs.set("environment", kind);
   // A blob URL from the browser fallback would not survive a restart
@@ -3831,6 +3857,21 @@ function updateLightControls(entry) {
     $("light-distance").value = String(entry.distance ?? 2.5);
   if ($("light-distance-value"))
     $("light-distance-value").textContent = `${(entry.distance ?? 2.5).toFixed(1)}×`;
+  /*
+   * Distance is hidden for a directional light, because it changes nothing.
+   *
+   * A directional light in three.js has no position in the physical sense: only
+   * the vector from it to its target is read, and the rig aims every light at
+   * the same centre. Sliding the distance walks the light along that very ray,
+   * so the direction is identical and the picture does not move by a pixel.
+   * There are no shadows in this viewer either, which is the other thing that
+   * would have made the distance matter.
+   *
+   * It is real for the other two: a point and a spot fall off with distance, and
+   * `placeLight` sizes their reach from it.
+   */
+  if ($("light-distance"))
+    $("light-distance").closest("label").hidden = entry.kind === "directional";
   if ($("light-colour")) $("light-colour").value = entry.colour || "#ffffff";
   if ($("light-kind")) $("light-kind").value = entry.kind || "directional";
   if ($("light-cone")) $("light-cone").hidden = entry.kind !== "spot";
@@ -3880,6 +3921,7 @@ function selectDecorItem(sel, { showHelper = true } = {}) {
   } else if (sel.type === "background") {
     viewer.showLightHelper(null);
     setGizmoMode(null);
+    paintEnvControls();
     // Switching to it is the outliner's job, on the click that chose the row.
     // Doing it here as well ran `useEnvironment` twice for one click, which on
     // the image source meant loading and decoding the panorama twice.
