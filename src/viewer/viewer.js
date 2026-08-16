@@ -2213,8 +2213,24 @@ export class Viewer {
   }
 
   /** What to write down, without the three objects. */
+  /**
+   * What to write down, without the objects.
+   *
+   * Both of them, named explicitly. This destructured `object` away and kept
+   * everything else, which was right until a light grew a `marker` — a live
+   * sprite, which `JSON.stringify` happily serialises through three's own
+   * `toJSON`, texture and all. Seven and a half thousand characters per light,
+   * written to the roaming preferences on every change and into every document's
+   * saved look, for a field the reader throws away.
+   *
+   * A denylist is what let that happen: anything added to an entry ships until
+   * somebody notices. It stays a denylist because the alternative — listing the
+   * eleven fields that *are* saved — is a list to forget to extend the next time
+   * a light gains a property, and that failure is silent in the other direction:
+   * a setting that quietly stops being remembered.
+   */
   lightState() {
-    return this.lights.map(({ object, ...rest }) => rest);
+    return this.lights.map(({ object, marker, ...rest }) => rest);
   }
 
   applyLights(saved) {

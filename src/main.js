@@ -232,6 +232,11 @@ function captureViewState() {
     envLighting: viewer.envLighting,
     envIntensity: viewer.scene.environmentIntensity ?? 1,
     bgBrightness: Number($("bg-brightness")?.value ?? 1),
+    // How the panorama is framed, which for an HDR is a lighting decision and
+    // not merely a look: its rotation decides which way the key comes from. It
+    // was the one part of the environment the document did not carry, so
+    // switching tabs and back put the sun somewhere else.
+    framing: { ...(viewer.framing || {}) },
     lights: viewer.lightState(),
     // The stand travels with the scene it was chosen for: a plinth picked to sit
     // a figurine on has nothing to say about the next file.
@@ -271,6 +276,13 @@ async function restoreViewState(s) {
   $("env-intensity").value = String(s.envIntensity);
   $("bg-brightness").value = String(s.bgBrightness ?? 1);
   viewer.setBackgroundBrightness(s.bgBrightness ?? 1);
+  if (s.framing) {
+    viewer.setFraming(s.framing);
+    $("env-zoom").value = String(s.framing.zoom ?? 1);
+    $("env-rotation").value = String(s.framing.rotation ?? 0);
+    $("env-blur").value = String(s.framing.blur ?? 0);
+  }
+  paintEnvControls();
   // No `setKeyLight`/`setKeyLightPower`/`setKeyLightColour` here any more. They
   // wrote to light zero from three fields `captureViewState` never wrote, so
   // they were three calls acting on `undefined` — and `applyLights` on the very
@@ -311,6 +323,11 @@ async function resetViewSettings() {
   viewer.setBackgroundBrightness(1);
   viewer.showEnvBackground = true;
   $("env-background").checked = true;
+  viewer.setFraming({ zoom: 1, rotation: 0, blur: 0 });
+  $("env-zoom").value = "1";
+  $("env-rotation").value = "0";
+  $("env-blur").value = "0";
+  paintEnvControls("studio");
   // Empty, which `applyLights` reads as "give me the standard rig": one key
   // light, where the standard rig puts it.
   viewer.applyLights([]);
@@ -2789,6 +2806,21 @@ const PANORAMA_KINDS = ["hdr", "exr", "png", "jpg", "jpeg", "webp"];
 function paintEnvControls(kind = viewer.envKind || "studio") {
   $("env-background").closest("label").hidden = kind === "studio";
   $("env-lighting").closest("label").hidden = false;
+  /*
+   * "Luminosité du fond" needs a backdrop made of pixels.
+   *
+   * `scene.backgroundIntensity` is read by exactly two shaders in three: the one
+   * that draws a cube map and the one that draws a plane texture. A `Color`
+   * background goes through `setClearColor` and never meets either, so the
+   * slider is inert on the studio — which always draws the solid colour — and
+   * equally inert on a gradient or an image whose backdrop has been switched
+   * off, when the same solid colour is what is showing.
+   */
+  const drawsATexture = kind !== "studio" && viewer.showEnvBackground !== false;
+  $("bg-brightness").closest("label").hidden = !drawsATexture;
+  // And the same rule once more: with the environment switched off there is no
+  // `scene.environment` for an intensity to scale.
+  $("env-intensity").closest("label").hidden = viewer.envLighting === false;
 }
 
 /**
@@ -2866,6 +2898,9 @@ $("env-background").addEventListener("change", (e) => {
   viewer.showEnvBackground = e.target.checked;
   viewer.applyBackground();
   prefs.set("environmentBackground", e.target.checked);
+  // Hiding the backdrop puts the solid colour back on screen, and the brightness
+  // slider has nothing to act on again.
+  paintEnvControls();
 });
 
 // --- gradient ---------------------------------------------------------------
@@ -2992,6 +3027,9 @@ $("env-blur").addEventListener("input", (e) => {
 $("env-lighting").addEventListener("change", (e) => {
   viewer.setEnvironmentLighting(e.target.checked);
   prefs.set("environmentLighting", e.target.checked);
+  paintEnvControls();
+  // The list carries the same switch on its Environnement row.
+  paintTree();
 });
 $("env-intensity").addEventListener("input", (e) => {
   const value = Number(e.target.value);
