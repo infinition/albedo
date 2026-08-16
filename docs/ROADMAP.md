@@ -22,6 +22,8 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | Grid built a page at a time | [x] | 5000 entries, 240 cards built |
 | Stale thumbnail work dropped | [x] | 20 asked, 2 processes started, 18 abandoned |
 | Custom lights: add, place, colour, remove | [x] | Luminance moves with power and bearing, returns on removal |
+| Lights clickable in the viewport | [x] | A marker per light, asked before the model so one standing in front of the subject is still reachable; hidden unless its light is the one being edited |
+| Volumetric fog with a position | [x] | Mean grey 45 off, 145 on, and back to 45 when the volume is moved out of frame — so it has a place |
 | Colour space correction | [x] | Base colour sRGB, data maps linear |
 | PBR / unlit toggle | [x] | Both buttons drive the channel state |
 | Per material PBR / unlit | [x] | Alligator body unlit while its eyes stay PBR |
@@ -31,7 +33,7 @@ Legend: **[x]** exercised and measured, **[ ]** written but not yet confirmed on
 | Eleven inspection channels | [x] | Rendered offscreen one by one: 9 distinct images, the two pairs that match being constants on that model |
 | Point clouds counted in the statistics | [x] | 2000 points reported for PCD and XYZ, which read as an empty scene before |
 | Wireframe, grid, bounding box, skeleton | [x] | Toggles verified |
-| Exposure control | [x] | Wired to tone mapping |
+| Exposure control | [x] | Wired to tone mapping. The slider lives in Effets; the mechanism stays on the renderer, because the backdrop is pre-compensated against the tone curve |
 
 ### Files and Textures
 
@@ -162,6 +164,17 @@ invisible is the reusable part.
 - **`onOpenChange` swallows its errors.** A change to it stopped `#retopo`
   mounting with nothing in the console. Check `document.getElementById("retopo")`
   after opening the mode.
+- **`requestAnimationFrame` is the wrong clock in an on-demand renderer.** The
+  focus indicator was first written as a rAF loop that read the viewer and
+  repainted a readout. Two faults in one: the loop spins through frames that draw
+  nothing, and rAF stops being called at all in a background tab — where the loop
+  was also what removed the indicator, so it would have stayed on screen for
+  ever. Anything that has to follow the picture should be *pushed* by whatever
+  draws it.
+- **A backtick in a GLSL comment ends the template literal.** `fog.js` failed to
+  parse with an error pointing at a comment line, which reads as a mangled file
+  rather than as a string that closed early. Shaders written as template literals
+  cannot quote identifiers the way the rest of the codebase does.
 - **A pixel width written once is not a layout.** `--peek` was set by the drag
   handle and never confronted with the window again, so every later resize of
   the window was a resize of one half only. Anything a user drags has to be
@@ -239,6 +252,46 @@ invisible is the reusable part.
       button, the scope sentences and every progress line: 137 keys, audited
       both ways. They ship in the mode's own chunk rather than in the startup
       dictionaries, which is what keeps a thumbnail job from parsing them.
+
+- [x] One list for the whole scene. `src/ui/outliner.js` replaces the two that
+      disagreed — the mesh tree in one tab and the lights, stand and backdrops in
+      another — with Fonds, Lumières, Atmosphère, Socles and Modèle in a single
+      list pinned above the tabs. Eye, rename on double-click and delete on every
+      row; mesh previews textured and lit by the scene's own probe.
+- [x] A naming convention that survives being used. Blender-style numbering on
+      copy and import, a retopology result named after its *source mesh*, the
+      link carried both ways, propagation that stops the moment a name is typed
+      by hand, and a re-run that replaces only what descends from the meshes it
+      covers.
+- [x] Retopology one mesh at a time, with the selection as the default scope and
+      one low poly per high poly. History and rebake carry N results.
+- [x] Lights that behave like objects: a clickable marker, the transform
+      handles, and markers hidden by default so a viewer stays a viewer.
+- [x] Volumetric fog with a place in the scene — its own row in the list, its own
+      handle in the viewport, and a ray-marched pass reading a depth render of
+      its own.
+- [x] Depth of field shown while it is set: the focal plane, the sharp band and
+      the numbers, from the pass's own arithmetic.
+- [x] Settings that belong to the scene rather than to the application. Effects,
+      stand, backdrop and lights travel with the document; the preferences are
+      what a session starts from.
+- [x] Channel previews drawn on hover instead of thirteen offscreen renders per
+      load, each tile in the colour of the thing it shows.
+- [x] Panels that are read at a glance: effects as cards with a switch on the
+      title line, toggles as chips, sections that fold, and the Objet pane down
+      from 1095 to 738 pixels.
+
+### Faults Found and Fixed, Scene-List Round
+
+| Fault | How it hid |
+| --- | --- |
+| `selection.delete` did not exist | The tree called it to drop a mesh it had just removed. `selection` is an object literal and the method was never written, so deleting a mesh from the list threw a TypeError — on a path nothing else took, in a list that repainted itself afterwards anyway |
+| `applyPrefs` abandoned everything after line 40 | `#fov-value` was nested *inside* a `data-i18n` span. `applyStaticIn` writes `textContent` on every such element, which deletes its children, so the readout was gone before the preferences were read and `applyPrefs` threw on it. Everything below that line — wireframe colour, stand, saved lights, slider readouts — silently stopped being restored, and the throw surfaced only as "Uncaught (in promise)" with no frame anyone read |
+| A selected light swept away on every repaint | `prune` was handed the ids the tree knows about, which are meshes and materials. Judged against that list a light is "no longer in the scene" and was dropped instantly — the row never even flickered lit |
+| Picking a light missed by however far it had just moved | Rendering is on demand, and it is the frame that flushes matrix updates. A click arriving before the next frame raycast against the previous frame's position. Dragging the elevation slider and immediately clicking the marker — which is exactly how one places a light — missed silently |
+| Three calls in `restoreViewState` acting on `undefined` | `setKeyLight`, `setKeyLightPower` and `setKeyLightColour` read three fields `captureViewState` never wrote, and `applyLights` rebuilt every light on the very next line. Even when they did something, they did it to an object about to be replaced |
+| Every pane with a slider scrolled sideways by two pixels | A range input carries a default margin on top of its own box, so `width: 100%` came out two pixels over. Enough for a scrollbar to appear and the column to twitch; not enough to see why |
+| The panorama was forgotten, not freed | Leaving an image for the studio never released `panoramaSource` — the decoded texture stayed in memory the whole time — but coming back still went through the file picker, a disk read and a decode, which made a round trip to compare look destructive |
 
 ### Next / Upcoming Features
 
