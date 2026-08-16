@@ -374,6 +374,75 @@
           changed with the move: it draws a portrait per row through the
           renderer, which is work no Explorer thumbnail process should start.
         -->
+        <!--
+          The tools sit at the very top, above the list.
+
+          They were under it, next to the coordinates, which put the row you
+          reach for constantly below a list that scrolls. At the top they are
+          in one fixed place: the hand goes to the same pixels whatever the
+          scene holds. The coordinates stay under the list, because they
+          describe the selection rather than act on it.
+        -->
+        <div class="mini-bar" role="toolbar" aria-label="Outils de scène">
+          <button id="mini-move" class="mini" type="button" data-i18n-title="pane.editMoveTitle" title="Déplacer (G)">
+            <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
+          </button>
+          <button id="mini-rotate" class="mini" type="button" data-i18n-title="pane.editRotateTitle" title="Tourner (R)">
+            <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>
+          </button>
+          <button id="mini-scale" class="mini" type="button" data-i18n-title="pane.editScaleTitle" title="Échelle (S)">
+            <svg viewBox="0 0 24 24"><path d="M4 20h7v-7"/><path d="M20 4h-7v7"/><path d="M4 20L20 4"/></svg>
+          </button>
+          <span class="mini-sep"></span>
+
+          <div class="mini-menu">
+            <button id="mini-pivot" class="mini" type="button" aria-expanded="false" data-i18n-title="pan.pivot" title="Centre de rotation">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+            </button>
+            <div id="pivot-menu" class="mini-pop" hidden>
+              <p class="mini-pop-title" data-i18n="pan.pivot">Centre de rotation</p>
+              <label class="chip" style="--tint:#b08cff">
+                <input type="checkbox" id="pivot-show" />
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+                <span data-i18n="pan.pivotShow">Montrer le centre</span>
+              </label>
+              <div class="row">
+                <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées" data-i18n="pan.pivotMove">Déplacer</button>
+                <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets" data-i18n="pan.pivotCentre">Centre géométrique</button>
+              </div>
+              <div class="row">
+                <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante" data-i18n="pan.pivotReset">Restaurer</button>
+              </div>
+            </div>
+          </div>
+          <span class="mini-sep"></span>
+
+          <div class="mini-menu">
+            <button id="part-import" class="mini" type="button" aria-expanded="false" data-i18n-title="pane.importTitle" title="Importer un objet">
+              <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
+            </button>
+            <div id="import-menu" class="mini-pop" hidden>
+              <p class="mini-pop-title" data-i18n="pane.importTitle">Importer un objet</p>
+              <button id="import-disk" class="wide" type="button" data-i18n="pane.importDisk">Depuis l'ordinateur</button>
+              <button id="import-library" class="wide" type="button" data-i18n="pane.importLibrary">Depuis la bibliothèque</button>
+              <p class="hint" data-i18n="pane.importHint">La bibliothèque se referme sur le modèle choisi.</p>
+            </div>
+          </div>
+          <button id="part-copy" class="mini" type="button" data-i18n-title="pane.copyTitle" title="Copier (Ctrl+C)">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+          </button>
+          <button id="part-paste" class="mini" type="button" data-i18n-title="pane.pasteTitle" title="Coller (Ctrl+V)">
+            <svg viewBox="0 0 24 24"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/></svg>
+          </button>
+          <span class="mini-sep"></span>
+
+          <button id="undo" class="mini" type="button" data-i18n-title="pane.undoTitle" title="Annuler (Ctrl+Z)" disabled>
+            <svg viewBox="0 0 24 24"><path d="M4 10h10a5 5 0 0 1 0 10h-3"/><path d="M8 6l-4 4 4 4"/></svg>
+          </button>
+          <button id="redo" class="mini" type="button" data-i18n-title="pane.redoTitle" title="Rétablir (Ctrl+Maj+Z)" disabled>
+            <svg viewBox="0 0 24 24"><path d="M20 10H10a5 5 0 0 0 0 10h3"/><path d="M16 6l4 4-4 4"/></svg>
+          </button>
+        </div>
         <div id="outliner-dock">
           <div class="outliner-bar">
             <span data-i18n="pane.sceneTitle">Scène</span>
@@ -405,66 +474,6 @@
           subject.
         -->
         <div id="scene-tools">
-          <div class="mini-bar" role="toolbar" aria-label="Outils de scène">
-            <button id="mini-move" class="mini" type="button" data-i18n-title="pane.editMoveTitle" title="Déplacer (G)">
-              <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
-            </button>
-            <button id="mini-rotate" class="mini" type="button" data-i18n-title="pane.editRotateTitle" title="Tourner (R)">
-              <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>
-            </button>
-            <button id="mini-scale" class="mini" type="button" data-i18n-title="pane.editScaleTitle" title="Échelle (S)">
-              <svg viewBox="0 0 24 24"><path d="M4 20h7v-7"/><path d="M20 4h-7v7"/><path d="M4 20L20 4"/></svg>
-            </button>
-            <span class="mini-sep"></span>
-
-            <div class="mini-menu">
-              <button id="mini-pivot" class="mini" type="button" aria-expanded="false" data-i18n-title="pan.pivot" title="Centre de rotation">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
-              </button>
-              <div id="pivot-menu" class="mini-pop" hidden>
-                <p class="mini-pop-title" data-i18n="pan.pivot">Centre de rotation</p>
-                <label class="chip" style="--tint:#b08cff">
-                  <input type="checkbox" id="pivot-show" />
-                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
-                  <span data-i18n="pan.pivotShow">Montrer le centre</span>
-                </label>
-                <div class="row">
-                  <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées" data-i18n="pan.pivotMove">Déplacer</button>
-                  <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets" data-i18n="pan.pivotCentre">Centre géométrique</button>
-                </div>
-                <div class="row">
-                  <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante" data-i18n="pan.pivotReset">Restaurer</button>
-                </div>
-              </div>
-            </div>
-            <span class="mini-sep"></span>
-
-            <div class="mini-menu">
-              <button id="part-import" class="mini" type="button" aria-expanded="false" data-i18n-title="pane.importTitle" title="Importer un objet">
-                <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
-              </button>
-              <div id="import-menu" class="mini-pop" hidden>
-                <p class="mini-pop-title" data-i18n="pane.importTitle">Importer un objet</p>
-                <button id="import-disk" class="wide" type="button" data-i18n="pane.importDisk">Depuis l'ordinateur</button>
-                <button id="import-library" class="wide" type="button" data-i18n="pane.importLibrary">Depuis la bibliothèque</button>
-                <p class="hint" data-i18n="pane.importHint">La bibliothèque se referme sur le modèle choisi.</p>
-              </div>
-            </div>
-            <button id="part-copy" class="mini" type="button" data-i18n-title="pane.copyTitle" title="Copier (Ctrl+C)">
-              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
-            </button>
-            <button id="part-paste" class="mini" type="button" data-i18n-title="pane.pasteTitle" title="Coller (Ctrl+V)">
-              <svg viewBox="0 0 24 24"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/></svg>
-            </button>
-            <span class="mini-sep"></span>
-
-            <button id="undo" class="mini" type="button" data-i18n-title="pane.undoTitle" title="Annuler (Ctrl+Z)" disabled>
-              <svg viewBox="0 0 24 24"><path d="M4 10h10a5 5 0 0 1 0 10h-3"/><path d="M8 6l-4 4 4 4"/></svg>
-            </button>
-            <button id="redo" class="mini" type="button" data-i18n-title="pane.redoTitle" title="Rétablir (Ctrl+Maj+Z)" disabled>
-              <svg viewBox="0 0 24 24"><path d="M20 10H10a5 5 0 0 0 0 10h3"/><path d="M16 6l4 4-4 4"/></svg>
-            </button>
-          </div>
 
           <div id="xform-block" hidden>
             <p class="hint" id="edit-target" data-i18n="pane.editTarget">Cible : le modèle entier</p>

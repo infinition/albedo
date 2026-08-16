@@ -669,11 +669,12 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
  * way from the list to the settings. At the bottom it is out of that path and
  * against the edge, which is the easiest thing in a window to hit.
  */
-#outliner-dock { order: 0; flex: 0 0 30%; min-height: 88px; overflow-y: auto; }
-#scene-tools { order: 1; flex: none; }
-#panes { order: 2; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#inspector > .mini-bar { order: 0; flex: none; }
+#outliner-dock { order: 1; flex: 0 0 30%; min-height: 88px; overflow-y: auto; }
+#scene-tools { order: 2; flex: none; }
+#panes { order: 3; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #inspector > #tabs {
-  order: 3;
+  order: 4;
   flex: none;
   /* The rule moves with it: a separator belongs on the side the content is. */
   border-top: 1px solid var(--line);
