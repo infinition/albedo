@@ -3301,9 +3301,40 @@ for (const [group, key, id] of POST_CONTROLS) {
   const el = $(id);
   if (!el) continue;
   const isCheck = el.type === "checkbox";
-  el.addEventListener(isCheck ? "change" : "input", () =>
-    setPost(group, key, isCheck ? el.checked : Number(el.value))
-  );
+  el.addEventListener(isCheck ? "change" : "input", () => {
+    setPost(group, key, isCheck ? el.checked : Number(el.value));
+    if (isCheck) paintFxCard(el);
+  });
+}
+
+/**
+ * A card looks like what it is doing.
+ *
+ * The class is what colours the border and the glyph and reveals the
+ * parameters, and it is set from the switch rather than tracked beside it, so
+ * there is one answer to "is this effect on" and the picture cannot drift from
+ * it — restoring a saved set, clicking the switch and clicking the title all
+ * end up here.
+ */
+function paintFxCard(input) {
+  input.closest(".fx")?.classList.toggle("on", input.checked);
+}
+
+/**
+ * The whole title line is the switch.
+ *
+ * A seventeen pixel toggle is a small target for a control that is used more
+ * than anything else in this pane, and the name beside it is dead space. The
+ * switch itself is left alone: it is a label click away from toggling twice.
+ */
+for (const head of document.querySelectorAll(".fx-head")) {
+  head.addEventListener("click", (e) => {
+    if (e.target.classList.contains("fx-switch")) return;
+    const box = head.querySelector(".fx-switch");
+    if (!box) return;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 // Restore what was left on, and only then: a saved set that is entirely off
@@ -3317,6 +3348,10 @@ void shellReady.then(() => {
     if ($(id).type === "checkbox") $(id).checked = !!value;
     else $(id).value = String(value);
   }
+  // The cards catch up with the switches, including the ones no saved set
+  // mentions: `aa` is ticked in the markup, so its card is on from the start.
+  for (const box of document.querySelectorAll(".fx-switch")) paintFxCard(box);
+  refreshSliderValues();
   if (wanted) {
     postPending = viewer.effects();
     postPending.then((fx) => {

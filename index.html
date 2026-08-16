@@ -375,14 +375,24 @@
             bar in Retopo mirrors this switch rather than owning a second one.
           -->
           <label class="check"><input type="checkbox" id="opt-wireframe" /><span data-i18n="pane.wireframe">Fil de fer (W)</span></label>
-          <label class="check" id="opt-wire-dark-row"><input type="checkbox" id="opt-wire-dark" /><span data-i18n="pane.wireDark">Traits sombres</span></label>
+          <!--
+            Checked in the markup, because dark is the default the preferences
+            already declare (`wireDark: true`) and the box was the one place
+            saying otherwise. Anything that turns the wireframe on before the
+            preferences have been read — the W key, most of all — asks this
+            checkbox, so an unchecked default meant the first wireframe of every
+            session came up in light lines whatever had been saved.
+          -->
+          <label class="check" id="opt-wire-dark-row"><input type="checkbox" id="opt-wire-dark" checked /><span data-i18n="pane.wireDark">Traits sombres</span></label>
           <label class="check"><input type="checkbox" id="opt-grid" checked /><span data-i18n="pane.grid">Grille</span></label>
           <label class="check"><input type="checkbox" id="opt-bounds" /><span data-i18n="pane.bounds">Boîte englobante</span></label>
           <label class="check"><input type="checkbox" id="opt-skeleton" /><span data-i18n="pane.skeleton">Squelette</span></label>
-          <label class="field">
-            <span data-i18n="pane.exposure">Exposition</span>
-            <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" />
-          </label>
+          <!--
+            Exposure is in Effets now. It sat here, among the grid and the
+            bounding box, which are answers to "what is drawn"; how bright the
+            picture comes out is the camera's answer, and belongs with bloom and
+            sharpening. How bright the *scene* is belongs on the lights.
+          -->
         </section>
 
         <section>
@@ -603,63 +613,145 @@
           </div>
         </div>
 
+        <!--
+          Effects, as a stack of cards rather than as a wall of prose.
+
+          Every block used to be a heading, a checkbox called "Activer", and a
+          column of labels each sitting above its own slider. Five of them, all
+          the same shape, all in the same grey: reading it meant reading it,
+          there was no shape to recognise. Worse, "Activer" appeared five times
+          and named nothing, so the one word repeated most often in the panel
+          carried the least information in it.
+
+          One line per effect: a glyph in that effect's own colour, its name, and
+          the switch that turns it on — and the parameters appear underneath only
+          once it is on, because a slider that drives nothing is a slider you
+          have to test to discover that. Each parameter is one row: name, slider,
+          value, left to right.
+
+          The colours are not decoration. A row of identical grey cards is a row
+          you read; a row where occlusion is violet, bloom is amber and grading
+          is green is a row you aim at.
+        -->
         <div class="pane" data-pane="effects">
+
+        <!--
+          Exposure, at the top, and outside the switches.
+
+          It lived in the Vue tab next to the wireframe and the grid, which put
+          the one dial that says how bright the picture is among the things that
+          say what is drawn in it. It belongs with bloom and sharpening: they are
+          all the camera's answer rather than the scene's, and the scene's own
+          answer — how hard each light burns — is on the lights themselves now.
+
+          Not a switch, because there is no off. And still `toneMappingExposure`
+          on the renderer rather than a pass in the chain: the backdrop colour is
+          pre-compensated by inverting the tone curve, so a chain that took over
+          the exposure would darken every backdrop by whatever the dial said.
+        -->
+        <div class="fx fx-plain" style="--fx:#8fd6ff">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M16.9 16.9l2.1 2.1M19.1 4.9l-2.1 2.1M7 16.9l-2.1 2.1"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.exposure">Exposition</span>
+          </div>
+          <div class="fx-body">
+            <label class="fx-row"><span data-i18n="pane.exposure">Exposition</span>
+              <input type="range" id="opt-exposure" min="0" max="3" step="0.05" value="1" /></label>
+          </div>
+        </div>
+
         <p class="hint" data-i18n="pane.effectsHint">Chargés à la demande : tant que rien n'est activé, la chaîne n'existe pas.</p>
 
-        <section>
-          <h2 data-i18n="pane.ao">Occlusion ambiante</h2>
-          <label class="check"><input type="checkbox" id="ao-on" /><span data-i18n="pane.enable">Activer</span></label>
-          <label class="field"><span data-i18n="pane.radius">Rayon</span>
-            <input type="range" id="ao-radius" min="0.05" max="1.5" step="0.01" value="0.25" /></label>
-          <label class="field"><span data-i18n="pane.strength">Force</span>
-            <input type="range" id="ao-intensity" min="0" max="2" step="0.02" value="1" /></label>
-        </section>
+        <div class="fx" data-fx="ao" style="--fx:#b08cff">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="11" r="6.5"/><path d="M4 19.5c2.6-1.6 5.2-2.4 8-2.4s5.4.8 8 2.4"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.ao">Occlusion ambiante</span>
+            <input type="checkbox" id="ao-on" class="fx-switch" data-i18n-aria="pane.ao" aria-label="Occlusion ambiante" />
+          </div>
+          <div class="fx-body">
+            <label class="fx-row"><span data-i18n="pane.radius">Rayon</span>
+              <input type="range" id="ao-radius" min="0.05" max="1.5" step="0.01" value="0.25" /></label>
+            <label class="fx-row"><span data-i18n="pane.strength">Force</span>
+              <input type="range" id="ao-intensity" min="0" max="2" step="0.02" value="1" /></label>
+          </div>
+        </div>
 
-        <section>
-          <h2 data-i18n="pane.bloom">Bloom</h2>
-          <label class="check"><input type="checkbox" id="bloom-on" /><span data-i18n="pane.enable">Activer</span></label>
-          <label class="field"><span data-i18n="pane.strength">Force</span>
-            <input type="range" id="bloom-strength" min="0" max="2" step="0.01" value="0.6" /></label>
-          <label class="field"><span data-i18n="pane.radius">Rayon</span>
-            <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="field"><span data-i18n="pane.threshold">Seuil</span>
-            <input type="range" id="bloom-threshold" min="0" max="2" step="0.01" value="1.1" /></label>
-        </section>
+        <div class="fx" data-fx="bloom" style="--fx:#ffc061">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7.5" opacity=".55"/><circle cx="12" cy="12" r="10.5" opacity=".25"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.bloom">Bloom</span>
+            <input type="checkbox" id="bloom-on" class="fx-switch" data-i18n-aria="pane.bloom" aria-label="Bloom" />
+          </div>
+          <div class="fx-body">
+            <label class="fx-row"><span data-i18n="pane.strength">Force</span>
+              <input type="range" id="bloom-strength" min="0" max="2" step="0.01" value="0.6" /></label>
+            <label class="fx-row"><span data-i18n="pane.radius">Rayon</span>
+              <input type="range" id="bloom-radius" min="0" max="1" step="0.01" value="0.5" /></label>
+            <label class="fx-row"><span data-i18n="pane.threshold">Seuil</span>
+              <input type="range" id="bloom-threshold" min="0" max="2" step="0.01" value="1.1" /></label>
+          </div>
+        </div>
 
-        <section>
-          <h2 data-i18n="pane.dof">Profondeur de champ</h2>
-          <label class="check"><input type="checkbox" id="dof-on" /><span data-i18n="pane.enable">Activer</span></label>
-          <label class="field"><span data-i18n="pane.focus">Mise au point</span>
-            <input type="range" id="dof-focus" min="0" max="1" step="0.01" value="0.5" /></label>
-          <label class="field"><span data-i18n="pane.aperture">Ouverture</span>
-            <input type="range" id="dof-aperture" min="0" max="0.06" step="0.001" value="0.02" /></label>
-          <label class="field"><span data-i18n="pane.maxblur">Flou maximal</span>
-            <input type="range" id="dof-maxblur" min="0" max="0.05" step="0.001" value="0.012" /></label>
-        </section>
+        <div class="fx" data-fx="dof" style="--fx:#7ee0c0">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><circle cx="17" cy="12" r="2.6" opacity=".45"/><path d="M2 12h2M21 12h1"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.dof">Profondeur de champ</span>
+            <input type="checkbox" id="dof-on" class="fx-switch" data-i18n-aria="pane.dof" aria-label="Profondeur de champ" />
+          </div>
+          <div class="fx-body">
+            <label class="fx-row"><span data-i18n="pane.focus">Mise au point</span>
+              <input type="range" id="dof-focus" min="0" max="1" step="0.01" value="0.5" /></label>
+            <label class="fx-row"><span data-i18n="pane.aperture">Ouverture</span>
+              <input type="range" id="dof-aperture" min="0" max="0.06" step="0.001" value="0.02" /></label>
+            <label class="fx-row"><span data-i18n="pane.maxblur">Flou maximal</span>
+              <input type="range" id="dof-maxblur" min="0" max="0.05" step="0.001" value="0.012" /></label>
+          </div>
+        </div>
 
-        <section>
-          <h2 data-i18n="pane.grade">Étalonnage</h2>
-          <label class="check"><input type="checkbox" id="grade-on" /><span data-i18n="pane.enable">Activer</span></label>
-          <label class="field"><span data-i18n="pane.contrast">Contraste</span>
-            <input type="range" id="grade-contrast" min="0.5" max="2" step="0.01" value="1" /></label>
-          <label class="field"><span data-i18n="pane.saturation">Saturation</span>
-            <input type="range" id="grade-saturation" min="0" max="2" step="0.01" value="1" /></label>
-          <label class="field"><span data-i18n="pane.temperature">Température</span>
-            <input type="range" id="grade-temperature" min="-1" max="1" step="0.01" value="0" /></label>
-          <label class="field"><span data-i18n="pane.vignette">Vignettage</span>
-            <input type="range" id="grade-vignette" min="0" max="1" step="0.01" value="0.25" /></label>
-          <label class="field"><span data-i18n="pane.grain">Grain</span>
-            <input type="range" id="grade-grain" min="0" max="0.3" step="0.005" value="0.04" /></label>
-          <label class="field"><span data-i18n="pane.aberration">Aberration chromatique</span>
-            <input type="range" id="grade-aberration" min="0" max="2" step="0.01" value="0" /></label>
-          <label class="field"><span data-i18n="pane.sharpen">Netteté</span>
-            <input type="range" id="grade-sharpen" min="0" max="1" step="0.01" value="0.2" /></label>
-        </section>
+        <div class="fx" data-fx="grade" style="--fx:#8ce08c">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.grade">Étalonnage</span>
+            <input type="checkbox" id="grade-on" class="fx-switch" data-i18n-aria="pane.grade" aria-label="Étalonnage" />
+          </div>
+          <div class="fx-body">
+            <label class="fx-row"><span data-i18n="pane.contrast">Contraste</span>
+              <input type="range" id="grade-contrast" min="0.5" max="2" step="0.01" value="1" /></label>
+            <label class="fx-row"><span data-i18n="pane.saturation">Saturation</span>
+              <input type="range" id="grade-saturation" min="0" max="2" step="0.01" value="1" /></label>
+            <label class="fx-row"><span data-i18n="pane.temperature">Température</span>
+              <input type="range" id="grade-temperature" min="-1" max="1" step="0.01" value="0" /></label>
+            <label class="fx-row"><span data-i18n="pane.vignette">Vignettage</span>
+              <input type="range" id="grade-vignette" min="0" max="1" step="0.01" value="0.25" /></label>
+            <label class="fx-row"><span data-i18n="pane.grain">Grain</span>
+              <input type="range" id="grade-grain" min="0" max="0.3" step="0.005" value="0.04" /></label>
+            <label class="fx-row"><span data-i18n="pane.aberration">Aberration chromatique</span>
+              <input type="range" id="grade-aberration" min="0" max="2" step="0.01" value="0" /></label>
+            <label class="fx-row"><span data-i18n="pane.sharpen">Netteté</span>
+              <input type="range" id="grade-sharpen" min="0" max="1" step="0.01" value="0.2" /></label>
+          </div>
+        </div>
 
-        <section>
-          <h2 data-i18n="pane.aa">Anticrénelage</h2>
-          <label class="check"><input type="checkbox" id="aa-on" checked /><span data-i18n="pane.smaa">SMAA sur l'image finale</span></label>
-        </section>
+        <!-- No parameters, so the switch is the whole control. -->
+        <div class="fx fx-bare" data-fx="aa" style="--fx:#9aa6b8">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><path d="M4 18L12 6l8 12"/><path d="M7.5 14h9"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.aa">Anticrénelage</span>
+            <input type="checkbox" id="aa-on" class="fx-switch" checked data-i18n-aria="pane.aa" aria-label="Anticrénelage" />
+          </div>
+        </div>
         </div>
 
         <div class="pane" data-pane="photo">

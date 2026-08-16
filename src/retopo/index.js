@@ -1305,10 +1305,34 @@ export function createRetopo({
   // A compact mirror of the panel's controls, reached by the arrow on the action
   // bar. Each writes back to the panel's own input, which stays the single source
   // of truth, then repaints. Two tabs: remesh and bake.
-  el.menuToggle.addEventListener("click", () => {
-    const on = el.menu.hidden;
+  /** Open or shut the unfolded menu, from wherever the request came. */
+  function showMenu(on) {
+    if (el.menu.hidden === !on) return;
     el.menu.hidden = !on;
     el.menuToggle.setAttribute("aria-pressed", String(on));
+  }
+  el.menuToggle.addEventListener("click", () => showMenu(el.menu.hidden));
+
+  /*
+   * Reaching past it closes it, the way every other drawer in this application
+   * behaves. It used to stay open until the arrow itself was found again, which
+   * on a panel this size means a large plate of controls sitting over the model
+   * while you are trying to look at the model.
+   *
+   * On `pointerdown` rather than `click`, so it shuts on the press that begins
+   * an orbit instead of waiting for a release that a drag never delivers. The
+   * toggle is excluded because its own handler is about to run and would read a
+   * menu this listener had just closed, turning one click into open-and-shut.
+   */
+  document.addEventListener("pointerdown", (e) => {
+    if (el.menu.hidden) return;
+    if (el.menu.contains(e.target) || el.menuToggle.contains(e.target)) return;
+    showMenu(false);
+  });
+  // Escape reaches it too: a drawer you can only dismiss with the mouse is one
+  // more thing the keyboard cannot get out of.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el.menu.hidden) showMenu(false);
   });
   for (const b of el.menu.querySelectorAll("[data-mtab]")) {
     b.addEventListener("click", () => {
