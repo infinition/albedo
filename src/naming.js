@@ -121,6 +121,39 @@ export function adopt(root, object) {
   return object;
 }
 
+/** Names an exporter invents when nobody named anything: `mesh_0`, `Object_12`. */
+const GENERIC = /^(mesh|object|node|group|geometry|primitive|default|untitled)[\s._-]*\d*$/i;
+
+/**
+ * Give a lone, anonymously-named mesh the file's own name.
+ *
+ * `mesh_0` is not Albedo's invention — it is what the exporter wrote, and most
+ * generators write something like it. It tells you nothing, and it is the label
+ * every derived name is then built from, so a result comes out `mesh_0_LP` when
+ * `Blue_Alien_Plant_04_LP` was there for the taking.
+ *
+ * Only when there is exactly one mesh, and only when its name carries no
+ * information. A file with forty parts has forty names its author chose, and
+ * flattening those into `file`, `file.001`, `file.002` would replace real
+ * information with none — the opposite of the trade being made here.
+ *
+ * @returns {string|null} the name applied, or null when nothing was touched
+ */
+export function nameFromFile(root, object, fileLabel) {
+  const stem = stripCopy(String(fileLabel || "").replace(/\.[^.]+$/, "")).trim();
+  if (!stem || !object) return null;
+  const meshes = [];
+  object.traverse?.((o) => {
+    if (o.isMesh || o.isSkinnedMesh) meshes.push(o);
+  });
+  if (meshes.length !== 1) return null;
+  const mesh = meshes[0];
+  if (mesh.name && !GENERIC.test(mesh.name)) return null;
+
+  mesh.name = uniqueName(stem, takenNames(root, mesh));
+  return mesh.name;
+}
+
 /**
  * Tie a low poly to the high poly it was made from.
  *
@@ -242,36 +275,42 @@ export function propagate(root, high) {
  * @param {string} fallback a name for the result when there is no single source
  * @returns {string} the name given to the result
  */
+/**
+ * Carry a group's name and link down to the meshes inside it.
+ *
+ * A result arrives as a group holding one mesh, and the outliner lists *meshes*.
+ * Naming only the group therefore renamed something nobody displays, and the row
+ * on screen kept whatever the engine's glb happened to call it — `retopo`.
+ *
+ * Shared by the two places a result gets its identity, and that sharing is the
+ * repair rather than a tidy-up. A run named the group and its meshes; a bake
+ * came back through `restoreIdentity`, which named the group *only* — so
+ * decimating produced `mesh_0_LP` and baking silently turned it back into
+ * `retopo`. Two paths that must agree, agreeing by construction.
+ */
+function nameInside(root, object, high) {
+  if (high) link(high, object);
+  const taken = takenNames(root, object);
+  taken.add(object.name);
+  let n = 0;
+  object.traverse?.((o) => {
+    if (o === object || (!o.isMesh && !o.isSkinnedMesh)) return;
+    // One mesh takes the group's own name; a second and third are numbered from
+    // it, so a result that came back split still reads as one family.
+    o.name = n === 0 ? object.name : uniqueName(object.name, taken);
+    taken.add(o.name);
+    if (high) link(high, o);
+    n++;
+  });
+}
+
 export function nameResult(root, object, sources, fallback = "modele") {
   if (!object) return "";
   const list = (sources || []).filter(Boolean);
 
   if (list.length === 1) {
     object.name = uniqueName(lowName(list[0].name || fallback), takenNames(root, object));
-    link(list[0], object);
-    /*
-     * The meshes inside get the name too, and their own link.
-     *
-     * The result arrives as a group holding one mesh, and it was only the
-     * *group* that was named and linked. The outliner lists meshes, not part
-     * groups, so the row still read whatever the engine's glb happened to call
-     * it — and renaming the high poly propagated to a name nothing displayed.
-     * The link is what a rename walks, so it has to reach the thing on screen.
-     */
-    const taken = takenNames(root, object);
-    taken.add(object.name);
-    let n = 0;
-    object.traverse?.((o) => {
-      if (o === object || (!o.isMesh && !o.isSkinnedMesh)) return;
-      // One mesh takes the group's own name; a second and third are numbered
-      // from it, so a result that came back split still reads as one family.
-      o.name = n === 0 ? object.name : uniqueName(object.name, taken);
-      taken.add(o.name);
-      link(list[0], o);
-      n++;
-    });
-    // The last one linked wins the reverse pointer, so it points at the mesh a
-    // rename should follow rather than at the group nobody sees.
+    nameInside(root, object, list[0]);
     return object.name;
   }
 
@@ -325,6 +364,11 @@ export function restoreIdentity(root, node, snap) {
   Object.assign(meta(node), snap.meta);
   const high = highPolyOf(root, node);
   if (high) meta(high).low = node.uuid;
+  // The meshes inside, exactly as a fresh run names them. Without this a bake
+  // restored the group's name and left the mesh on screen called `retopo`,
+  // which is what the engine writes and what the person had just renamed away
+  // from.
+  nameInside(root, node, high);
   return node.name;
 }
 

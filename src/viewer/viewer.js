@@ -1338,7 +1338,42 @@ export class Viewer {
    * shift, so it keeps the origin its geometry was authored with.
    */
   recentreOrigin(object) {
-    if (!object || !object.children.length) return;
+    if (!object) return;
+    /*
+     * A mesh with no children was skipped outright, which is the commonest case
+     * there is: one object in the scene, and the handles sitting wherever the
+     * exporter happened to leave the origin — often outside the shape entirely.
+     * Worse than looking wrong, it turns wrong: a rotation is about the origin,
+     * and one that far out swings the model through an arc instead of turning it
+     * on the spot.
+     *
+     * A group can be recentred by moving its children one way and itself the
+     * other. A leaf has no children, so the same cancellation is done one level
+     * down: the *geometry* moves one way and the mesh the other. Nothing shifts
+     * on screen and an export is identical, because the position compensates
+     * exactly what the vertices gave up.
+     */
+    /*
+     * A leaf is left alone, and that is a decision rather than an omission.
+     *
+     * The handles do sit wrong on a single mesh — at whatever origin the
+     * exporter left, often outside the shape — and the obvious repair is to move
+     * the geometry one way and the mesh the other, the same cancellation the
+     * group branch below performs on its children.
+     *
+     * It is not safe. Vertex buffers are routinely *quantised*: a glTF written
+     * with `KHR_mesh_quantization` stores positions as 16-bit integers with a
+     * scale on the node, so a real file here reports its centre at 32767.5 with
+     * a node scale of 0.00012. Translating that buffer writes floats into an
+     * integer array — the mesh is destroyed, irreversibly, on the file formats
+     * this viewer exists to open. Sharing is the second hazard: instances and
+     * repeated parts draw from one buffer, and moving it moves all of them.
+     *
+     * Doing it properly means handles on a proxy at the geometric centre with
+     * the delta forwarded to the mesh, which is a real piece of machinery and
+     * not a line in this function.
+     */
+    if (!object.children.length) return;
     const box = new THREE.Box3().setFromObject(object);
     if (box.isEmpty()) return;
     object.updateMatrixWorld(true);

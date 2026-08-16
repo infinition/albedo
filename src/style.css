@@ -657,14 +657,23 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
 }
 .mini-sep { width: 1px; height: 15px; background: var(--line); margin: 0 4px; flex: none; }
 
-/* The pivot's own little plate, hung under its button. */
-.mini-menu { position: relative; display: inline-flex; }
+/*
+ * The little plates, hung under the bar rather than under their own button.
+ *
+ * Anchored to the button they came from, a 232 pixel plate opened from a glyph
+ * in the right half of a 276 pixel column ran off the edge — and `#inspector` is
+ * `overflow: hidden`, so it was not merely ugly, it was cut off. Spanning the
+ * tools row instead means no plate can overflow whatever it is opened from, and
+ * there is no arithmetic per button to get wrong later.
+ */
+.mini-bar { position: relative; }
+.mini-menu { display: inline-flex; }
 .mini-pop {
   position: absolute;
   top: calc(100% + 5px);
   left: 0;
+  right: 0;
   z-index: 8;
-  width: 232px;
   padding: 9px 10px 10px;
   border: 1px solid var(--line);
   border-radius: 9px;

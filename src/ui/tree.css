@@ -107,6 +107,20 @@
 
 .tree-empty { margin: 8px 2px; font-size: 11px; color: var(--muted, #8b929c); }
 
+/* Which side of a retopology a mesh is on, read from the link and not the name. */
+.tree-badge {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+}
+.tree-badge.high { color: #ffc061; }
+.tree-badge.low { color: #7ee0c0; }
+
 .tree-row {
   display: flex;
   align-items: center;

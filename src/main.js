@@ -17,7 +17,7 @@ import { createPrefs } from "./prefs.js";
 import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 import { selection, decorId, decorKey } from "./selection.js";
-import { adopt, renameNode } from "./naming.js";
+import { adopt, nameFromFile, renameNode } from "./naming.js";
 import { createTabs } from "./ui/tabs.js";
 import { setLang, initLang, applyStatic, currentLang, t } from "./i18n/index.js";
 
@@ -1104,6 +1104,9 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     // after its source: two rows reading `Cube` are two rows you cannot tell
     // apart, and a low poly made from "the second one" has nothing to say.
     adopt(viewer.root, object);
+    // A single mesh called `mesh_0` is the exporter shrugging. The file has a
+    // name, and it is the one every derived name will be built from.
+    nameFromFile(viewer.root, object, label || "");
     /*
      * The veil comes down here, the instant there is something behind it.
      *

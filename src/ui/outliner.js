@@ -91,6 +91,14 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
   const notice = (text) => onNotice?.(text);
   const env = () => viewer.scene?.environment || null;
 
+  // One listener, on the container, which outlives every repaint of its rows.
+  body.addEventListener("dblclick", (e) => {
+    const span = e.target.closest?.(".tree-name");
+    if (!span?.__rename) return;
+    e.stopPropagation();
+    span.__rename(span);
+  });
+
   // ---------------------------------------------------------------------------
   // The pieces every row is made of
   // ---------------------------------------------------------------------------
@@ -156,8 +164,49 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     if (!rename) return span;
 
     span.title = `${text} — double-clic pour renommer`;
-    span.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
+    /*
+     * The handler is hung on the row's own list, not on this span.
+     *
+     * A double click is two clicks *on one element*, and the first click selects
+     * — which repaints the list and replaces every row. The span the second
+     * click lands on is a different object from the first, so the browser never
+     * recognises the pair and `dblclick` was never emitted at all. The listener
+     * being correct made no difference; it was never reached.
+     *
+     * `body` survives a repaint — only its children are replaced — so the
+     * delegated listener below is still there afterwards, and it finds the
+     * rename through the property carried by whichever span is current.
+     */
+    span.__rename = (target) => startRename(target, text, rename);
+    return span;
+  }
+
+  /**
+   * `HP` or `LP`, from the link rather than from the name.
+   *
+   * A node that something was made *from* is a high poly; a node made from
+   * something is a low poly. Nothing else in the row can say this: the names
+   * come from whatever exporter wrote the file, and a person is free to change
+   * them.
+   */
+  function badge(node) {
+    const meta = node?.userData?.albedo;
+    if (!meta) return null;
+    const isLow = meta.role === "low" && meta.high;
+    const isHigh = !!meta.low;
+    if (!isLow && !isHigh) return null;
+    const tag = document.createElement("span");
+    tag.className = "tree-badge " + (isLow ? "low" : "high");
+    tag.textContent = isLow ? "LP" : "HP";
+    tag.title = isLow
+      ? "Bas poly, issu d'un autre maillage de cette scène"
+      : "Haut poly : un bas poly de cette scène en descend";
+    return tag;
+  }
+
+  /** Turn a name into a text field, and put the name back if it is cancelled. */
+  function startRename(span, text, rename) {
+    {
       editing = null;
       const input = document.createElement("input");
       input.className = "tree-rename";
@@ -184,8 +233,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       });
       input.addEventListener("blur", () => finish(true));
       editing = input;
-    });
-    return span;
+    }
   }
 
   /** A group header: caret, folder, label, count, and sometimes a plus. */
@@ -557,6 +605,18 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     row.appendChild(
       nameCell(mesh.name, (next) => renameNode(viewer.root, mesh.node, next))
     );
+    /*
+     * A badge saying which side of a retopology this mesh is on.
+     *
+     * The suffix in the name is the ordinary answer and it is not enough on its
+     * own: a file arrives with the names its exporter chose, a result arrives
+     * with the names the engine chose, and either can be renamed by hand five
+     * minutes later. The badge is read from the link rather than from the text,
+     * so "which of these is the low poly" has an answer that cannot be typed
+     * over.
+     */
+    const role = badge(mesh.node);
+    if (role) row.appendChild(role);
     const num = document.createElement("span");
     num.className = "tree-num";
     num.textContent = fr(mesh.triangles);
