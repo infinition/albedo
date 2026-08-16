@@ -278,5 +278,9 @@
   "pane.upright": "Level",
   "pane.uprightTitle": "Put the horizon back level",
   "pan.contents": "Contents",
-  "pan.exportTitle": "Export"
+  "pan.exportTitle": "Export",
+  "tl.stepBack": "Step back",
+  "tl.stepOn": "Step on",
+  "tl.loop": "Loop",
+  "tl.speed": "Speed"
 }

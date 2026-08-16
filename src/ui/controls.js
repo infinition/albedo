@@ -306,11 +306,76 @@ export function wireTimeline({ viewer, onState }) {
   range.addEventListener("pointerup", () => (state.scrubbing = false));
   range.addEventListener("input", (e) => setTime(Number(e.target.value)));
 
+  /*
+   * Stepping, and why it is a thirtieth of a second rather than "a frame".
+   *
+   * A glTF clip carries keyframe times and no frame rate: there is no honest
+   * answer to "which frame is this". So the step is a fixed, small, familiar
+   * increment — the size of a frame in the rate most people work at — and the
+   * buttons say "image précédente" as a description of the gesture rather than a
+   * claim about the file. Printing an invented frame number next to it would be
+   * the dishonest version of the same convenience.
+   */
+  const STEP = 1 / 30;
+  const step = (dir) => {
+    if (!state.action) return;
+    if (viewer.playing) toggle();
+    const d = state.duration || 1;
+    setTime((((now() + dir * STEP) % d) + d) % d);
+  };
+  $("anim-prev").addEventListener("click", () => step(-1));
+  $("anim-next").addEventListener("click", () => step(1));
+
+  /*
+   * Looping, as the two three.js constants rather than an import.
+   *
+   * `LoopRepeat` is 2201 and `LoopOnce` 2200. This module is parsed at startup —
+   * it is the HUD — and pulling three in for two integers is weight on the path
+   * that every Explorer thumbnail job also walks.
+   */
+  const LOOP_REPEAT = 2201;
+  const LOOP_ONCE = 2200;
+  const loop = $("anim-loop");
+  const setLoop = (on) => {
+    state.loop = on;
+    loop.classList.toggle("active", on);
+    loop.setAttribute("aria-pressed", String(on));
+    if (state.action) {
+      state.action.loop = on ? LOOP_REPEAT : LOOP_ONCE;
+      state.action.clampWhenFinished = !on;
+    }
+    viewer.invalidate();
+  };
+  state.loop = true;
+  loop.addEventListener("click", () => setLoop(!state.loop));
+
+  /** Slower is the whole point: a foot plant is four frames at full speed. */
+  const setSpeed = (v) => {
+    state.speed = v;
+    for (const b of document.querySelectorAll("[data-speed]")) {
+      b.classList.toggle("active", Number(b.dataset.speed) === v);
+    }
+    if (state.action) state.action.timeScale = v;
+    viewer.invalidate();
+  };
+  state.speed = 1;
+  for (const b of document.querySelectorAll("[data-speed]")) {
+    b.addEventListener("click", () => setSpeed(Number(b.dataset.speed)));
+  }
+
   return {
     attach(action, duration) {
       state.action = action;
       state.duration = duration || 0;
       range.max = String(state.duration || 1);
+      // The loop and the speed belong to the transport, not to the clip: a new
+      // action arrives at its own defaults and has to be told what the buttons
+      // already say, or the controls would lie about what is playing.
+      if (action) {
+        action.loop = state.loop ? LOOP_REPEAT : LOOP_ONCE;
+        action.clampWhenFinished = !state.loop;
+        action.timeScale = state.speed;
+      }
       // A clip of zero length is a bind pose, not an animation: showing a
       // scrubber that cannot move would only be in the way.
       $("timeline").hidden = !action || state.duration <= 0;

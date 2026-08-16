@@ -278,5 +278,9 @@
   "pane.upright": "Redresser",
   "pane.uprightTitle": "Remettre l'horizon droit",
   "pan.contents": "Contenu",
-  "pan.exportTitle": "Exporter"
+  "pan.exportTitle": "Exporter",
+  "tl.stepBack": "Image précédente",
+  "tl.stepOn": "Image suivante",
+  "tl.loop": "Boucler",
+  "tl.speed": "Vitesse"
 }

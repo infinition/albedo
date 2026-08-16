@@ -530,11 +530,36 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   left: 50%;
   bottom: var(--gap);
   transform: translateX(-50%);
-  width: min(620px, 60cqw);
-  padding: 4px 10px 4px 4px;
-  gap: 10px;
+  /* Wider than it was: it now carries a clip name, four transport buttons, a
+     loop and four speeds. Still capped against the stage so it cannot outgrow a
+     narrow window. */
+  width: min(760px, 88cqw);
+  padding: 4px 8px;
+  gap: 7px;
+  flex-wrap: wrap;
 }
-#timeline input[type="range"] { flex: 1; }
+#timeline input[type="range"] { flex: 1; min-width: 120px; }
+/* The clip name earns real width, and truncates rather than pushing the
+   transport off the end. */
+#anim-select {
+  max-width: 190px;
+  min-width: 90px;
+  flex: 0 1 auto;
+  text-overflow: ellipsis;
+}
+#anim-select:disabled { opacity: 0.75; cursor: default; }
+#timeline .icon { flex: none; }
+#timeline .icon.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.tl-speed { flex: none; }
+.tl-speed .seg {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+#anim-clock { flex: none; font-size: 11px; }
 
 input[type="range"] {
   -webkit-appearance: none;
@@ -608,10 +633,27 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
  * and a scroll container that refuses to be shorter than its content never
  * scrolls — it pushes the panel instead, and the panes below it off the bottom.
  */
+/*
+ * The tab rail sits at the bottom, where the thumb is.
+ *
+ * It was between the tools and the panes, which put the one control that
+ * *changes* the panel in the middle of the panel — so every trip through it
+ * crossed the content twice, and the eye had to step over a row of icons on the
+ * way from the list to the settings. At the bottom it is out of that path and
+ * against the edge, which is the easiest thing in a window to hit.
+ */
 #outliner-dock { order: 0; flex: 0 0 30%; min-height: 88px; overflow-y: auto; }
 #scene-tools { order: 1; flex: none; }
-#inspector > #tabs { order: 2; flex: none; }
-#panes { order: 3; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#panes { order: 2; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#inspector > #tabs {
+  order: 3;
+  flex: none;
+  /* The rule moves with it: a separator belongs on the side the content is. */
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  margin: 6px -16px 0;
+  padding: 6px 16px 0;
+}
 
 /*
  * The scene tools: a bar of glyphs, and the numbers of whatever is selected.

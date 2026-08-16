@@ -291,13 +291,38 @@
           <span id="stats" class="mono"></span>
         </div>
 
+        <!--
+          The transport, in the order a hand uses it.
+
+          It was a play button, a bar, a clock and a picker that only appeared
+          when a file happened to carry two clips. What it could not do was the
+          thing anyone doing this work does constantly: step one frame, hold on a
+          pose, slow the playback down to see what a foot is doing. Those are the
+          controls, and the clip name is always on screen because "which
+          animation am I looking at" is a question a single-clip file asks too.
+        -->
         <div id="timeline" class="ov" hidden>
+          <select id="anim-select" class="quiet" data-i18n-aria="tl.animation" aria-label="Animation"></select>
+          <button id="anim-prev" class="icon" type="button" data-i18n-title="tl.stepBack" title="Image précédente">
+            <svg viewBox="0 0 24 24"><path d="M17 5v14M15 12L7 5v14z"/></svg>
+          </button>
           <button id="anim-play" class="icon" type="button" data-i18n-title="tl.play" title="Lecture / pause (Espace)">
             <svg viewBox="0 0 24 24" id="icon-play"><path d="M8 5l11 7-11 7z" /></svg>
           </button>
+          <button id="anim-next" class="icon" type="button" data-i18n-title="tl.stepOn" title="Image suivante">
+            <svg viewBox="0 0 24 24"><path d="M7 5v14M9 12l8-7v14z"/></svg>
+          </button>
           <input type="range" id="anim-time" min="0" max="1" step="0.001" value="0" data-i18n-aria="tl.position" aria-label="Position" />
           <span id="anim-clock" class="mono">0.00 / 0.00</span>
-          <select id="anim-select" class="quiet" data-i18n-aria="tl.animation" aria-label="Animation" hidden></select>
+          <button id="anim-loop" class="icon active" type="button" aria-pressed="true" data-i18n-title="tl.loop" title="Boucler">
+            <svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 12V10a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+          <div class="segment tl-speed" role="group" data-i18n-aria="tl.speed" aria-label="Vitesse">
+            <button class="seg" type="button" data-speed="0.25">¼</button>
+            <button class="seg" type="button" data-speed="0.5">½</button>
+            <button class="seg active" type="button" data-speed="1">1×</button>
+            <button class="seg" type="button" data-speed="2">2×</button>
+          </div>
         </div>
       </div>
 

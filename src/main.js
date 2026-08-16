@@ -3393,8 +3393,12 @@ function buildAnimationUi(clips) {
     timeline.attach(null, 0);
     return;
   }
-  // The picker only earns its place when there is something to pick.
-  select.hidden = playable.length < 2;
+  // The name is always on screen. It used to appear only when a file carried
+  // two clips, on the reasoning that one clip is not a choice — true, and beside
+  // the point: "which animation is this" is a question a single-clip file asks
+  // just as loudly, and the answer was nowhere.
+  select.hidden = false;
+  select.disabled = playable.length < 2;
   for (const { clip, index } of playable) {
     const opt = document.createElement("option");
     opt.value = String(index);

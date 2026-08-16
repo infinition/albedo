@@ -1527,21 +1527,36 @@ export class Viewer {
     // Each model starts from the user's own preference, not the last model's
     this.skeletons.visible = this._skeletonVisible === true;
     let meshCount = 0;
+    let skinned = false;
     object.traverse((o) => {
       if (o.isMesh || o.isPoints) meshCount++;
-      if (o.isSkinnedMesh && o.skeleton) {
-        const helper = new THREE.SkeletonHelper(o);
+      if (o.isSkinnedMesh && o.skeleton) skinned = true;
+    });
+
+    /*
+     * One helper, built from the model rather than from the skinned mesh.
+     *
+     * `SkeletonHelper` gathers its bones by *traversing the object it is given*.
+     * A skinned mesh in glTF does not contain its bones — the armature is a
+     * sibling under the scene, and the mesh merely points at it through its
+     * skeleton. So a helper built on the mesh found no bones, produced a
+     * geometry with zero vertices, and drew nothing at all: the switch worked,
+     * the group turned visible, and the picture never changed. On a rig of a
+     * hundred and eighty-seven bones.
+     *
+     * Given the model root, the traversal meets the armature and the helper has
+     * something to draw. One rather than one per mesh, since a second helper
+     * over the same armature is the same lines drawn twice.
+     */
+    if (skinned || object.userData.boneTree) {
+      const helper = new THREE.SkeletonHelper(object);
+      if (helper.geometry.attributes.position?.count) {
         helper.material.linewidth = 2;
         this.skeletons.add(helper);
       }
-    });
-    // Skeleton files carry a bone tree and no geometry: without the helper the
-    // viewport would simply be empty, so it is shown by default there.
-    if (object.userData.boneTree && !this.skeletons.children.length) {
-      const helper = new THREE.SkeletonHelper(object);
-      helper.material.linewidth = 2;
-      this.skeletons.add(helper);
-      if (meshCount === 0) this.skeletons.visible = true;
+      // Skeleton files carry a bone tree and no geometry: without the helper the
+      // viewport would simply be empty, so it is shown by default there.
+      if (meshCount === 0 && this.skeletons.children.length) this.skeletons.visible = true;
     }
 
     const box = new THREE.Box3().setFromObject(object);
