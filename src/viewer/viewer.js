@@ -338,6 +338,9 @@ export class Viewer {
       this.camera.updateProjectionMatrix();
     }
     this.post?.setSize(w, h);
+    // The flat backdrop is composed at the viewport's aspect, so a window that
+    // changes shape needs it drawn again or the picture is stretched.
+    if (this.envKind === "picture" && this.backdropSource) this.composeBackdrop();
     this.invalidate();
   }
 
@@ -561,6 +564,117 @@ export class Viewer {
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // The flat backdrop
+  // ---------------------------------------------------------------------------
+
+  /**
+   * A picture behind the model that stays where it is put.
+   *
+   * The panorama is a *sphere*: it turns with the camera, because that is what
+   * makes it read as somewhere the model is standing, and it lights the scene
+   * because an HDR carries light. This is the other thing entirely — a flat
+   * picture pinned to the screen, which does not move when you orbit and casts
+   * nothing at all. A studio wall, a reference plate, a mood board behind the
+   * asset.
+   *
+   * It costs no new drawing code: three's background already has two paths, and
+   * a texture whose mapping is the ordinary UV one goes down the screen-aligned
+   * plane rather than the sky box. Zoom, pan and blur are composed into a canvas
+   * the same way the panorama's framing is, so there is one technique here
+   * rather than a shader for the second case.
+   *
+   * The lighting is unaffected on purpose: with this chosen, `applyLighting`
+   * finds no environment source and falls to the studio probe, which is why the
+   * list can go on saying the backdrop is a picture and the light is the studio.
+   */
+  async loadBackdrop(url) {
+    const { TextureLoader } = THREE;
+    const texture = await new Promise((resolve) => {
+      new TextureLoader().load(url, resolve, undefined, () => resolve(null));
+    });
+    if (!texture) return false;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    if (this.backdropSource && this.backdropSource !== texture) this.backdropSource.dispose();
+    this.backdropSource = texture;
+    this.envKind = "picture";
+    this.composeBackdrop();
+    this.applyLighting();
+    return true;
+  }
+
+  /** How the picture is framed: a magnification, an offset, a softening. */
+  setBackdrop(patch = {}) {
+    this.backdrop = {
+      zoom: patch.zoom ?? this.backdrop?.zoom ?? 1,
+      x: patch.x ?? this.backdrop?.x ?? 0,
+      y: patch.y ?? this.backdrop?.y ?? 0,
+      blur: patch.blur ?? this.backdrop?.blur ?? 0,
+    };
+    this.composeBackdrop();
+  }
+
+  /**
+   * Draw the picture into a canvas the shape of the viewport.
+   *
+   * Composed rather than handed over raw because the plane three draws a
+   * background texture on is *stretched* to the screen: a portrait photograph
+   * behind a wide window would be pulled sideways. The canvas takes the
+   * viewport's aspect and the image is fitted into it the way a wallpaper is —
+   * covering it, cropped rather than squashed — after which zoom, offset and
+   * blur are ordinary drawing.
+   */
+  composeBackdrop() {
+    const source = this.backdropSource;
+    const image = source?.image;
+    if (!image?.width) return;
+    const f = this.backdrop || { zoom: 1, x: 0, y: 0, blur: 0 };
+
+    const size = this.renderer.getSize(new THREE.Vector2());
+    const aspect = size.x > 0 && size.y > 0 ? size.x / size.y : 16 / 9;
+    const width = Math.min(2560, Math.max(640, Math.round(image.width)));
+    const height = Math.max(360, Math.round(width / aspect));
+
+    const canvas = this.backdropCanvas || document.createElement("canvas");
+    this.backdropCanvas = canvas;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, width, height);
+    ctx.filter = f.blur ? `blur(${Math.max(1, Math.round(f.blur * width * 0.03))}px)` : "none";
+
+    // Cover: the larger of the two ratios, so the shorter side is the one that
+    // overflows and no edge of the canvas is ever left empty.
+    const zoom = Math.max(0.2, f.zoom);
+    const scale = Math.max(width / image.width, height / image.height) * zoom;
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    // The offsets are fractions of the *drawn* size, so panning feels the same
+    // whatever the picture and whatever the zoom.
+    const dx = (width - drawW) / 2 + f.x * drawW;
+    const dy = (height - drawH) / 2 - f.y * drawH;
+    ctx.drawImage(image, dx, dy, drawW, drawH);
+    ctx.filter = "none";
+
+    // A new object each time: three caches the background against the texture's
+    // identity and never looks at its version, so redrawing the canvas under the
+    // same texture changes nothing on screen.
+    if (this.backdropTexture) this.backdropTexture.dispose();
+    this.backdropTexture = new THREE.CanvasTexture(canvas);
+    this.backdropTexture.colorSpace = THREE.SRGBColorSpace;
+    this.applyBackground();
+  }
+
+  /** The colour behind everything, when no picture is showing. */
+  setBackgroundColour(hex) {
+    this.solidBackground.set(hex);
+    this.applyBackground();
+    // The chain pre-compensates this colour against the tone curve, so it has to
+    // be told rather than left with the value it inverted last time.
+    this.post?.syncBackdrop?.();
+    this.invalidate();
+  }
+
   /**
    * The backdrop, from whatever the environment currently is.
    *
@@ -575,6 +689,11 @@ export class Viewer {
       this.scene.background = this.envPanorama;
     } else if (this.envKind === "gradient" && this.gradient) {
       this.scene.background = this.gradient;
+    } else if (this.envKind === "picture" && this.backdropTexture) {
+      // Ordinary UV mapping, which is what sends three down its screen-aligned
+      // plane instead of its sky box: the picture stays put while the camera
+      // orbits, which is the whole difference between this and the panorama.
+      this.scene.background = this.backdropTexture;
     } else {
       this.scene.background = this.solidBackground;
     }

@@ -261,5 +261,12 @@
   "pan.saveTitle": "Save",
   "pane.importDisk": "From this computer",
   "pane.importLibrary": "From the library",
-  "pane.importHint": "The library closes on the model you pick."
+  "pane.importHint": "The library closes on the model you pick.",
+  "pane.envPicture": "Canvas",
+  "pane.envPictureTitle": "A still picture behind the model, which does not light it",
+  "pane.noBackdrop": "No picture",
+  "pane.backdropX": "Across",
+  "pane.backdropY": "Up",
+  "pane.backdropHint": "Pinned to the screen, and casts no light: the studio still lights the scene.",
+  "pane.bgColour": "Background colour"
 }

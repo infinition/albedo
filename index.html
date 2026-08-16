@@ -695,7 +695,18 @@
                     <button id="env-studio" class="seg active" type="button" data-i18n-title="pane.envStudio" data-i18n="pane.envStudio" title="Éclairage neutre généré">Studio</button>
                     <button id="env-gradient" class="seg" type="button" data-i18n-title="pane.envGradient" data-i18n="pane.envGradient" title="Fond en dégradé">Dégradé</button>
                     <button id="env-image" class="seg" type="button" data-i18n-title="pane.envImage" data-i18n="pane.envImage" title="Panorama 360, HDR ou image">Image</button>
+                    <button id="env-picture" class="seg" type="button" data-i18n-title="pane.envPictureTitle" data-i18n="pane.envPicture" title="Une image fixe derrière le modèle, qui n'éclaire pas">Toile</button>
                   </div>
+                </div>
+                <!--
+                  The colour behind everything, when no picture is showing.
+                  It was a hardcoded dark grey, which is the wrong backdrop for
+                  judging a dark model and the only one there was.
+                -->
+                <div class="fx-row fx-row-plain" style="margin-top:6px">
+                  <span data-i18n="pane.bgColour">Couleur du fond</span>
+                  <input type="color" id="bg-colour" class="swatch" value="#14161a" />
+                  <button id="bg-colour-reset" class="tree-mini" type="button" data-i18n="pane.recentre">Défaut</button>
                 </div>
                 <div class="row" style="margin-top:6px">
                   <div class="chips">
@@ -739,6 +750,39 @@
                     <span data-i18n="pane.envBlur">Flou</span>
                     <input type="range" id="env-blur" min="0" max="1" step="0.01" value="0" />
                   </label>
+                </div>
+
+                <!--
+                  Réglages Toile de fond.
+
+                  Not the panorama's controls: that one turns with the camera and
+                  its framing is a zoom and a rotation around the viewer. This is
+                  a flat picture pinned to the screen, so what it needs is where
+                  the picture sits in the frame — across, up, and how big.
+                -->
+                <div id="backdrop-editor" hidden>
+                  <p id="backdrop-file" class="hint" data-i18n="pane.noBackdrop">Aucune image</p>
+                  <div class="row">
+                    <button id="backdrop-replace" class="seg" type="button" data-i18n="pane.envReplace">Remplacer</button>
+                    <button id="backdrop-clear" class="seg" type="button" data-i18n="pane.envClear">Retirer</button>
+                  </div>
+                  <label class="field">
+                    <span><span data-i18n="pane.envZoom">Zoom</span> <span id="backdrop-zoom-value" class="mono">1.0×</span></span>
+                    <input type="range" id="backdrop-zoom" min="0.2" max="4" step="0.02" value="1" />
+                  </label>
+                  <label class="field">
+                    <span data-i18n="pane.backdropX">Horizontal</span>
+                    <input type="range" id="backdrop-x" min="-1" max="1" step="0.01" value="0" />
+                  </label>
+                  <label class="field">
+                    <span data-i18n="pane.backdropY">Vertical</span>
+                    <input type="range" id="backdrop-y" min="-1" max="1" step="0.01" value="0" />
+                  </label>
+                  <label class="field">
+                    <span data-i18n="pane.envBlur">Flou</span>
+                    <input type="range" id="backdrop-blur" min="0" max="1" step="0.01" value="0" />
+                  </label>
+                  <p class="hint" data-i18n="pane.backdropHint">Fixe à l'écran, et n'éclaire pas : l'éclairage reste celui du studio.</p>
                 </div>
 
                 <!-- Réglages Dégradé -->

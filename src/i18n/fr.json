@@ -261,5 +261,12 @@
   "pan.saveTitle": "Enregistrer",
   "pane.importDisk": "Depuis l'ordinateur",
   "pane.importLibrary": "Depuis la bibliothèque",
-  "pane.importHint": "La bibliothèque se referme sur le modèle choisi."
+  "pane.importHint": "La bibliothèque se referme sur le modèle choisi.",
+  "pane.envPicture": "Toile",
+  "pane.envPictureTitle": "Une image fixe derrière le modèle, qui n'éclaire pas",
+  "pane.noBackdrop": "Aucune image",
+  "pane.backdropX": "Horizontal",
+  "pane.backdropY": "Vertical",
+  "pane.backdropHint": "Fixe à l'écran, et n'éclaire pas : l'éclairage reste celui du studio.",
+  "pane.bgColour": "Couleur du fond"
 }

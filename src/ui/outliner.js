@@ -47,9 +47,15 @@ const fr = (n) => n.toLocaleString("fr-FR");
 
 /** The three backdrop sources, in the order they escalate. */
 const BACKDROPS = [
-  { kind: "studio", label: "Studio", hint: "Éclairage neutre généré, sans fond visible" },
-  { kind: "gradient", label: "Dégradé", hint: "Fond en dégradé, qui éclaire aussi" },
-  { kind: "image", label: "Image", hint: "Panorama 360, HDR ou image" },
+  { kind: "studio", label: "Studio", hint: "Éclairage neutre généré, sans fond visible", lights: true },
+  { kind: "gradient", label: "Dégradé", hint: "Fond en dégradé, qui éclaire aussi", lights: true },
+  { kind: "image", label: "Image", hint: "Panorama 360, HDR ou image", lights: true },
+  {
+    kind: "picture",
+    label: "Toile",
+    hint: "Une image fixe derrière le modèle. Elle ne tourne pas avec la caméra et n'éclaire pas.",
+    lights: false,
+  },
 ];
 
 /** What the environment's own light looks like, per source. */
@@ -270,11 +276,13 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       // used to be told apart only by a checkbox in another panel.
       const state = document.createElement("span");
       state.className = "tree-num";
-      state.textContent = active
-        ? viewer.envLighting !== false
-          ? "éclaire"
-          : "fond"
-        : "";
+      state.textContent = !active
+        ? ""
+        : !source.lights
+          ? "fond seul"
+          : viewer.envLighting !== false
+            ? "éclaire"
+            : "fond";
       row.appendChild(state);
 
       row.addEventListener("click", (e) => {
@@ -325,10 +333,13 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
    * rule somebody has to remember.
    */
   function environmentRow() {
-    const kind = viewer.envKind || "studio";
-    const source = BACKDROPS.find((b) => b.kind === kind) || BACKDROPS[0];
+    const chosen = BACKDROPS.find((b) => b.kind === viewer.envKind) || BACKDROPS[0];
+    // A backdrop that does not light leaves the studio probe doing the work, so
+    // that is what this row must name. Saying "Toile" here would credit the
+    // light to a flat picture that casts nothing.
+    const source = chosen.lights ? chosen : BACKDROPS[0];
     const on = viewer.envLighting !== false;
-    const id = decorId("bg", kind);
+    const id = decorId("bg", source.kind);
 
     const row = document.createElement("div");
     row.className = "tree-row tree-child" + (selection.has(id) ? " picked" : "") + (on ? "" : " muted");
@@ -336,7 +347,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
 
     const bulb = document.createElement("span");
     bulb.className = "tree-bulb";
-    bulb.style.background = ENV_TINT[kind] || "#e8ecf4";
+    bulb.style.background = ENV_TINT[source.kind] || "#e8ecf4";
     bulb.textContent = "◍";
     bulb.title = "La lumière qui vient de l'environnement";
     row.appendChild(bulb);

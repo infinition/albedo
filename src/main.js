@@ -237,6 +237,9 @@ function captureViewState() {
     // was the one part of the environment the document did not carry, so
     // switching tabs and back put the sun somewhere else.
     framing: { ...(viewer.framing || {}) },
+    backdrop: { ...(viewer.backdrop || {}) },
+    backdropPath: prefs?.get?.("backdropPath") ?? null,
+    backgroundColour: `#${viewer.solidBackground.getHexString()}`,
     lights: viewer.lightState(),
     // The stand travels with the scene it was chosen for: a plinth picked to sit
     // a figurine on has nothing to say about the next file.
@@ -267,7 +270,17 @@ async function restoreViewState(s) {
   viewer.setAlwaysShowLights(!!s.lightsAlwaysVisible);
   $("opt-exposure").value = String(s.exposure);
   viewer.setExposure(s.exposure);
-  if (s.environment !== "studio") await useEnvironment(s.environment, s.environmentPath, false);
+  $("bg-colour").value = s.backgroundColour || "#14161a";
+  viewer.setBackgroundColour(s.backgroundColour || "#14161a");
+  if (s.backdrop) {
+    viewer.setBackdrop(s.backdrop);
+    $("backdrop-zoom").value = String(s.backdrop.zoom ?? 1);
+    $("backdrop-x").value = String(s.backdrop.x ?? 0);
+    $("backdrop-y").value = String(s.backdrop.y ?? 0);
+    $("backdrop-blur").value = String(s.backdrop.blur ?? 0);
+  }
+  if (s.environment === "picture") await useEnvironment("picture", s.backdropPath, false);
+  else if (s.environment !== "studio") await useEnvironment(s.environment, s.environmentPath, false);
   else await viewer.setEnvironment("studio");
   viewer.showEnvBackground = s.envBackground;
   $("env-background").checked = s.envBackground !== false;
@@ -327,7 +340,13 @@ async function resetViewSettings() {
   $("env-zoom").value = "1";
   $("env-rotation").value = "0";
   $("env-blur").value = "0";
-  paintEnvControls("studio");
+  viewer.setBackdrop({ zoom: 1, x: 0, y: 0, blur: 0 });
+  for (const [id, v] of [["backdrop-zoom", "1"], ["backdrop-x", "0"], ["backdrop-y", "0"], ["backdrop-blur", "0"]]) {
+    $(id).value = v;
+  }
+  $("bg-colour").value = "#14161a";
+  viewer.setBackgroundColour("#14161a");
+  paintBackdropPanes("studio");
   // Empty, which `applyLights` reads as "give me the standard rig": one key
   // light, where the standard rig puts it.
   viewer.applyLights([]);
@@ -2734,7 +2753,21 @@ function wakeTree() {
       $("outliner-all")?.addEventListener("click", () => outliner.reveal());
       $("outliner-isolate")?.addEventListener("click", () => outliner.isolate());
     })
-    .catch((e) => console.error("[albedo] arbre de scène :", e))
+    /*
+     * A failure here is loud, because it is otherwise invisible.
+     *
+     * The catch used to log and stop. The application carries on perfectly well
+     * without the list — every panel still works — so a typo in the outliner
+     * left it simply absent, with one red line in a console nobody has open, and
+     * the panel looking like a design choice rather than a fault. Same shape as
+     * `onOpenChange` swallowing its errors, which is already in the pitfalls.
+     */
+    .catch((e) => {
+      console.error("[albedo] arbre de scène :", e);
+      toast("L'arbre de scène n'a pas pu se construire", 4000);
+      $("scene-tree").innerHTML =
+        '<p class="hint tree-empty">L\'arbre n\'a pas pu se construire. Voir la console.</p>';
+    })
     .finally(() => {
       outlinerArriving = null;
     });
@@ -2785,6 +2818,28 @@ async function pickFile(name, extensions) {
 const fileLabel = (path) => (path || "").split(/[\\/]/).pop() || path;
 
 const PANORAMA_KINDS = ["hdr", "exr", "png", "jpg", "jpeg", "webp"];
+
+/**
+ * Which backdrop is lit up, and which set of its controls is on screen.
+ *
+ * One function for four sources, called from every route in — the segment, the
+ * list, a restore, a document switch. Four `hidden` assignments scattered over
+ * three call sites is how a control ends up visible for a source it has nothing
+ * to say about.
+ */
+function paintBackdropPanes(kind = viewer.envKind || "studio") {
+  for (const [id, k] of [
+    ["env-studio", "studio"], ["env-gradient", "gradient"],
+    ["env-image", "image"], ["env-picture", "picture"],
+  ]) {
+    $(id)?.classList.toggle("active", k === kind);
+  }
+  $("gradient-editor").hidden = kind !== "gradient";
+  $("env-image-tools").hidden = kind !== "image";
+  $("env-framing").hidden = kind !== "image";
+  $("backdrop-editor").hidden = kind !== "picture";
+  paintEnvControls(kind);
+}
 
 /**
  * Which of the backdrop's controls apply to the source in force.
@@ -2840,6 +2895,39 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
   let source = path;
   let url = null;
 
+  /*
+   * The flat backdrop takes the same route as the panorama and stops short of
+   * the lighting.
+   *
+   * Same order for finding a file — what is already loaded, then the saved path,
+   * then the picker — because "it forgot my image" is the same complaint
+   * whichever of the two is chosen.
+   */
+  if (kind === "picture") {
+    const held = !ask && !source && viewer.backdropSource;
+    if (!held) {
+      if (!source && !ask) source = prefs.get("backdropPath") || null;
+      if (!source) source = await pickFile("Images", ["png", "jpg", "jpeg", "webp", "bmp"]);
+      if (!source) return;
+      const link = tauri ? tauri.core.convertFileSrc(source) : source;
+      if (!(await viewer.loadBackdrop(link))) {
+        $("backdrop-file").textContent = "Image illisible";
+        return;
+      }
+      if (remember && tauri) prefs.set("backdropPath", source);
+    } else {
+      viewer.envKind = "picture";
+      viewer.composeBackdrop();
+      viewer.applyLighting();
+      source = prefs.get("backdropPath") || "";
+    }
+    $("backdrop-file").textContent = source ? fileLabel(source) : "Image chargée";
+    paintBackdropPanes(kind);
+    if (remember) prefs.set("environment", kind);
+    paintTree();
+    return;
+  }
+
   if (kind === "image") {
     const held = !ask && !source && viewer.panoramaSource;
     if (held) {
@@ -2864,18 +2952,9 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
     $("env-file").textContent = "Panorama illisible";
     return;
   }
-  for (const [id, k] of [["env-studio", "studio"], ["env-gradient", "gradient"], ["env-image", "image"]]) {
-    $(id).classList.toggle("active", k === kind);
-  }
   $("env-file").textContent =
     kind === "image" ? fileLabel(source) : kind === "gradient" ? "Dégradé interne" : "Aucun panorama";
-  // The stops only mean something while the gradient is what is shown
-  $("gradient-editor").hidden = kind !== "gradient";
-  // Replacing, removing and framing only exist once there is an image to act on
-  $("env-image-tools").hidden = kind !== "image";
-  $("env-framing").hidden = kind !== "image";
-  // The studio probe is the lighting: asking whether it lights would be odd
-  paintEnvControls(kind);
+  paintBackdropPanes(kind);
   if (!remember) return;
   prefs.set("environment", kind);
   // A blob URL from the browser fallback would not survive a restart
@@ -2887,6 +2966,43 @@ $("env-gradient").addEventListener("click", () => useEnvironment("gradient"));
 // Whatever panorama is already there, without a question. The picker only
 // appears when there is genuinely nothing to come back to.
 $("env-image").addEventListener("click", () => useEnvironment("image", null));
+$("env-picture").addEventListener("click", () => useEnvironment("picture", null));
+$("backdrop-replace").addEventListener("click", () =>
+  useEnvironment("picture", null, true, { ask: true })
+);
+$("backdrop-clear").addEventListener("click", () => {
+  prefs.set("backdropPath", null);
+  useEnvironment("studio");
+});
+
+/*
+ * The picture's framing: across, up, how big, how soft.
+ *
+ * Written straight through to the viewer, which recomposes the canvas. There is
+ * no cheaper path — the blur and the crop are drawing operations — but the
+ * canvas is at most 2560 wide and a drag is a handful of them.
+ */
+for (const [id, key, unit] of [
+  ["backdrop-zoom", "zoom", "×"], ["backdrop-x", "x", ""],
+  ["backdrop-y", "y", ""], ["backdrop-blur", "blur", ""],
+]) {
+  $(id).addEventListener("input", (e) => {
+    const value = Number(e.target.value);
+    viewer.setBackdrop({ [key]: value });
+    if (unit && $(`${id}-value`)) $(`${id}-value`).textContent = `${value.toFixed(1)}${unit}`;
+    markDirty();
+  });
+}
+
+$("bg-colour").addEventListener("input", (e) => {
+  viewer.setBackgroundColour(e.target.value);
+  prefs.set("backgroundColour", e.target.value);
+});
+$("bg-colour-reset").addEventListener("click", () => {
+  $("bg-colour").value = "#14161a";
+  viewer.setBackgroundColour("#14161a");
+  prefs.set("backgroundColour", "#14161a");
+});
 // Replacing is the one gesture that means "a different file", so it is the one
 // that always asks.
 $("env-replace").addEventListener("click", () => useEnvironment("image", null, true, { ask: true }));
@@ -3959,7 +4075,10 @@ function selectDecorItem(sel, { showHelper = true } = {}) {
   } else if (sel.type === "background") {
     viewer.showLightHelper(null);
     setGizmoMode(null);
-    paintEnvControls();
+    // The whole set, not just the two dead-control rules: choosing a backdrop
+    // row has to bring up that backdrop's own editor, and the panel is reachable
+    // by routes that never went through `useEnvironment`.
+    paintBackdropPanes();
     // Switching to it is the outliner's job, on the click that chose the row.
     // Doing it here as well ran `useEnvironment` twice for one click, which on
     // the image source meant loading and decoding the panorama twice.
