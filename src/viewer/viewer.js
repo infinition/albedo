@@ -1781,6 +1781,125 @@ export class Viewer {
     this.syncMarkers();
   }
 
+  // ---------------------------------------------------------------------------
+  // Where the lens is focused
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Three rings across the view: the plane in focus, and the band that is sharp.
+   *
+   * Depth of field is the one effect whose main control is invisible while you
+   * set it. "Mise au point 0.42" names a plane somewhere in the scene, and the
+   * only way to find out where was to let go of the slider and look at what came
+   * out blurred — so setting it was a guess, a wait, and another guess.
+   *
+   * Built once, on the first drag, because a viewer that never opens the effect
+   * should not carry three ring geometries around.
+   */
+  focusHelper() {
+    if (this._focus) return this._focus;
+    const group = new THREE.Group();
+    group.name = "albedo:focus";
+    // Never occluded: the whole point is to see where the plane sits *inside*
+    // the model, and a ring hidden by the very geometry it cuts through says
+    // nothing.
+    const ring = (colour, opacity, dashed) => {
+      const points = [];
+      const N = 96;
+      for (let i = 0; i <= N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        points.push(new THREE.Vector3(Math.cos(a), Math.sin(a), 0));
+      }
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = dashed
+        ? new THREE.LineDashedMaterial({
+            color: colour,
+            transparent: true,
+            opacity,
+            depthTest: false,
+            dashSize: 0.06,
+            gapSize: 0.05,
+          })
+        : new THREE.LineBasicMaterial({
+            color: colour,
+            transparent: true,
+            opacity,
+            depthTest: false,
+          });
+      const line = new THREE.LineLoop(geometry, material);
+      if (dashed) line.computeLineDistances();
+      line.renderOrder = 997;
+      return line;
+    };
+    // The sharp limits are dashed and dim; the plane in focus is solid and warm,
+    // because it is the one the slider is actually moving.
+    group.add(ring(0x5fd8ff, 0.35, true));  // near limit
+    group.add(ring(0xffc061, 0.95, false)); // the focal plane
+    group.add(ring(0x5fd8ff, 0.35, true));  // far limit
+    group.visible = false;
+    this.scene.add(group);
+    this._focus = group;
+    return group;
+  }
+
+  /**
+   * Put the rings where the lens is actually focused.
+   *
+   * The band comes from the shader's own arithmetic rather than from a guess.
+   * Three's bokeh blurs by `clamp((depth - focus) * aperture, ±maxblur)`, so the
+   * distance at which the blur first becomes visible is a threshold divided by
+   * the aperture — which is why opening the aperture visibly pinches the two
+   * dashed rings towards the solid one, exactly as it should.
+   */
+  updateFocus({ distance, aperture, maxblur }) {
+    const group = this._focus;
+    if (!group || !group.visible) return;
+
+    const box = this.boxHelper?.box || new THREE.Box3();
+    const radius = box.isEmpty()
+      ? 1
+      : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3);
+
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    // A blur under this is a pixel nobody would call soft. Absolute rather than
+    // a fraction of `maxblur`: the ceiling says how blurred the *blurred* parts
+    // get, and has nothing to say about where sharpness ends.
+    const halfBand = Math.min(aperture > 1e-6 ? 0.0016 / aperture : radius, radius * 4);
+
+    const [near, plane, far] = group.children;
+    const at = (line, d, scale, opacity) => {
+      line.position.copy(this.camera.position).addScaledVector(forward, Math.max(d, 1e-3));
+      line.quaternion.copy(this.camera.quaternion);
+      line.scale.setScalar(radius * scale);
+      line.material.opacity = opacity;
+      // The dash pattern is in local units, so it has to be recomputed whenever
+      // the ring is rescaled or the dashes stretch into a solid line.
+      if (line.material.isLineDashedMaterial) line.computeLineDistances();
+    };
+    at(plane, distance, 0.72, 0.95);
+    // A limit behind the camera is not a limit anybody can see; it fades out
+    // rather than being drawn folded through the eye.
+    at(near, distance - halfBand, 0.6, distance - halfBand > 0 ? 0.35 : 0);
+    at(far, distance + halfBand, 0.85, 0.35);
+
+    this._focusAt = { distance, halfBand };
+    this.onFocus?.(this._focusAt);
+    this.invalidate();
+  }
+
+  /** Show or hide the focus rings. */
+  showFocus(on) {
+    const group = on ? this.focusHelper() : this._focus;
+    if (!group) return;
+    group.visible = !!on;
+    this.invalidate();
+  }
+
+  /** What the rings currently say, for a readout to print. */
+  focusReading() {
+    return this._focusAt || null;
+  }
+
   /** Every light follows the model it lights, so a new file is lit the same. */
   replaceLights() {
     for (const entry of this.lights) this.placeLight(entry);
@@ -2183,8 +2302,11 @@ export class Viewer {
     this.stand.visible = stand && before.stand;
     this.boxHelper.visible = false;
     // A light marker is a handle, not scenery: it belongs on screen while the
-    // rig is being set and never in the picture the rig was set for.
+    // rig is being set and never in the picture the rig was set for. Same for
+    // the focus rings, which say where the effect is aimed and are not part of
+    // the picture the effect produces.
     this.markers.visible = false;
+    if (this._focus) this._focus.visible = false;
     this.post?.outline([]);
 
     this.renderer.setSize(w, h, false);

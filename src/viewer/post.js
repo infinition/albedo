@@ -438,6 +438,15 @@ export class PostFx {
     // the focus changes nothing at all. The slider stops before that.
     u.aperture.value = Math.min(bag.aperture, 0.06);
     u.maxblur.value = bag.maxblur;
+
+    // The rings read the numbers the pass was just given rather than working
+    // them out again: an indicator computed from its own copy of the formula is
+    // an indicator that can be wrong, which is worse than not having one.
+    this.viewer.updateFocus({
+      distance: u.focus.value,
+      aperture: u.aperture.value,
+      maxblur: u.maxblur.value,
+    });
   }
 
   render(dt = 0) {

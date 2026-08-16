@@ -245,5 +245,9 @@
   "pane.smTranslation": "SpaceMouse translation",
   "pane.smRotation": "SpaceMouse rotation",
   "pane.smHint": "Each axis: listened or not, its speed, and its direction",
-  "pane.smLockRoll": "Lock roll"
+  "pane.smLockRoll": "Lock roll",
+  "dof.focusAt": "Focus at",
+  "dof.sharpOver": "· sharp over",
+  "pane.lightsAlways": "Always show lights",
+  "pane.sceneTitle": "Scene"
 }

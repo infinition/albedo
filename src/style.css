@@ -993,6 +993,39 @@ label:has(> input[type="range"]) { position: relative; }
 label:hover > .slider-value,
 label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
 
+/*
+ * The focus readout, over the viewport, only while a DOF slider is moving.
+ *
+ * Bottom centre rather than beside the slider: the eye is on the model when it
+ * is chasing a focal plane, and a number in the panel is a number in the corner
+ * you are not looking at.
+ */
+#focus-readout {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgb(12 14 18 / 0.82);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#focus-readout[hidden] { display: none; }
+#focus-readout b { font-weight: 600; color: #ffc061; }
+#focus-readout i { font-style: normal; color: #5fd8ff; }
+#focus-readout span { color: var(--muted); }
+
 /* --- effects, as cards ---------------------------------------------------- */
 
 /*

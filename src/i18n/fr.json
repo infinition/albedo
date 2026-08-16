@@ -245,5 +245,9 @@
   "pane.smTranslation": "Translation SpaceMouse",
   "pane.smRotation": "Rotation SpaceMouse",
   "pane.smHint": "Chaque axe : écouté ou non, sa vitesse, et son sens",
-  "pane.smLockRoll": "Bloquer le roulis"
+  "pane.smLockRoll": "Bloquer le roulis",
+  "dof.focusAt": "Mise au point",
+  "dof.sharpOver": "· net sur",
+  "pane.lightsAlways": "Toujours montrer les lumières",
+  "pane.sceneTitle": "Scène"
 }

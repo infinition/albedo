@@ -3343,6 +3343,67 @@ for (const [group, key, id] of POST_CONTROLS) {
   });
 }
 
+/*
+ * Depth of field, shown while it is being set rather than after.
+ *
+ * The three sliders name a plane somewhere in the scene, and until now the only
+ * way to find out where was to let go, wait for the frame, and look at what came
+ * out soft. Dragging any of them puts three rings in the viewport — the plane in
+ * focus and the two ends of the sharp band — and a readout under them.
+ *
+ * On `input` rather than on `pointerdown`, so the arrow keys get it too; and
+ * held for a moment after the last change, because letting go to look at the
+ * result is precisely when the rings should still be there.
+ */
+{
+  const readout = $("focus-readout");
+  readout.innerHTML =
+    `<span data-i18n="dof.focusAt">Mise au point</span> <b>—</b>` +
+    ` <span data-i18n="dof.sharpOver">· net sur</span> <i>—</i>`;
+  const far = readout.querySelector("b");
+  const band = readout.querySelector("i");
+  let timer = 0;
+
+  /*
+   * Pushed by the pass, not polled by a frame loop.
+   *
+   * A `requestAnimationFrame` loop was the obvious way to keep this in step, and
+   * the wrong one twice over: rendering here is on demand, so a loop spins
+   * through frames that draw nothing, and rAF stops being called at all in a
+   * background tab — which would leave the readout on screen for ever, since the
+   * loop was also what took it away. The pass already recomputes the focus every
+   * time it renders, so it says so, and the numbers follow a camera move for
+   * free.
+   */
+  viewer.onFocus = (at) => {
+    far.textContent = at.distance.toFixed(2);
+    band.textContent = (at.halfBand * 2).toFixed(2);
+  };
+
+  const show = () => {
+    readout.hidden = false;
+    viewer.showFocus(true);
+    // The rings are filled by the pass on its next render, which the change to
+    // the setting has already asked for.
+    viewer.invalidate();
+    clearTimeout(timer);
+    // Held after the last change, because letting go to look at the result is
+    // precisely when the rings should still be there.
+    timer = setTimeout(() => {
+      readout.hidden = true;
+      viewer.showFocus(false);
+    }, 1200);
+  };
+
+  for (const id of ["dof-focus", "dof-aperture", "dof-maxblur"]) {
+    $(id)?.addEventListener("input", show);
+  }
+  // Turning the effect on is also a moment to be told where it is aimed.
+  $("dof-on")?.addEventListener("change", (e) => {
+    if (e.target.checked) show();
+  });
+}
+
 /**
  * A card looks like what it is doing.
  *
