@@ -2049,6 +2049,10 @@ $("opt-skeleton").addEventListener("change", (e) => {
   viewer.setSkeleton(e.target.checked);
   prefs.set("skeleton", e.target.checked);
 });
+$("opt-lights-visible").addEventListener("change", (e) => {
+  viewer.setAlwaysShowLights(e.target.checked);
+  prefs.set("lightsAlwaysVisible", e.target.checked);
+});
 $("opt-exposure").addEventListener("input", (e) => {
   viewer.setExposure(Number(e.target.value));
   prefs.set("exposure", Number(e.target.value));
@@ -2539,15 +2543,46 @@ async function pickFile(name, extensions) {
 
 const fileLabel = (path) => (path || "").split(/[\\/]/).pop() || path;
 
-async function useEnvironment(kind, path, remember = true) {
+const PANORAMA_KINDS = ["hdr", "exr", "png", "jpg", "jpeg", "webp"];
+
+/**
+ * Switch what lights the scene and what sits behind it.
+ *
+ * `path` names a file to load. `ask` forces the picker, which is what the
+ * Remplacer button wants and nothing else does.
+ *
+ * The order below is the whole of the fix for "it forgets my panorama": the
+ * texture already in memory answers first, the saved path second, and the
+ * picker only when neither can. Clicking Image used to go straight to the
+ * picker every time, on the reasoning that a saved path may have moved — true,
+ * but that is a reason to fall back to the picker when the load *fails*, not to
+ * refuse to try.
+ */
+async function useEnvironment(kind, path, remember = true, { ask = false } = {}) {
   let source = path;
-  if (kind === "image" && !source) {
-    source = await pickFile("Panoramas", ["hdr", "exr", "png", "jpg", "jpeg", "webp"]);
-    if (!source) return;
+  let url = null;
+
+  if (kind === "image") {
+    const held = !ask && !source && viewer.panoramaSource;
+    if (held) {
+      // Still decoded and still held. `setEnvironment` re-adopts it with no url.
+      source = prefs.get("environmentPath") || "";
+    } else {
+      if (!source && !ask) source = prefs.get("environmentPath") || null;
+      if (!source) source = await pickFile("Panoramas", PANORAMA_KINDS);
+      if (!source) return;
+      url = tauri ? tauri.core.convertFileSrc(source) : source;
+    }
   }
-  const url = kind === "image" ? (tauri ? tauri.core.convertFileSrc(source) : source) : null;
+
   const ok = await viewer.setEnvironment(kind, url);
   if (!ok) {
+    // A remembered path that has moved or been deleted. Ask once, rather than
+    // leaving the button dead with a message under it.
+    if (kind === "image" && !ask) {
+      const picked = await pickFile("Panoramas", PANORAMA_KINDS);
+      if (picked) return useEnvironment("image", picked, remember);
+    }
     $("env-file").textContent = "Panorama illisible";
     return;
   }
@@ -2571,13 +2606,12 @@ async function useEnvironment(kind, path, remember = true) {
 
 $("env-studio").addEventListener("click", () => useEnvironment("studio"));
 $("env-gradient").addEventListener("click", () => useEnvironment("gradient"));
-$("env-image").addEventListener("click", () => {
-  // Always ask for the file. A remembered path that has moved or been deleted
-  // would otherwise answer the click with "Panorama illisible" and never open
-  // the picker, which is the one thing the button is for.
-  useEnvironment("image", null);
-});
-$("env-replace").addEventListener("click", () => useEnvironment("image", null));
+// Whatever panorama is already there, without a question. The picker only
+// appears when there is genuinely nothing to come back to.
+$("env-image").addEventListener("click", () => useEnvironment("image", null));
+// Replacing is the one gesture that means "a different file", so it is the one
+// that always asks.
+$("env-replace").addEventListener("click", () => useEnvironment("image", null, true, { ask: true }));
 $("env-clear").addEventListener("click", () => {
   prefs.set("environmentPath", null);
   useEnvironment("studio");
@@ -2853,6 +2887,8 @@ function applyPrefs() {
   // asks the checkbox, never `prefs`, when the wireframe first turns on.
   $("opt-wire-dark").checked = p.wireDark;
   wire?.setColour(!p.wireDark);
+  $("opt-lights-visible").checked = p.lightsAlwaysVisible;
+  viewer.setAlwaysShowLights(p.lightsAlwaysVisible);
   if (p.pedestal) usePedestal(p.pedestal, false);
   if (p.lights) viewer.applyLights(p.lights);
   // Setting `value` fires no input event, so the readouts would still be

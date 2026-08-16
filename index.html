@@ -388,6 +388,16 @@
           <label class="check"><input type="checkbox" id="opt-bounds" /><span data-i18n="pane.bounds">Boîte englobante</span></label>
           <label class="check"><input type="checkbox" id="opt-skeleton" /><span data-i18n="pane.skeleton">Squelette</span></label>
           <!--
+            Here, among the things that say what is drawn, and unchecked.
+
+            A light marker is a handle. Albedo is a viewer before it is a light
+            rig, and four bright discs floating over every model somebody opened
+            to look at it is the tool getting in the way of the thing. Off, the
+            marker of the light you are editing is the only one on screen, which
+            is the one you asked for.
+          -->
+          <label class="check"><input type="checkbox" id="opt-lights-visible" /><span data-i18n="pane.lightsAlways">Toujours montrer les lumières</span></label>
+          <!--
             Exposure is in Effets now. It sat here, among the grid and the
             bounding box, which are answers to "what is drawn"; how bright the
             picture comes out is the camera's answer, and belongs with bloom and

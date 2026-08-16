@@ -33,6 +33,14 @@ export const DEFAULTS = {
   wireOnly: false,
   /** Dark lines rather than light ones: neither works on every model. */
   wireDark: true,
+  /**
+   * Every light marker on screen, or only the one being edited.
+   *
+   * False, because this is a viewer first: a marker is a handle for arranging a
+   * rig, and a handle that is always out is clutter over every model opened
+   * merely to be looked at.
+   */
+  lightsAlwaysVisible: false,
   /** Flat faces rather than smooth ones, for reading the topology. */
   flat: false,
   exposure: 1,

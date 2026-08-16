@@ -155,6 +155,17 @@ export class Viewer {
     this.markers = new THREE.Group();
     this.markers.name = "albedo:markers";
     this.scene.add(this.markers);
+    /*
+     * Off by default, and that is the important half of the feature.
+     *
+     * This is a viewer first. A rig of four lights means four bright discs
+     * floating over every model anybody opens to *look* at it, for the sake of a
+     * control they may never touch. So a marker is drawn only while its light is
+     * the one being edited — chosen in the list, chosen in the viewport — and
+     * the switch that shows them all is there for when you are actually
+     * arranging a rig.
+     */
+    this.alwaysShowLights = false;
     this.lights = [];
     this.lightHelper = null;
     this.selectedLight = null;
@@ -709,6 +720,21 @@ export class Viewer {
    * @param {string} [url] panorama to load when the kind is an image
    */
   async setEnvironment(kind, url) {
+    /*
+     * Coming back to a panorama already held costs nothing and asks nothing.
+     *
+     * Leaving an image for the studio never released `panoramaSource`: the
+     * decoded texture stayed in memory the whole time, and going back to it
+     * still went through the file picker, a disk read and a decode. Worse than
+     * slow — it made the round trip look destructive, so switching to studio to
+     * compare felt like losing the image you had chosen.
+     */
+    if (kind === "image" && !url && this.panoramaSource) {
+      this.envKind = "image";
+      this.applyPanorama();
+      this.applyBackground();
+      return true;
+    }
     if (kind === "image" && url) {
       const panorama = await this.loadPanorama(url);
       if (!panorama) return false;
@@ -1728,9 +1754,31 @@ export class Viewer {
       const s = Math.max(radius * 0.09, 1e-4);
       entry.marker.scale.set(s, s, 1);
       entry.marker.material.color.set(entry.colour || "#ffffff");
-      entry.marker.visible = entry.enabled !== false;
+    }
+    this.syncMarkers();
+  }
+
+  /**
+   * Which markers are on screen, decided in one place.
+   *
+   * Three things move this — the switch, the selection, and a light being
+   * switched off — and each of them used to be entitled to write `visible` on
+   * its own. One rule, asked by all three, is what stops "I turned them off and
+   * one stayed" from being possible at all.
+   */
+  syncMarkers() {
+    for (const entry of this.lights) {
+      if (!entry.marker) continue;
+      entry.marker.visible =
+        entry.enabled !== false && (this.alwaysShowLights || this.selectedLight === entry.id);
     }
     this.invalidate();
+  }
+
+  /** Show every light's marker, or only the one being edited. */
+  setAlwaysShowLights(on) {
+    this.alwaysShowLights = on !== false;
+    this.syncMarkers();
   }
 
   /** Every light follows the model it lights, so a new file is lit the same. */
@@ -1852,6 +1900,9 @@ export class Viewer {
       this.lightHelper = null;
     }
     this.selectedLight = id;
+    // The markers follow the choice: with the switch off, the one being edited
+    // is the only one drawn, and clearing the selection clears the viewport.
+    this.syncMarkers();
     const entry = this.lights.find((l) => l.id === id);
     if (!entry) {
       this.invalidate();
