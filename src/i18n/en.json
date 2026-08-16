@@ -268,5 +268,15 @@
   "pane.backdropX": "Across",
   "pane.backdropY": "Up",
   "pane.backdropHint": "Pinned to the screen, and casts no light: the studio still lights the scene.",
-  "pane.bgColour": "Background colour"
+  "pane.bgColour": "Background colour",
+  "pane.lens": "Lens",
+  "pane.framing": "Framing",
+  "pane.picture": "Picture",
+  "pane.focal": "35mm equivalent",
+  "pane.recentreShot": "Reframe",
+  "pane.recentreTitle": "Frame the model",
+  "pane.upright": "Level",
+  "pane.uprightTitle": "Put the horizon back level",
+  "pan.contents": "Contents",
+  "pan.exportTitle": "Export"
 }

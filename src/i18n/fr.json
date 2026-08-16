@@ -268,5 +268,15 @@
   "pane.backdropX": "Horizontal",
   "pane.backdropY": "Vertical",
   "pane.backdropHint": "Fixe à l'écran, et n'éclaire pas : l'éclairage reste celui du studio.",
-  "pane.bgColour": "Couleur du fond"
+  "pane.bgColour": "Couleur du fond",
+  "pane.lens": "Objectif",
+  "pane.framing": "Cadrage",
+  "pane.picture": "Image",
+  "pane.focal": "Équivalent 24×36",
+  "pane.recentreShot": "Recadrer",
+  "pane.recentreTitle": "Recadrer sur le modèle",
+  "pane.upright": "Redresser",
+  "pane.uprightTitle": "Remettre l'horizon droit",
+  "pan.contents": "Contenu",
+  "pan.exportTitle": "Exporter"
 }

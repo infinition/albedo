@@ -1039,6 +1039,19 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
   height: 1px;
   background: linear-gradient(90deg, var(--line), transparent);
 }
+/* A glyph before the name, for the sections that carry one: at ten pixels the
+   title is small enough that a shape finds it faster than the word does. */
+#inspector h2 > svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.8;
+}
 /* Sections get air between them rather than inside them, so a heading sits with
    the controls it names instead of halfway between two groups. */
 #panes section + section { margin-top: 14px; }

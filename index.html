@@ -323,16 +323,13 @@
           <button class="tab" type="button" data-pane="retopo" data-i18n-title="tab.retopo" data-i18n-aria="tab.retopo" title="Retopo" aria-label="Retopo" hidden>
             <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
           </button>
-          <button class="tab" type="button" data-pane="camera" data-i18n-title="tab.camera" data-i18n-aria="tab.camera" title="Caméra" aria-label="Caméra">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M12 4v8l6 4" /></svg>
-          </button>
           <button class="tab" type="button" data-pane="decor" data-i18n-title="tab.decor" data-i18n-aria="tab.decor" title="Décor" aria-label="Décor">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="4" /><path d="M3 19h18M6 15l3-3 3 3" /></svg>
           </button>
           <button class="tab" type="button" data-pane="effects" data-i18n-title="tab.effects" data-i18n-aria="tab.effects" title="Effets" aria-label="Effets">
             <svg viewBox="0 0 24 24"><path d="M5 12h4l2-5 2 10 2-5h4"/></svg>
           </button>
-          <button class="tab" type="button" data-pane="photo" data-i18n-title="tab.photo" data-i18n-aria="tab.photo" title="Photo" aria-label="Photo">
+          <button class="tab" type="button" data-pane="photo" data-i18n-title="tab.camera" data-i18n-aria="tab.camera" title="Caméra" aria-label="Caméra">
             <svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
           <button class="tab" type="button" data-pane="object" data-i18n-title="tab.object" data-i18n-aria="tab.object" title="Objet" aria-label="Objet">
@@ -561,33 +558,6 @@
           <div id="materials"></div>
         </section>
         <p class="hint" id="matter-empty" data-i18n="pane.matterEmpty">Ouvre un modèle pour voir ses matières.</p>
-        </div>
-
-        <div class="pane" data-pane="camera">
-        <section>
-          <h2 data-i18n="pane.camera">Caméra</h2>
-          <div class="row">
-            <div class="segment" role="group" data-i18n-aria="pane.projection" aria-label="Projection">
-              <button id="proj-persp" class="seg active" type="button" data-i18n-title="pane.persp" data-i18n="pane.persp" title="Perspective">Perspective</button>
-              <button id="proj-ortho" class="seg" type="button" data-i18n-title="pane.ortho" data-i18n="pane.ortho" title="Orthographique">Ortho</button>
-            </div>
-          </div>
-          <label class="field">
-            <!--
-              The readout is a *sibling* of the translated span, never a child.
-              `applyStaticIn` writes `textContent` on every `[data-i18n]`
-              element, which replaces its children: nested here, `#fov-value`
-              was deleted by the first language pass, and `applyPrefs` then threw
-              on it and abandoned everything below that line — the wireframe
-              colour, the stand, the saved lights and the slider readouts all
-              silently stopped being restored. Every other readout in this file
-              already sits outside; this was the one that did not.
-            -->
-            <span><span data-i18n="pane.fov">Champ</span> <span id="fov-value" class="mono">45°</span></span>
-            <input type="range" id="opt-fov" min="10" max="100" step="1" value="45" />
-          </label>
-          <p class="hint" data-i18n="pane.camHint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
-        </section>
         </div>
 
         <div class="pane" data-pane="decor">
@@ -969,11 +939,58 @@
         </div>
         </div>
 
+        <!--
+          The camera and the picture it takes, in one place.
+
+          They were two tabs. Caméra held exactly two controls — the projection
+          and the field of view — and Photo held the framing and the file, which
+          is the same subject one step later: the lens decides what is in the
+          frame, the format decides the shape of the frame, and the button
+          writes it out. Splitting them meant setting a shot took two tabs and a
+          guess about which half a given control had been filed under.
+        -->
         <div class="pane" data-pane="photo">
+
         <section>
-          <h2 data-i18n="pane.photo">Photo</h2>
-          <div class="shot-preview"><img id="shot-preview" alt="" /></div>
-          <p id="shot-note" class="hint" data-i18n="pane.shotNote">Le cadrage est celui de la vue.</p>
+          <h2>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="9"/></svg>
+            <span data-i18n="pane.lens">Objectif</span>
+          </h2>
+          <div class="row">
+            <div class="segment" role="group" data-i18n-aria="pane.projection" aria-label="Projection">
+              <button id="proj-persp" class="seg active" type="button" data-i18n-title="pane.persp" data-i18n="pane.persp" title="Perspective">Perspective</button>
+              <button id="proj-ortho" class="seg" type="button" data-i18n-title="pane.ortho" data-i18n="pane.ortho" title="Orthographique">Ortho</button>
+            </div>
+          </div>
+          <label class="field">
+            <!--
+              The readout is a *sibling* of the translated span, never a child.
+              `applyStaticIn` writes `textContent` on every `[data-i18n]`
+              element, which replaces its children.
+            -->
+            <span><span data-i18n="pane.fov">Champ</span> <span id="fov-value" class="mono">45°</span></span>
+            <input type="range" id="opt-fov" min="10" max="100" step="1" value="45" />
+          </label>
+          <!--
+            The same lens in millimetres, because that is the unit anybody who
+            has held a camera thinks in. Derived rather than stored: a 24×36
+            frame is 24mm tall, so the focal length is half of that over the
+            tangent of half the vertical field. One number, two ways of saying
+            it, and no second control to fall out of step.
+          -->
+          <p class="hint"><span data-i18n="pane.focal">Équivalent 24×36</span> <span id="focal-value" class="mono">—</span></p>
+          <div class="row">
+            <button id="cam-frame" class="seg" type="button" data-i18n-title="pane.recentreTitle" data-i18n="pane.recentreShot" title="Recadrer sur le modèle">Recadrer</button>
+            <button id="cam-reset-roll" class="seg" type="button" data-i18n-title="pane.uprightTitle" data-i18n="pane.upright" title="Remettre l'horizon droit">Redresser</button>
+          </div>
+          <p class="hint" data-i18n="pane.camHint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
+        </section>
+
+        <section>
+          <h2>
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+            <span data-i18n="pane.framing">Cadrage</span>
+          </h2>
           <div class="row">
             <div class="segment" role="group" data-i18n-aria="pane.format" aria-label="Format">
               <button id="shot-view" class="seg active" type="button" data-i18n-title="pane.shotViewTitle" data-i18n="pane.shotView" title="Le rapport de la fenêtre">Vue</button>
@@ -995,6 +1012,15 @@
               <button id="shot-x4" class="seg" type="button" data-i18n-title="pane.shotX4Title" title="Le quadruple">×4</button>
             </div>
           </div>
+        </section>
+
+        <section>
+          <h2>
+            <svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span data-i18n="pane.picture">Image</span>
+          </h2>
+          <div class="shot-preview"><img id="shot-preview" alt="" /></div>
+          <p id="shot-note" class="hint" data-i18n="pane.shotNote">Le cadrage est celui de la vue.</p>
           <!-- What goes in the picture, as three chips on one line rather than
                three ticked lines saying the same. -->
           <div class="chips">
@@ -1020,45 +1046,48 @@
         </section>
         </div>
 
-        <div class="pane" data-pane="object">
-        <section>
-          <h2 data-i18n="pan.scene">Scène</h2>
-          <!--
-            No transform segment here any more.
+        <!--
+          What is true of the document rather than of a selection.
 
-            Déplacer / Tourner / Échelle existed in five places at once: the bar
-            over the model, this segment, the new row under the scene list, and
-            one set each on the light and the stand. Three of the five call the
-            same `setEditMode`, so this one was the same control drawn a third
-            time, in the tab furthest from the thing it moves. The two that
-            remain elsewhere are *not* duplicates yet — they aim at a light and
-            at the stand, which `editTarget` cannot yet resolve.
-          -->
+          Everything that acts on one object — the handles, the coordinates, the
+          pivot, importing, copying, undoing — moved under the scene list, where
+          the thing it acts on is. What is left here is the file: what it holds,
+          how it is turned, where it is written, and what Windows does with it.
+
+          Two sections were both titled "Scène": one listing the parts, one
+          holding the exports. Two headings with one name in one column is the
+          reader's problem, not the writer's.
+        -->
+        <div class="pane" data-pane="object">
+
+        <section>
+          <h2>
+            <svg viewBox="0 0 24 24"><path d="M12 3l9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
+            <span data-i18n="pan.contents">Contenu</span>
+          </h2>
+          <p id="dimensions" class="hint mono">—</p>
           <div id="parts-list"></div>
-          <!--
-            The numbers, the handles, the pivot, importing, copying and undoing
-            have all moved under the scene list, where the thing they act on is.
-            What stays here is what is true of the document rather than of a
-            selection: how it is turned, where it is written, and what the shell
-            does with it.
-          -->
         </section>
 
-        <details id="shell-section" class="fold" hidden>
-          <summary data-i18n="pan.shell">Intégration Windows</summary>
-          <p class="hint" data-i18n="pan.shellHint">Les vignettes des fichiers 3D dans l'explorateur, rendues par cette copie d'Albedo. Rien n'est écrit tant que tu ne le demandes pas.</p>
-          <div class="row">
-            <button id="shell-on" class="seg" type="button" data-i18n="pan.shellOn">Activer</button>
-            <button id="shell-off" class="seg" type="button" data-i18n="pan.shellOff">Retirer</button>
-          </div>
-          <div class="row">
-            <button id="shell-shortcut" class="seg" type="button" data-i18n-title="pan.shortcutTitle" data-i18n="pan.shortcut">Raccourci bureau</button>
-          </div>
-          <p class="hint mono" id="shell-state">—</p>
-        </details>
-
         <section>
-          <h2 data-i18n="pan.saveTitle">Enregistrer</h2>
+          <h2>
+            <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
+            <span data-i18n="pan.exportTitle">Exporter</span>
+          </h2>
+          <div class="row">
+            <button id="btn-export" class="wide" type="button" disabled data-i18n="pan.export">Exporter en glTF</button>
+          </div>
+          <div class="row">
+            <button id="btn-export-obj" class="seg" type="button" disabled data-i18n="pan.exportObj">OBJ</button>
+            <button id="btn-export-stl" class="seg" type="button" disabled data-i18n="pan.exportStl">STL</button>
+            <button id="btn-snapshot" class="seg" type="button" disabled data-i18n="pan.snapshot">Image</button>
+          </div>
+          <p id="export-note" class="hint"></p>
+          <!--
+            Writing the file back sits with writing a file out, because they are
+            the same act with a different destination. They were two sections,
+            one called Exporter and one called Enregistrer, one above the other.
+          -->
           <div class="row">
             <button id="save-transform" class="seg" type="button" title="Écrire le modèle redressé dans un nouveau fichier" data-i18n="pan.saveAs">Enregistrer sous</button>
             <button id="save-over" class="seg" type="button" title="Remplacer le fichier ouvert" data-i18n="pan.saveOver">Écraser l'original</button>
@@ -1073,6 +1102,19 @@
           <div class="row">
             <button id="orient-reset" class="seg" type="button" title="Revenir a l'orientation du fichier" data-i18n="pan.orientReset">Reinitialiser</button>
           </div>
+        </details>
+
+        <details id="shell-section" class="fold" hidden>
+          <summary data-i18n="pan.shell">Intégration Windows</summary>
+          <p class="hint" data-i18n="pan.shellHint">Les vignettes des fichiers 3D dans l'explorateur, rendues par cette copie d'Albedo. Rien n'est écrit tant que tu ne le demandes pas.</p>
+          <div class="row">
+            <button id="shell-on" class="seg" type="button" data-i18n="pan.shellOn">Activer</button>
+            <button id="shell-off" class="seg" type="button" data-i18n="pan.shellOff">Retirer</button>
+          </div>
+          <div class="row">
+            <button id="shell-shortcut" class="seg" type="button" data-i18n-title="pan.shortcutTitle" data-i18n="pan.shortcut">Raccourci bureau</button>
+          </div>
+          <p class="hint mono" id="shell-state">—</p>
         </details>
 
         <details class="fold">
@@ -1098,20 +1140,6 @@
           </details>
         </details>
 
-        <section>
-          <h2 data-i18n="pan.scene">Scène</h2>
-          <p id="dimensions" class="hint mono">—</p>
-          <div class="row">
-            <button id="btn-export" class="wide" type="button" disabled data-i18n="pan.export">Exporter en glTF</button>
-          </div>
-          <div class="row">
-            <button id="btn-export-obj" class="seg" type="button" disabled data-i18n="pan.exportObj">OBJ</button>
-            <button id="btn-export-stl" class="seg" type="button" disabled data-i18n="pan.exportStl">STL</button>
-            <button id="btn-snapshot" class="seg" type="button" disabled data-i18n="pan.snapshot">Image</button>
-          </div>
-          <p id="export-note" class="hint"></p>
-        </section>
-
         <!--
           The raw graph, folded, and it is not the outliner said twice.
 
@@ -1119,14 +1147,13 @@
           maps. This is what the *file* actually contains — the bones, the
           empties, the nesting an exporter left behind — which is the thing you
           need when a model will not skin or an object sits where nothing put it.
-          Two hundred lines of it, open, sat under the export buttons of every
-          session that never needed it.
         -->
         <details class="fold">
           <summary data-i18n="pan.graph">Graphe du fichier</summary>
           <div id="tree" class="tree">—</div>
         </details>
         </div>
+
         </div>
 
       </aside>

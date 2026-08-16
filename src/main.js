@@ -2657,7 +2657,8 @@ $("shot-save").addEventListener("click", async () => {
  * so every live call asking for the tree was silently redirected to Objet and
  * the Scène tab did nothing at all when clicked.
  */
-const migratePane = (name) => ({ render: "view", scene: "object" })[name] || name;
+const migratePane = (name) =>
+  ({ render: "view", scene: "object", camera: "photo" })[name] || name;
 
 /** Work only done while its own pane is on screen. */
 const PANE_WAKE = {
@@ -2783,11 +2784,39 @@ function paintTree() {
 
 // --- camera ---------------------------------------------------------------
 
+/**
+ * The same lens in millimetres.
+ *
+ * Degrees are what the renderer wants and what nobody thinks in. A 24×36 frame
+ * is 24mm tall, so the focal length is half of that over the tangent of half the
+ * vertical field — one number said two ways, derived rather than stored, so
+ * there is no second control to fall out of step with the first.
+ */
+function paintFocal(deg) {
+  const mm = 12 / Math.tan((deg * Math.PI) / 360);
+  $("focal-value").textContent = `${Math.round(mm)} mm`;
+}
+
 $("opt-fov").addEventListener("input", (e) => {
   const deg = Number(e.target.value);
   viewer.setFov(deg);
   $("fov-value").textContent = `${deg}°`;
+  paintFocal(deg);
   prefs.set("fov", deg);
+});
+
+// Framing and levelling: two things the camera does to itself, next to the lens
+// that decides what they frame and level.
+$("cam-frame").addEventListener("click", () => {
+  if (!viewer.current) return;
+  viewer.frameCurrent();
+  toast("Recadré");
+});
+$("cam-reset-roll").addEventListener("click", () => {
+  viewer.camera.up.set(0, 1, 0);
+  viewer.controls?.update?.();
+  viewer.invalidate();
+  toast("Horizon redressé");
 });
 
 function setProjection(kind, remember = true) {
@@ -3283,6 +3312,7 @@ function applyPrefs() {
   setClipping(p.clipAxis, false);
   $("opt-fov").value = String(p.fov);
   $("fov-value").textContent = `${p.fov}°`;
+  paintFocal(p.fov);
   viewer.setFov(p.fov);
   if (p.projection !== "perspective") setProjection(p.projection, false);
   // Never read before: the checkbox stayed at the markup's unchecked default
