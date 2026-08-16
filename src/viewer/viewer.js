@@ -1569,6 +1569,15 @@ export class Viewer {
     this.boxHelper.box.copy(box);
     // The rig is placed against the model, so a new file is lit the same way
     this.replaceLights();
+    /*
+     * A fresh model has nothing chosen, lights included.
+     *
+     * `selectedLight` survives from the default rig, so opening a file drew the
+     * key light's marker over it — a handle for something nobody had asked to
+     * touch. The rule everywhere else is that a marker appears when its light is
+     * chosen; this is the one place that was quietly exempt.
+     */
+    this.showLightHelper(null);
     this.frame(box);
     this.scaleGrid(box);
 
@@ -2127,13 +2136,25 @@ export class Viewer {
    * one stayed" from being possible at all.
    */
   syncMarkers() {
+    /*
+     * Nothing loaded, nothing to arrange, nothing drawn.
+     *
+     * A marker is a handle for placing a light *around a subject*. The default
+     * rig exists from startup and its light counts as the selected one, so on an
+     * empty viewer a white disc sat over the "drop a model here" panel — a
+     * handle for a job nobody can start yet, and the first thing anybody sees of
+     * this application.
+     */
+    const subject = !!this.current;
     for (const entry of this.lights) {
       if (!entry.marker) continue;
       entry.marker.visible =
-        entry.enabled !== false && (this.alwaysShowLights || this.selectedLight === entry.id);
+        subject &&
+        entry.enabled !== false &&
+        (this.alwaysShowLights || this.selectedLight === entry.id);
     }
     if (this.fogMarker) {
-      this.fogMarker.visible = !!this.fogSelected && !!this.fogOn;
+      this.fogMarker.visible = subject && !!this.fogSelected && !!this.fogOn;
     }
     this.invalidate();
   }
