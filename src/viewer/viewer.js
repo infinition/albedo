@@ -2438,6 +2438,38 @@ export class Viewer {
     return primary;
   }
 
+  /**
+   * Hide everything that is a tool rather than a thing, for one render.
+   *
+   * A picture is of the model. The light markers, the focus rings, the transform
+   * handles and the bake cage are all real objects in the scene — that is how
+   * they get drawn at all — and every one of them was excluded from `photo` by a
+   * line of its own, which is a list that only stays complete until somebody
+   * adds the next overlay. The transform gizmo is the one that had never been
+   * added: framing a shot with the handles up put them in the saved file.
+   *
+   * @returns {() => void} put everything back exactly as it was
+   */
+  hideHelpers() {
+    const parked = [];
+    const hide = (o) => {
+      if (!o || !o.visible) return;
+      parked.push(o);
+      o.visible = false;
+    };
+    hide(this.markers);
+    hide(this._focus);
+    hide(this.gizmoHelper);
+    hide(this.pivotMarker);
+    // Anything a mode hung in the scene and flagged, the bake cage above all.
+    this.scene.traverse((o) => {
+      if (o.userData?.helper) hide(o);
+    });
+    return () => {
+      for (const o of parked) o.visible = true;
+    };
+  }
+
   /** Take a light's stand-in out of the scene and free what it holds. */
   dropMarker(entry) {
     if (!entry?.marker) return;
@@ -2645,16 +2677,15 @@ export class Viewer {
     const gridVisible = this.grid.visible;
     const boundsVisible = this.boxHelper.visible;
     const standVisible = this.stand.visible;
-    const markersVisible = this.markers.visible;
     if (transparent) this.scene.background = null;
     this.grid.visible = false;
     this.boxHelper.visible = false;
     // A thumbnail is about the file, not about the room it is shown in
     this.stand.visible = false;
-    // The light markers least of all. They are drawn with depth testing off, so
-    // one sitting between the camera and the model would print a bright disc
-    // over the very thing the icon is of, in every Explorer folder.
-    this.markers.visible = false;
+    // Least of all the markers: drawn with depth testing off, one sitting
+    // between the camera and the model would print a bright disc over the very
+    // thing the icon is of, in every Explorer folder.
+    const showHelpers = this.hideHelpers();
 
     // Rendered at twice the asked size, then cropped to what was actually
     // drawn. Fitting the camera on the bounding box instead would leave a long
@@ -2683,7 +2714,7 @@ export class Viewer {
     this.grid.visible = gridVisible;
     this.boxHelper.visible = boundsVisible;
     this.stand.visible = standVisible;
-    this.markers.visible = markersVisible;
+    showHelpers();
     this.resize();
 
     const full = document.createElement("canvas");
@@ -2763,7 +2794,6 @@ export class Viewer {
       grid: this.grid.visible,
       stand: this.stand.visible,
       bounds: this.boxHelper.visible,
-      markers: this.markers.visible,
       selection: this.selected,
       aspect: this.camera.isPerspectiveCamera ? this.camera.aspect : null,
     };
@@ -2772,12 +2802,7 @@ export class Viewer {
     this.grid.visible = grid && before.grid;
     this.stand.visible = stand && before.stand;
     this.boxHelper.visible = false;
-    // A light marker is a handle, not scenery: it belongs on screen while the
-    // rig is being set and never in the picture the rig was set for. Same for
-    // the focus rings, which say where the effect is aimed and are not part of
-    // the picture the effect produces.
-    this.markers.visible = false;
-    if (this._focus) this._focus.visible = false;
+    const showHelpers = this.hideHelpers();
     this.post?.outline([]);
 
     this.renderer.setSize(w, h, false);
@@ -2798,7 +2823,7 @@ export class Viewer {
     this.grid.visible = before.grid;
     this.stand.visible = before.stand;
     this.boxHelper.visible = before.bounds;
-    this.markers.visible = before.markers;
+    showHelpers();
     if (before.selection?.length) this.post?.outline(before.selection);
     if (before.aspect !== null) {
       this.camera.aspect = before.aspect;

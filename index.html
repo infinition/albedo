@@ -1165,6 +1165,38 @@
           <p class="hint mono" id="shell-state">—</p>
         </details>
 
+        <!--
+          Appearance sits with the devices: both are settings of the
+          application rather than facts about the file, and both are set once and
+          left alone. Folded for the same reason.
+        -->
+        <details class="fold">
+          <summary data-i18n="pan.look">Apparence</summary>
+          <p class="hint" data-i18n="pan.accentHint">La couleur qui dit « celui-ci ». Le blanc n'ajoute aucune teinte, ce qui est le bon choix pour juger des couleurs.</p>
+          <div class="chips" id="accent-chips">
+            <label class="chip" style="--tint:#4fd1e0">
+              <input type="radio" name="accent" value="cyan" checked />
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/></svg>
+              <span data-i18n="pan.accentCyan">Cyan</span>
+            </label>
+            <label class="chip" style="--tint:#ff9d4d">
+              <input type="radio" name="accent" value="orange" />
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/></svg>
+              <span data-i18n="pan.accentOrange">Orange</span>
+            </label>
+            <label class="chip" style="--tint:#6fd08c">
+              <input type="radio" name="accent" value="green" />
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/></svg>
+              <span data-i18n="pan.accentGreen">Vert</span>
+            </label>
+            <label class="chip" style="--tint:#e8e8e8">
+              <input type="radio" name="accent" value="white" />
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/></svg>
+              <span data-i18n="pan.accentWhite">Blanc</span>
+            </label>
+          </div>
+        </details>
+
         <details class="fold">
           <summary data-i18n="pan.devices">Périphériques</summary>
           <div class="row">

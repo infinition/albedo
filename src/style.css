@@ -4,14 +4,28 @@
  * so the render surface is always the whole window.
  */
 
+/*
+ * A neutral grey, and one colour that means "this one".
+ *
+ * The greys carried a blue cast — #101216 against #16191e — which is a choice
+ * about *taste* made by the tool, on a surface whose whole job is to show
+ * somebody else's colours. A cool grey next to a warm model tints the judgement
+ * of it. These are neutral: the same value on all three channels, so nothing on
+ * screen is being nudged.
+ *
+ * The accent is a single variable, and everything that highlights reads it —
+ * which is what makes swapping it a swap rather than a repaint. Four are
+ * offered, on `[data-accent]` on the root element; cyan is the default because
+ * it is the one that stays legible against both a bright render and a dark one.
+ */
 :root {
-  --bg: #101216;
-  --panel: rgba(22, 25, 30, 0.82);
-  --panel-solid: #16191e;
-  --line: rgba(255, 255, 255, 0.09);
-  --fg: #e8ebf0;
-  --muted: #8a93a2;
-  --accent: #4c8dff;
+  --bg: #131313;
+  --panel: rgba(28, 28, 28, 0.86);
+  --panel-solid: #1c1c1c;
+  --line: rgba(255, 255, 255, 0.10);
+  --fg: #ececec;
+  --muted: #8e8e8e;
+  --accent: #4fd1e0;
   --radius: 9px;
   --gap: 14px;
   /*
@@ -35,6 +49,19 @@
   --panel-reserve: 324px;
   color-scheme: dark;
 }
+
+/*
+ * The four accents.
+ *
+ * On the root element rather than on `body`, so the value is in scope for
+ * everything including the elements a mode builds later and hangs elsewhere.
+ * Each is picked to hold up against a lit render rather than against this
+ * stylesheet: white is the one for anybody judging colour, since it adds none.
+ */
+:root[data-accent="cyan"] { --accent: #4fd1e0; }
+:root[data-accent="orange"] { --accent: #ff9d4d; }
+:root[data-accent="green"] { --accent: #6fd08c; }
+:root[data-accent="white"] { --accent: #e8e8e8; }
 
 /*
  * A narrower panel in a narrow window, asked of the window and not of the stage.
@@ -1303,6 +1330,9 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
 }
 .chip:has(input:checked) svg { opacity: 1; color: var(--tint, var(--accent)); }
 .chip:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A radio group of colours: the swatch is filled rather than outlined, so the
+   colour is the thing being chosen rather than a label about it. */
+#accent-chips .chip svg { opacity: 1; color: var(--tint); }
 /* `display: inline-flex` beats the `hidden` attribute, and two of these chips
    are hidden by code — the wireframe colour when there are no lines, and
    "éclaire" on the studio probe, which always does. */

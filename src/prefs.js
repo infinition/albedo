@@ -41,6 +41,13 @@ export const DEFAULTS = {
    * merely to be looked at.
    */
   lightsAlwaysVisible: false,
+  /**
+   * The one colour the interface uses to say "this one".
+   *
+   * Cyan by default: it stays legible against a bright render and a dark one,
+   * which the blue it replaced did not on a dark model.
+   */
+  accent: "cyan",
   /** Flat faces rather than smooth ones, for reading the topology. */
   flat: false,
   exposure: 1,

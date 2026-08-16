@@ -2284,6 +2284,28 @@ $("opt-lights-visible").addEventListener("change", (e) => {
   viewer.setAlwaysShowLights(e.target.checked);
   prefs.set("lightsAlwaysVisible", e.target.checked);
 });
+
+/**
+ * The accent, which is a preference of the application and not of a scene.
+ *
+ * Written to the root element rather than to `body`, so it is in scope for
+ * everything — including the markup a lazily-loaded mode builds and parks in a
+ * detached div. One attribute, one custom property, and every highlight in the
+ * stylesheet already reads it.
+ */
+const ACCENTS = new Set(["cyan", "orange", "green", "white"]);
+
+function setAccent(name, remember = true) {
+  const accent = ACCENTS.has(name) ? name : "cyan";
+  document.documentElement.dataset.accent = accent;
+  const box = document.querySelector(`#accent-chips input[value="${accent}"]`);
+  if (box) box.checked = true;
+  if (remember) prefs.set("accent", accent);
+}
+
+for (const box of document.querySelectorAll("#accent-chips input")) {
+  box.addEventListener("change", () => setAccent(box.value));
+}
 $("opt-exposure").addEventListener("input", (e) => {
   viewer.setExposure(Number(e.target.value));
   prefs.set("exposure", Number(e.target.value));
@@ -3325,6 +3347,7 @@ function applyPrefs() {
   wire?.setColour(!p.wireDark);
   $("opt-lights-visible").checked = p.lightsAlwaysVisible;
   viewer.setAlwaysShowLights(p.lightsAlwaysVisible);
+  setAccent(p.accent, false);
   if (p.pedestal) usePedestal(p.pedestal, false);
   if (p.lights) viewer.applyLights(p.lights);
   // Setting `value` fires no input event, so the readouts would still be

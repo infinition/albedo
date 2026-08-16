@@ -282,5 +282,11 @@
   "tl.stepBack": "Step back",
   "tl.stepOn": "Step on",
   "tl.loop": "Loop",
-  "tl.speed": "Speed"
+  "tl.speed": "Speed",
+  "pan.look": "Appearance",
+  "pan.accentHint": "The colour that says \"this one\". White adds no tint, which is the right choice for judging colour.",
+  "pan.accentCyan": "Cyan",
+  "pan.accentOrange": "Orange",
+  "pan.accentGreen": "Green",
+  "pan.accentWhite": "White"
 }

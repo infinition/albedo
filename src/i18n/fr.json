@@ -282,5 +282,11 @@
   "tl.stepBack": "Image précédente",
   "tl.stepOn": "Image suivante",
   "tl.loop": "Boucler",
-  "tl.speed": "Vitesse"
+  "tl.speed": "Vitesse",
+  "pan.look": "Apparence",
+  "pan.accentHint": "La couleur qui dit « celui-ci ». Le blanc n'ajoute aucune teinte, ce qui est le bon choix pour juger des couleurs.",
+  "pan.accentCyan": "Cyan",
+  "pan.accentOrange": "Orange",
+  "pan.accentGreen": "Vert",
+  "pan.accentWhite": "Blanc"
 }
