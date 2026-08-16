@@ -4319,10 +4319,31 @@ window.addEventListener("keyup", (e) => {
     if (moved > 4 || nav.mode !== "orbit") return;
 
     const box = stage.getBoundingClientRect();
-    const hit = viewer.pick(
-      ((e.clientX - box.left) / box.width) * 2 - 1,
-      -((e.clientY - box.top) / box.height) * 2 + 1
-    );
+    const nx = ((e.clientX - box.left) / box.width) * 2 - 1;
+    const ny = -((e.clientY - box.top) / box.height) * 2 + 1;
+
+    /*
+     * Lights are asked about first, and win outright.
+     *
+     * A light is an object you point at, like anything else in the outliner, and
+     * the only reason it was not one before is that it draws nothing for a ray
+     * to hit. Its marker does. Asked before the model because a key light
+     * usually sits between the camera and the subject: whoever loses the tie is
+     * the one you can never click, and a marker exists to be clicked.
+     *
+     * Choosing it is all that happens here. The panel follows the selection, the
+     * helper is drawn by that, and the handles come up with it — one path from a
+     * click in the list and from a click in the viewport, because they are the
+     * same act on the same thing.
+     */
+    const light = viewer.pickLight(nx, ny);
+    if (light) {
+      selection.choose(decorId("light", light.id), "light", e.ctrlKey || e.metaKey);
+      setLightGizmoMode("translate");
+      return;
+    }
+
+    const hit = viewer.pick(nx, ny);
     if (!hit) {
       // A handle is not part of the model, so a click on one lands here as a
       // click on nothing and would put away the very thing being aimed at.

@@ -139,6 +139,22 @@ export class Viewer {
     // Lights rig: contains all scene lights, starting with the primary "light"
     this.rig = new THREE.Group();
     this.scene.add(this.rig);
+    /*
+     * Something to click on, since a light is not a thing you can hit.
+     *
+     * A light has no geometry: a ray through the middle of one passes clean
+     * through and reports the wall behind it. Every 3D application solves this
+     * the same way, with a stand-in the size of an icon that stands where the
+     * light stands and answers for it, and this is ours.
+     *
+     * A group of its own rather than a child of each light, for two reasons that
+     * both matter. Picking asks one question of one branch instead of walking
+     * the rig and filtering. And a render that must not show them — a photo, a
+     * snapshot, an Explorer thumbnail — hides one object.
+     */
+    this.markers = new THREE.Group();
+    this.markers.name = "albedo:markers";
+    this.scene.add(this.markers);
     this.lights = [];
     this.lightHelper = null;
     this.selectedLight = null;
@@ -449,6 +465,42 @@ export class Viewer {
         ancestor = ancestor.parent;
       }
       if (shown) return hit;
+    }
+    return null;
+  }
+
+  /**
+   * Which light's marker is under the pointer, or null.
+   *
+   * Asked before `pick`, and answered from a branch of its own: a light sits in
+   * front of the model as often as behind it, and a marker that loses to the
+   * surface it is lighting is a marker you can only click when the model is out
+   * of the way.
+   *
+   * @returns {{id: number, object: any} | null}
+   */
+  pickLight(x, y) {
+    if (!this.markers.children.length) return null;
+    /*
+     * The world matrices are brought up to date first, and this is not belt and
+     * braces.
+     *
+     * Rendering here happens on demand: moving a light marks the view dirty and
+     * a frame is composed later, and it is that frame which flushes the matrix
+     * updates. A click arriving before it — dragging the elevation slider and
+     * immediately clicking the marker, which is exactly how one places a light —
+     * raycasts against where the marker was at the *last* frame while the
+     * picture already shows it somewhere else. The pick misses by however far it
+     * moved, and does so silently.
+     */
+    this.markers.updateMatrixWorld(true);
+    this._ray ||= new THREE.Raycaster();
+    this._ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
+    for (const hit of this._ray.intersectObjects(this.markers.children, false)) {
+      if (!hit.object.visible) continue;
+      const id = hit.object.userData.lightId;
+      const entry = this.lights.find((l) => l.id === id);
+      if (entry) return { id, object: entry.object };
     }
     return null;
   }
@@ -1034,6 +1086,10 @@ export class Viewer {
           lightEntry.azimuth = Math.round(THREE.MathUtils.radToDeg(spherical.theta));
           lightEntry.elevation = Math.round(90 - THREE.MathUtils.radToDeg(spherical.phi));
           lightEntry.distance = Math.max(0.5, Math.min(8, Number((spherical.radius / radius).toFixed(2))));
+          // The marker travels with the handle rather than waiting for the next
+          // `placeLight`: it is the picture of where the light is, and one that
+          // lags a drag is one you stop trusting.
+          lightEntry.marker?.position.copy(this.gizmo.object.position);
           if (this.lightHelper) this.lightHelper.update?.();
           this.onLightChange?.(lightEntry);
         }
@@ -1556,6 +1612,7 @@ export class Viewer {
       enabled: patch.enabled !== false,
     };
     entry.object = this.makeLight(entry);
+    entry.marker = this.makeLightMarker(entry);
     this.rig.add(entry.object);
     if (entry.object.target) this.rig.add(entry.object.target);
     this.lights.push(entry);
@@ -1565,6 +1622,67 @@ export class Viewer {
     }
     this.invalidate();
     return entry;
+  }
+
+  /**
+   * The disc every light marker is drawn with, made once.
+   *
+   * Drawn to a canvas rather than shipped as a file: it is a soft dot, it is
+   * thirty lines of arithmetic, and an asset would be one more thing the
+   * thumbnail process has to find on disk.
+   */
+  markerTexture() {
+    if (this._markerMap) return this._markerMap;
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 64;
+    const g = cv.getContext("2d");
+    const glow = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+    glow.addColorStop(0, "rgba(255,255,255,1)");
+    glow.addColorStop(0.35, "rgba(255,255,255,0.85)");
+    glow.addColorStop(0.62, "rgba(255,255,255,0.22)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, 64, 64);
+    // A ring, so the marker still reads on a bright backdrop where the glow
+    // alone washes out.
+    g.strokeStyle = "rgba(0,0,0,0.55)";
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(32, 32, 13, 0, Math.PI * 2);
+    g.stroke();
+    this._markerMap = new THREE.CanvasTexture(cv);
+    this._markerMap.colorSpace = THREE.SRGBColorSpace;
+    return this._markerMap;
+  }
+
+  /**
+   * A clickable stand-in for one light.
+   *
+   * `sizeAttenuation` stays on, which is not the obvious choice — an icon that
+   * keeps one size on screen reads better. It is the correct one because this
+   * sprite has to be *hit*, and three's sprite raycast measures the object in
+   * world space: with attenuation off the shader draws one size and the ray
+   * tests another, so the clickable area drifts away from the picture of it at
+   * every distance but one. Scaled against the model instead, in `placeLight`.
+   */
+  makeLightMarker(entry) {
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: this.markerTexture(),
+        color: new THREE.Color(entry.colour || "#ffffff"),
+        transparent: true,
+        // Drawn over the model rather than inside it. A key light usually sits
+        // behind the subject, and a marker you can only click from one side is
+        // a marker you cannot find.
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    sprite.renderOrder = 998;
+    sprite.name = `albedo:light:${entry.id}`;
+    sprite.userData.lightId = entry.id;
+    this.markers.add(sprite);
+    return sprite;
   }
 
   makeLight(entry) {
@@ -1601,6 +1719,16 @@ export class Viewer {
       // Reach past the model, otherwise the far side falls off to nothing
       entry.object.distance = reach * 4;
       entry.object.decay = 2;
+    }
+    // The marker stands where the light stands, and is sized against the model
+    // rather than in world units: the same rig around a chess piece and around a
+    // cathedral has to stay clickable in both.
+    if (entry.marker) {
+      entry.marker.position.copy(entry.object.position);
+      const s = Math.max(radius * 0.09, 1e-4);
+      entry.marker.scale.set(s, s, 1);
+      entry.marker.material.color.set(entry.colour || "#ffffff");
+      entry.marker.visible = entry.enabled !== false;
     }
     this.invalidate();
   }
@@ -1669,6 +1797,7 @@ export class Viewer {
       this.rig.remove(entry.object);
       if (entry.object.target) this.rig.remove(entry.object.target);
       entry.object.dispose?.();
+      this.dropMarker(entry);
     }
     this.lights = [];
     this._lightSeq = 0;
@@ -1687,6 +1816,16 @@ export class Viewer {
     return primary;
   }
 
+  /** Take a light's stand-in out of the scene and free what it holds. */
+  dropMarker(entry) {
+    if (!entry?.marker) return;
+    this.markers.remove(entry.marker);
+    // The shared disc is not disposed: it belongs to the viewer, not to this
+    // light, and the next one to be added would come back blank.
+    entry.marker.material.dispose();
+    entry.marker = null;
+  }
+
   removeLight(id) {
     const index = this.lights.findIndex((l) => l.id === id);
     if (index < 0) return;
@@ -1694,6 +1833,7 @@ export class Viewer {
     this.rig.remove(entry.object);
     if (entry.object.target) this.rig.remove(entry.object.target);
     entry.object.dispose?.();
+    this.dropMarker(entry);
     if (this.selectedLight === id) {
       this.selectedLight = this.lights[0]?.id ?? null;
       this.showLightHelper(this.selectedLight);
@@ -1745,6 +1885,7 @@ export class Viewer {
       this.rig.remove(entry.object);
       if (entry.object.target) this.rig.remove(entry.object.target);
       entry.object.dispose?.();
+      this.dropMarker(entry);
     }
     this.lights = [];
     this._lightSeq = 0;
@@ -1863,11 +2004,16 @@ export class Viewer {
     const gridVisible = this.grid.visible;
     const boundsVisible = this.boxHelper.visible;
     const standVisible = this.stand.visible;
+    const markersVisible = this.markers.visible;
     if (transparent) this.scene.background = null;
     this.grid.visible = false;
     this.boxHelper.visible = false;
     // A thumbnail is about the file, not about the room it is shown in
     this.stand.visible = false;
+    // The light markers least of all. They are drawn with depth testing off, so
+    // one sitting between the camera and the model would print a bright disc
+    // over the very thing the icon is of, in every Explorer folder.
+    this.markers.visible = false;
 
     // Rendered at twice the asked size, then cropped to what was actually
     // drawn. Fitting the camera on the bounding box instead would leave a long
@@ -1896,6 +2042,7 @@ export class Viewer {
     this.grid.visible = gridVisible;
     this.boxHelper.visible = boundsVisible;
     this.stand.visible = standVisible;
+    this.markers.visible = markersVisible;
     this.resize();
 
     const full = document.createElement("canvas");
@@ -1975,6 +2122,7 @@ export class Viewer {
       grid: this.grid.visible,
       stand: this.stand.visible,
       bounds: this.boxHelper.visible,
+      markers: this.markers.visible,
       selection: this.selected,
       aspect: this.camera.isPerspectiveCamera ? this.camera.aspect : null,
     };
@@ -1983,6 +2131,9 @@ export class Viewer {
     this.grid.visible = grid && before.grid;
     this.stand.visible = stand && before.stand;
     this.boxHelper.visible = false;
+    // A light marker is a handle, not scenery: it belongs on screen while the
+    // rig is being set and never in the picture the rig was set for.
+    this.markers.visible = false;
     this.post?.outline([]);
 
     this.renderer.setSize(w, h, false);
@@ -2003,6 +2154,7 @@ export class Viewer {
     this.grid.visible = before.grid;
     this.stand.visible = before.stand;
     this.boxHelper.visible = before.bounds;
+    this.markers.visible = before.markers;
     if (before.selection?.length) this.post?.outline(before.selection);
     if (before.aspect !== null) {
       this.camera.aspect = before.aspect;
