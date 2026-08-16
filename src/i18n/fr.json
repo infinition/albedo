@@ -224,7 +224,7 @@
   "pane.editRotateTitle": "Tourner (R)",
   "pane.editScale": "Échelle",
   "pane.editScaleTitle": "Redimensionner (S)",
-  "pane.editHint": "G déplacer, R tourner, S échelle, Échap sortir. Maj pendant le glisser règle par crans. Clique une surface pour n'agir que sur elle.",
+  "pane.editHint": "Maj pendant le glisser : par crans. Clique une surface pour n'agir que sur elle.",
   "pane.editTarget": "Cible : le modèle entier",
   "pane.pos": "Position",
   "pane.rot": "Rotation °",
@@ -256,5 +256,6 @@
   "pane.fogHeight": "Hauteur",
   "pane.fogFalloff": "Dégradé vertical",
   "pane.colour": "Couleur",
-  "pane.recentre": "Recentrer"
+  "pane.recentre": "Recentrer",
+  "pan.graph": "Graphe du fichier"
 }

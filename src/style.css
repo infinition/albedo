@@ -947,6 +947,51 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
 #panes section + section { margin-top: 14px; }
 
 /*
+ * A section that stays shut until it is wanted.
+ *
+ * The Objet pane was eleven hundred pixels of one column: the transform, the
+ * pivot, the orientation, the Explorer registration, the gamepad tuning and a
+ * text dump of the scene graph, all open, all the time. Four of those six are
+ * touched once a month and three of them are settings rather than work — but
+ * they were between the person and the two things that pane is opened for.
+ *
+ * Same face as a heading, so a folded section reads as a section and not as a
+ * widget: the label, then a rule to the edge, then the caret at the end of it.
+ */
+.fold { margin-top: 14px; }
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary:hover { color: var(--fg); }
+.fold > summary::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line), transparent);
+}
+/* The caret is the last thing on the line, past the rule, where a disclosure
+   control is looked for. */
+.fold > summary::before {
+  content: "▸";
+  order: 3;
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+.fold[open] > summary::before { transform: rotate(90deg); }
+
+/*
  * Nothing in a pane is allowed to be wider than the pane.
  *
  * A range input carries a default margin and its own box, so `width: 100%` came

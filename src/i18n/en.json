@@ -224,7 +224,7 @@
   "pane.editRotateTitle": "Rotate (R)",
   "pane.editScale": "Scale",
   "pane.editScaleTitle": "Scale (S)",
-  "pane.editHint": "G move, R rotate, S scale, Esc exits. Shift while dragging snaps. Click a surface to act on it alone.",
+  "pane.editHint": "Shift while dragging snaps. Click a surface to act on it alone.",
   "pane.editTarget": "Target: the whole model",
   "pane.pos": "Position",
   "pane.rot": "Rotation °",
@@ -256,5 +256,6 @@
   "pane.fogHeight": "Height",
   "pane.fogFalloff": "Vertical falloff",
   "pane.colour": "Colour",
-  "pane.recentre": "Recentre"
+  "pane.recentre": "Recentre",
+  "pan.graph": "File graph"
 }

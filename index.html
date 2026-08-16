@@ -898,8 +898,9 @@
             <button id="edit-rotate" class="seg" type="button" data-i18n-title="pane.editRotateTitle" data-i18n="pane.editRotate" title="Tourner (R)">Tourner</button>
             <button id="edit-scale" class="seg" type="button" data-i18n-title="pane.editScaleTitle" data-i18n="pane.editScale" title="Redimensionner (S)">Échelle</button>
           </div>
-          <p class="hint" data-i18n="pane.editHint">G déplacer, R tourner, S échelle, Échap sortir. Maj pendant le
-            glisser règle par crans. Clique une surface pour n'agir que sur elle.</p>
+          <!-- The keys are on the buttons' own tooltips; a paragraph repeating
+               them sat above the controls it described, every session, for ever. -->
+          <p class="hint" data-i18n="pane.editHint">Maj pendant le glisser : par crans. Clique une surface pour n'agir que sur elle.</p>
           <p class="hint" id="edit-target" data-i18n="pane.editTarget">Cible : le modèle entier</p>
           <div class="xform">
             <label><span data-i18n="pane.pos">Position</span>
@@ -924,8 +925,8 @@
           </div>
         </section>
 
-        <section id="shell-section" hidden>
-          <h2 data-i18n="pan.shell">Intégration Windows</h2>
+        <details id="shell-section" class="fold" hidden>
+          <summary data-i18n="pan.shell">Intégration Windows</summary>
           <p class="hint" data-i18n="pan.shellHint">Les vignettes des fichiers 3D dans l'explorateur, rendues par cette copie d'Albedo. Rien n'est écrit tant que tu ne le demandes pas.</p>
           <div class="row">
             <button id="shell-on" class="seg" type="button" data-i18n="pan.shellOn">Activer</button>
@@ -935,11 +936,17 @@
             <button id="shell-shortcut" class="seg" type="button" data-i18n-title="pan.shortcutTitle" data-i18n="pan.shortcut">Raccourci bureau</button>
           </div>
           <p class="hint mono" id="shell-state">—</p>
-        </section>
+        </details>
 
         <section>
           <h2 data-i18n="pan.pivot">Centre de rotation</h2>
-          <label class="check"><input type="checkbox" id="pivot-show" /><span data-i18n="pan.pivotShow">Montrer le centre</span></label>
+          <div class="chips">
+            <label class="chip" style="--tint:#b08cff">
+              <input type="checkbox" id="pivot-show" />
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+              <span data-i18n="pan.pivotShow">Montrer le centre</span>
+            </label>
+          </div>
           <div class="row">
             <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées" data-i18n="pan.pivotMove">Déplacer</button>
             <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets" data-i18n="pan.pivotCentre">Centre géométrique</button>
@@ -952,17 +959,17 @@
           <p class="hint" id="save-note"></p>
         </section>
 
-        <section>
-          <h2 data-i18n="pan.orient">Orientation</h2>
+        <details class="fold">
+          <summary data-i18n="pan.orient">Orientation</summary>
           <p class="hint" id="orient-value">Aucune rotation</p>
           <div class="grid axes" id="orient-buttons"></div>
           <div class="row">
             <button id="orient-reset" class="seg" type="button" title="Revenir a l'orientation du fichier" data-i18n="pan.orientReset">Reinitialiser</button>
           </div>
-        </section>
+        </details>
 
-        <section>
-          <h2 data-i18n="pan.devices">Périphériques</h2>
+        <details class="fold">
+          <summary data-i18n="pan.devices">Périphériques</summary>
           <div class="row">
             <button id="btn-spacemouse" class="wide" type="button" data-i18n="pan.spacemouse">Connecter une SpaceMouse</button>
           </div>
@@ -982,7 +989,7 @@
             <div id="sm-invert"></div>
             <label class="check"><input type="checkbox" id="sm-lockroll" /><span data-i18n="pane.smLockRoll">Bloquer le roulis</span></label>
           </details>
-        </section>
+        </details>
 
         <section>
           <h2 data-i18n="pan.scene">Scène</h2>
@@ -996,8 +1003,22 @@
             <button id="btn-snapshot" class="seg" type="button" disabled data-i18n="pan.snapshot">Image</button>
           </div>
           <p id="export-note" class="hint"></p>
-          <div id="tree" class="tree">—</div>
         </section>
+
+        <!--
+          The raw graph, folded, and it is not the outliner said twice.
+
+          The outliner lists what you can act on: meshes, their materials, their
+          maps. This is what the *file* actually contains — the bones, the
+          empties, the nesting an exporter left behind — which is the thing you
+          need when a model will not skin or an object sits where nothing put it.
+          Two hundred lines of it, open, sat under the export buttons of every
+          session that never needed it.
+        -->
+        <details class="fold">
+          <summary data-i18n="pan.graph">Graphe du fichier</summary>
+          <div id="tree" class="tree">—</div>
+        </details>
         </div>
         </div>
 
