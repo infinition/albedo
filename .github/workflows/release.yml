@@ -49,6 +49,39 @@ jobs:
       # l'etape ci-dessus, qui compile par l'outil Tauri au lieu de cargo seul.
       # L'essai reel se fait sur un poste de travail, ou il y a un ecran.
 
+      # The one thing that can go wrong quietly.
+      #
+      # `build.rs` turns the provider DLL into an `include_bytes!` when it finds
+      # it, and emits `PROVIDER = None` when it does not — deliberately, so the
+      # application still compiles on a tree where the provider has never been
+      # built. In CI that same kindness means a failed or skipped
+      # `build:thumbnails` produces a green release, an executable with no
+      # provider in it, and release notes promising one. Nothing fails, nothing
+      # is logged, and the first person to notice is a user whose Explorer shows
+      # generic icons.
+      #
+      # So the property is checked rather than the file: a DLL on disk proves
+      # nothing if cargo had already compiled without it. Sixty-four bytes from
+      # the middle of the DLL are looked for inside the executable, which is the
+      # actual claim the release notes make.
+      - name: Verify the provider is embedded
+        shell: powershell
+        run: |
+          $dll = "shell-thumbnails\target\release\albedo_thumbnails.dll"
+          $exe = "src-tauri\target\release\albedo.exe"
+          if (-not (Test-Path $dll)) { throw "provider DLL absente : build:thumbnails n'a rien produit" }
+          if (-not (Test-Path $exe)) { throw "albedo.exe absent" }
+          $bytes = [System.IO.File]::ReadAllBytes($dll)
+          # Latin-1 maps every byte to one character, so a byte search becomes a
+          # string search without any value being reinterpreted on the way.
+          $enc = [System.Text.Encoding]::GetEncoding(28591)
+          $probe = $enc.GetString($bytes, [int]($bytes.Length / 2), 64)
+          $hay = $enc.GetString([System.IO.File]::ReadAllBytes($exe))
+          if ($hay.IndexOf($probe) -lt 0) {
+            throw "albedo.exe ne contient pas la DLL : elle a ete construite apres la compilation, ou pas du tout"
+          }
+          Write-Host "provider embarque : $($bytes.Length) octets"
+
       - name: Prepare Release Executable & Zip
         shell: powershell
         run: |
