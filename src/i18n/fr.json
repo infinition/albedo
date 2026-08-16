@@ -249,5 +249,12 @@
   "dof.focusAt": "Mise au point",
   "dof.sharpOver": "· net sur",
   "pane.lightsAlways": "Toujours montrer les lumières",
-  "pane.sceneTitle": "Scène"
+  "pane.sceneTitle": "Scène",
+  "pane.fog": "Brouillard",
+  "pane.density": "Densité",
+  "pane.extent": "Étendue",
+  "pane.fogHeight": "Hauteur",
+  "pane.fogFalloff": "Dégradé vertical",
+  "pane.colour": "Couleur",
+  "pane.recentre": "Recentrer"
 }

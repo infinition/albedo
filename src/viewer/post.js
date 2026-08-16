@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { FogShader, makeDepthTarget } from "./fog.js";
 
 /**
  * Post-processing, in the order the picture is actually built.
@@ -27,6 +28,21 @@ export const DEFAULTS = {
   // just lifted. Above white is where a highlight actually is.
   bloom: { on: false, strength: 0.6, radius: 0.5, threshold: 1.1 },
   dof: { on: false, focus: 0.5, aperture: 0.02, maxblur: 0.012 },
+  /*
+   * A bank of fog with a place in the scene.
+   *
+   * `radius`, `height` and `falloff` are multiples of the subject's own size
+   * rather than world units, like every other placement in this viewer: a fog
+   * tuned around a figurine has to still be fog around a building.
+   */
+  fog: {
+    on: false,
+    colour: "#aebdd0",
+    density: 0.6,
+    radius: 1.6,
+    height: 0.15,
+    falloff: 1.4,
+  },
   grade: {
     on: false,
     contrast: 1,
@@ -245,6 +261,12 @@ export class PostFx {
     this.ao = new P.GTAOPass(viewer.scene, viewer.camera, width, height);
     this.bloom = new P.UnrealBloomPass(size, DEFAULTS.bloom.strength, DEFAULTS.bloom.radius, DEFAULTS.bloom.threshold);
     this.dof = new P.BokehPass(viewer.scene, viewer.camera, { ...DEFAULTS.dof });
+    // Between occlusion and bloom, on purpose. After occlusion, or the creases
+    // it darkens would be darkened through the fog standing in front of them;
+    // before bloom, so a lit bank of mist blooms like anything else bright.
+    this.fog = new P.ShaderPass(FogShader);
+    this.fogDepth = makeDepthTarget(width, height);
+    this.fogOverride = new THREE.MeshBasicMaterial();
     this.output = new P.OutputPass();
     this.grade = new P.ShaderPass(GradeShader);
     // Drawn on the finished picture rather than in the light: an outline is a
@@ -263,10 +285,11 @@ export class PostFx {
 
     this.grade.uniforms.resolution.value.set(width, height);
 
-    for (const pass of [this.render0, this.ao, this.bloom, this.dof, this.output, this.grade, this.outlinePass, this.aa]) {
+    for (const pass of [this.render0, this.ao, this.fog, this.bloom, this.dof, this.output, this.grade, this.outlinePass, this.aa]) {
       this.composer.addPass(pass);
     }
     this.ao.enabled = false;
+    this.fog.enabled = false;
     this.bloom.enabled = false;
     this.dof.enabled = false;
     this.grade.enabled = false;
@@ -285,7 +308,10 @@ export class PostFx {
    */
   get active() {
     const s = this.settings;
-    return s.ao.on || s.bloom.on || s.dof.on || s.grade.on || this.outlinePass.selectedObjects.length > 0;
+    return (
+      s.ao.on || s.bloom.on || s.dof.on || s.fog.on || s.grade.on ||
+      this.outlinePass.selectedObjects.length > 0
+    );
   }
 
   /**
@@ -308,6 +334,9 @@ export class PostFx {
     this.bloom.setSize(width, height);
     this.aa.setSize(width, height);
     this.outlinePass.setSize(width, height);
+    // The depth buffer the fog reads is the same shape as the picture, or the
+    // surfaces it finds are in the wrong places.
+    this.fogDepth.setSize(width, height);
     this.grade.uniforms.resolution.value.set(width, height);
   }
 
@@ -343,6 +372,11 @@ export class PostFx {
     } else if (group === "dof") {
       this.dof.enabled = bag.on;
       this.tuneDof();
+    } else if (group === "fog") {
+      this.fog.enabled = bag.on;
+      this.fog.uniforms.fogColour.value.set(bag.colour);
+      this.fog.uniforms.density.value = bag.density;
+      this.tuneFog();
     } else if (group === "grade") {
       this.grade.enabled = bag.on;
       for (const name of ["contrast", "saturation", "temperature", "vignette", "grain", "grainSize", "aberration", "sharpen"]) {
@@ -449,10 +483,84 @@ export class PostFx {
     });
   }
 
+  /**
+   * Put the fog where the scene says it should be.
+   *
+   * The volume is described in multiples of the subject's radius, and turned
+   * into world units here, against the model that is actually loaded. That is
+   * what lets one setting mean the same thing on a figurine and on a building —
+   * and it is why the anchor the user drags stores an *offset* from the centre
+   * rather than an absolute point.
+   */
+  tuneFog() {
+    const bag = this.settings.fog;
+    const u = this.fog.uniforms;
+    const viewer = this.viewer;
+    const box = viewer.boxHelper.box;
+    const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    const size = box.isEmpty() ? new THREE.Vector3(1, 1, 1) : box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.length() / 2, 1e-3);
+
+    // The anchor is a real object in the scene, so the transform handles can
+    // move it like anything else; where it ended up is where the fog is.
+    const anchor = viewer.fogAnchor;
+    if (anchor) u.centre.value.copy(anchor.position);
+    else u.centre.value.copy(centre);
+
+    u.radius.value = radius * bag.radius;
+    u.height.value = (box.isEmpty() ? 0 : box.min.y) + radius * bag.height;
+    u.falloff.value = bag.falloff / radius;
+    u.density.value = bag.density;
+    u.fogColour.value.set(bag.colour);
+
+    const camera = viewer.camera;
+    u.cameraNear.value = camera.near;
+    u.cameraFar.value = camera.far;
+    u.cameraPos.value.copy(camera.position);
+    u.cameraWorld.value.copy(camera.matrixWorld);
+    u.inverseProjection.value.copy(camera.projectionMatrixInverse);
+    // The march stops where the fog can no longer be: past the far side of the
+    // volume there is nothing left to accumulate, and spending steps out there
+    // is spending them where the answer is already zero.
+    const toCentre = camera.position.distanceTo(u.centre.value);
+    u.reach.value = Math.min(camera.far, toCentre + u.radius.value * 1.2);
+    u.tDepth.value = this.fogDepth.depthTexture;
+  }
+
+  /**
+   * The depth-only pass the fog reads.
+   *
+   * Rendered here rather than attached to one of the composer's buffers: those
+   * alternate between two targets and are multisampled, so a depth texture on
+   * one of them is the frame just drawn about half the time and the frame before
+   * it the rest. One flat draw of the scene with no shading is cheaper than the
+   * class of bug that produces.
+   */
+  drawFogDepth() {
+    const { renderer, scene, camera } = this.viewer;
+    const previousTarget = renderer.getRenderTarget();
+    const previousOverride = scene.overrideMaterial;
+    const previousBackground = scene.background;
+    scene.overrideMaterial = this.fogOverride;
+    // A background is drawn without depth, so leaving it in writes nothing and
+    // costs a full screen of shading for a buffer that only wants geometry.
+    scene.background = null;
+    renderer.setRenderTarget(this.fogDepth);
+    renderer.clear(true, true, false);
+    renderer.render(scene, camera);
+    scene.overrideMaterial = previousOverride;
+    scene.background = previousBackground;
+    renderer.setRenderTarget(previousTarget);
+  }
+
   render(dt = 0) {
     if (this.grade.enabled) this.grade.uniforms.time.value += dt;
     // The camera moves; a focus fixed when the slider last moved would drift
     if (this.dof.enabled) this.tuneDof();
+    if (this.fog.enabled) {
+      this.drawFogDepth();
+      this.tuneFog();
+    }
     this.composer.render(dt);
   }
 

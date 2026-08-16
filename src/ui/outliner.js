@@ -71,7 +71,9 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
    * Kept across repaints, because a list that snaps shut every time you click an
    * eye is a list you stop using.
    */
-  const opened = new Set(["group:bg", "group:light", "group:stand", "group:model"]);
+  const opened = new Set([
+    "group:bg", "group:light", "group:fog", "group:stand", "group:model",
+  ]);
   /** Whether this model has ever been drawn, so the first paint can open it. */
   let seen = false;
   /** The row being renamed, so a repaint does not tear the input out. */
@@ -357,6 +359,51 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
   }
 
   // ---------------------------------------------------------------------------
+  // Atmosphère
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The fog, listed like the object it is.
+   *
+   * It has a position, a colour and an extent, it can be switched off, and it
+   * can be dragged. Everything on that list is true of a light, and a thing that
+   * behaves like an object belongs in the list of objects rather than only in a
+   * card of sliders somewhere else. The card stays: it is where the *look* is
+   * set. This row is where it *is*.
+   */
+  function fogRows() {
+    const state = actions.fogState?.();
+    if (!state) return [];
+    const id = decorId("fog", "main");
+    const row = document.createElement("div");
+    row.className =
+      "tree-row tree-child" + (selection.has(id) ? " picked" : "") + (state.on ? "" : " muted");
+    row.appendChild(caret(id, false));
+
+    const chip = document.createElement("span");
+    chip.className = "tree-bulb";
+    chip.style.background = state.colour || "#aebdd0";
+    chip.textContent = "≈";
+    chip.title = "Brouillard volumétrique";
+    row.appendChild(chip);
+
+    row.appendChild(nameCell("Brouillard", null));
+    const num = document.createElement("span");
+    num.className = "tree-num";
+    num.textContent = state.on ? state.density.toFixed(1) : "";
+    row.appendChild(num);
+
+    row.addEventListener("click", (e) => selection.choose(id, "fog", e.ctrlKey || e.metaKey));
+    row.appendChild(
+      eye(state.on, state.on ? "Éteindre le brouillard" : "Allumer le brouillard", () => {
+        actions.setFog?.(!state.on);
+        paint();
+      })
+    );
+    return [row];
+  }
+
+  // ---------------------------------------------------------------------------
   // Socles
   // ---------------------------------------------------------------------------
 
@@ -609,6 +656,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         rows: lightRows(),
         add: { title: "Ajouter une lumière", act: () => actions.addLight?.() },
       },
+      { key: "fog", label: "Atmosphère", rows: fogRows() },
       {
         key: "stand",
         label: "Socles",

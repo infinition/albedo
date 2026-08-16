@@ -249,5 +249,12 @@
   "dof.focusAt": "Focus at",
   "dof.sharpOver": "· sharp over",
   "pane.lightsAlways": "Always show lights",
-  "pane.sceneTitle": "Scene"
+  "pane.sceneTitle": "Scene",
+  "pane.fog": "Fog",
+  "pane.density": "Density",
+  "pane.extent": "Extent",
+  "pane.fogHeight": "Height",
+  "pane.fogFalloff": "Vertical falloff",
+  "pane.colour": "Colour",
+  "pane.recentre": "Recentre"
 }

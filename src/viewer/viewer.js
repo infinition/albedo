@@ -509,6 +509,8 @@ export class Viewer {
     this._ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
     for (const hit of this._ray.intersectObjects(this.markers.children, false)) {
       if (!hit.object.visible) continue;
+      // The fog's own marker lives in the same group and answers for the fog.
+      if (hit.object.userData.fog) return { fog: true, object: this.fogAnchor };
       const id = hit.object.userData.lightId;
       const entry = this.lights.find((l) => l.id === id);
       if (entry) return { id, object: entry.object };
@@ -1119,6 +1121,11 @@ export class Viewer {
           if (this.lightHelper) this.lightHelper.update?.();
           this.onLightChange?.(lightEntry);
         }
+      }
+      // The fog's marker is the picture of where the fog is; dragging the anchor
+      // has to carry it, or the disc stays behind while the mist moves.
+      if (this.gizmo.object === this.fogAnchor && this.fogMarker) {
+        this.fogMarker.position.copy(this.fogAnchor.position);
       }
       this.onGizmoDrag?.("move", this.gizmo.object);
     });
@@ -1772,7 +1779,81 @@ export class Viewer {
       entry.marker.visible =
         entry.enabled !== false && (this.alwaysShowLights || this.selectedLight === entry.id);
     }
+    if (this.fogMarker) {
+      this.fogMarker.visible = !!this.fogSelected && !!this.fogOn;
+    }
     this.invalidate();
+  }
+
+  // ---------------------------------------------------------------------------
+  // The fog's anchor
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Something for the fog to be attached to.
+   *
+   * A volume of fog has a place, and a place in this application is an object:
+   * it goes in the list beside the lights and the stand, it takes the transform
+   * handles, and it is dragged like anything else. The pass reads this object's
+   * position every frame, so there is no second copy of "where the fog is" to
+   * fall out of step with the one being dragged.
+   */
+  fogHandle() {
+    if (this.fogAnchor) return this.fogAnchor;
+    this.fogAnchor = new THREE.Object3D();
+    this.fogAnchor.name = "Brouillard";
+    this.scene.add(this.fogAnchor);
+
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: this.markerTexture(),
+        color: new THREE.Color("#aebdd0"),
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    sprite.renderOrder = 998;
+    sprite.name = "albedo:fog";
+    sprite.userData.fog = true;
+    sprite.visible = false;
+    this.markers.add(sprite);
+    this.fogMarker = sprite;
+    this.placeFog();
+    return this.fogAnchor;
+  }
+
+  /** Put the fog back in the middle of whatever is loaded, at the model's scale. */
+  placeFog(reset = false) {
+    const anchor = this.fogAnchor;
+    if (!anchor) return;
+    const box = this.boxHelper?.box || new THREE.Box3();
+    const centre = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
+    const radius = box.isEmpty()
+      ? 1
+      : Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3);
+    // Only on a reset or before it has ever been placed: a fog somebody dragged
+    // into the corner of a scene must not jump back to the middle because the
+    // model was re-framed.
+    if (reset || !anchor.userData.placed) {
+      anchor.position.copy(centre);
+      anchor.userData.placed = true;
+    }
+    if (this.fogMarker) {
+      this.fogMarker.position.copy(anchor.position);
+      const s = Math.max(radius * 0.09, 1e-4);
+      this.fogMarker.scale.set(s, s, 1);
+    }
+    this.invalidate();
+  }
+
+  /** Which of the two things the fog panel needs the viewport to know. */
+  setFogState({ on, selected, colour } = {}) {
+    if (on !== undefined) this.fogOn = !!on;
+    if (selected !== undefined) this.fogSelected = !!selected;
+    if (colour && this.fogMarker) this.fogMarker.material.color.set(colour);
+    if (this.fogOn) this.fogHandle();
+    this.syncMarkers();
   }
 
   /** Show every light's marker, or only the one being edited. */

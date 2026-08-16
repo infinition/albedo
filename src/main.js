@@ -1498,7 +1498,20 @@ function followDecorSelection() {
   if (picked.kind === "light") selectDecorItem({ type: "light", id: Number(key) });
   else if (picked.kind === "stand") selectDecorItem({ type: "pedestal" });
   else if (picked.kind === "bg") selectDecorItem({ type: "background", kind: key });
-  else return;
+  else if (picked.kind === "fog") {
+    // The fog's look is set in the Effets card, so that is where choosing it
+    // goes — but its *place* is set here, with the same handles as everything
+    // else that has one.
+    viewer.showLightHelper(null);
+    viewer.setFogState({ selected: true });
+    viewer.setGizmo("translate", null, viewer.fogHandle());
+    showPane("effects");
+    return;
+  } else {
+    viewer.setFogState({ selected: false });
+    return;
+  }
+  viewer.setFogState({ selected: false });
   // The parameters of the thing just chosen, without a second click on a tab to
   // go and find them.
   showPane("decor");
@@ -2531,6 +2544,15 @@ function wakeTree() {
           },
           onLightsChanged: () => saveLights(),
           onLightRenamed: () => saveLights(),
+          fogState: () => ({
+            on: !!postState.fog?.on,
+            colour: postState.fog?.colour || "#aebdd0",
+            density: postState.fog?.density ?? 0,
+          }),
+          setFog: (on) => {
+            $("fog-on").checked = on;
+            $("fog-on").dispatchEvent(new Event("change", { bubbles: true }));
+          },
         },
       });
       $("outliner-all")?.addEventListener("click", () => outliner.reveal());
@@ -3357,6 +3379,9 @@ const POST_CONTROLS = [
   ["bloom", "radius", "bloom-radius"], ["bloom", "threshold", "bloom-threshold"],
   ["dof", "on", "dof-on"], ["dof", "focus", "dof-focus"],
   ["dof", "aperture", "dof-aperture"], ["dof", "maxblur", "dof-maxblur"],
+  ["fog", "on", "fog-on"], ["fog", "density", "fog-density"],
+  ["fog", "radius", "fog-radius"], ["fog", "height", "fog-height"],
+  ["fog", "falloff", "fog-falloff"], ["fog", "colour", "fog-colour"],
   ["grade", "on", "grade-on"], ["grade", "contrast", "grade-contrast"],
   ["grade", "saturation", "grade-saturation"], ["grade", "temperature", "grade-temperature"],
   ["grade", "vignette", "grade-vignette"], ["grade", "grain", "grade-grain"],
@@ -3373,13 +3398,17 @@ const POST_CONTROLS = [
  * application, so opening a second model beside the first must not inherit its
  * bloom.
  */
+/** What one control currently says, in the type its setting is stored as. */
+const readControl = (el) =>
+  el.type === "checkbox" ? el.checked : el.type === "color" ? el.value : Number(el.value);
+
 const POST_DEFAULTS = (() => {
   const bag = {};
   for (const [group, key, id] of POST_CONTROLS) {
     const el = $(id);
     if (!el) continue;
     bag[group] ??= {};
-    bag[group][key] = el.type === "checkbox" ? el.checked : Number(el.value);
+    bag[group][key] = readControl(el);
   }
   return bag;
 })();
@@ -3412,6 +3441,7 @@ async function applyPost(bag) {
   }
   for (const box of document.querySelectorAll(".fx-switch")) paintFxCard(box);
   refreshSliderValues();
+  viewer.setFogState({ on: !!postState.fog?.on, colour: postState.fog?.colour });
 
   // A stack that is entirely off, on a session that never built the chain, is
   // nothing to do: bringing a composer in to switch everything off is the one
@@ -3429,10 +3459,23 @@ for (const [group, key, id] of POST_CONTROLS) {
   if (!el) continue;
   const isCheck = el.type === "checkbox";
   el.addEventListener(isCheck ? "change" : "input", () => {
-    setPost(group, key, isCheck ? el.checked : Number(el.value));
+    setPost(group, key, readControl(el));
     if (isCheck) paintFxCard(el);
+    // The fog is the one effect with a body in the scene: switching it on has
+    // to bring its handle out, and recolouring it has to recolour that handle.
+    if (group === "fog") {
+      viewer.setFogState({
+        on: $("fog-on").checked,
+        colour: $("fog-colour").value,
+      });
+    }
   });
 }
+
+$("fog-recentre")?.addEventListener("click", () => {
+  viewer.placeFog(true);
+  toast("Brouillard recentré");
+});
 
 /*
  * Depth of field, shown while it is being set rather than after.
@@ -4546,6 +4589,10 @@ window.addEventListener("keyup", (e) => {
      * same act on the same thing.
      */
     const light = viewer.pickLight(nx, ny);
+    if (light?.fog) {
+      selection.choose(decorId("fog", "main"), "fog", e.ctrlKey || e.metaKey);
+      return;
+    }
     if (light) {
       selection.choose(decorId("light", light.id), "light", e.ctrlKey || e.metaKey);
       setLightGizmoMode("translate");

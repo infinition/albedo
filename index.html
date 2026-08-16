@@ -734,6 +734,36 @@
           </div>
         </div>
 
+        <!--
+          Fog has a place in the scene, so it also has a row in the outliner and
+          a handle in the viewport. The card is where its look is set; where it
+          *is* is set by dragging it, like anything else with a position.
+        -->
+        <div class="fx" data-fx="fog" style="--fx:#aebdd0">
+          <div class="fx-head">
+            <span class="fx-icon">
+              <svg viewBox="0 0 24 24"><path d="M3 9h13M6.5 13h14M3 17h11"/><path d="M18 9h2M2 13h1.5M17 17h4"/></svg>
+            </span>
+            <span class="fx-name" data-i18n="pane.fog">Brouillard</span>
+            <input type="checkbox" id="fog-on" class="fx-switch" data-i18n-aria="pane.fog" aria-label="Brouillard" />
+          </div>
+          <div class="fx-body">
+            <label class="fx-row"><span data-i18n="pane.density">Densité</span>
+              <input type="range" id="fog-density" min="0" max="3" step="0.02" value="0.6" /></label>
+            <label class="fx-row"><span data-i18n="pane.extent">Étendue</span>
+              <input type="range" id="fog-radius" min="0.2" max="6" step="0.05" value="1.6" /></label>
+            <label class="fx-row"><span data-i18n="pane.fogHeight">Hauteur</span>
+              <input type="range" id="fog-height" min="-1" max="3" step="0.02" value="0.15" /></label>
+            <label class="fx-row"><span data-i18n="pane.fogFalloff">Dégradé vertical</span>
+              <input type="range" id="fog-falloff" min="0.1" max="6" step="0.05" value="1.4" /></label>
+            <div class="fx-row fx-row-plain">
+              <span data-i18n="pane.colour">Couleur</span>
+              <input type="color" id="fog-colour" class="swatch" value="#aebdd0" />
+              <button id="fog-recentre" class="tree-mini" type="button" data-i18n="pane.recentre">Recentrer</button>
+            </div>
+          </div>
+        </div>
+
         <div class="fx" data-fx="grade" style="--fx:#8ce08c">
           <div class="fx-head">
             <span class="fx-icon">
