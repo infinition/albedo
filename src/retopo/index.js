@@ -271,6 +271,29 @@ const BAR_HUD = `
  * untouched model opens on Méthode, which is where you would start anyway.
  */
 const PANEL = `
+<!--
+  The panel keeps what needs room; the bar's menu keeps what needs the model.
+
+  Every setting existed twice — once here and once in the drop-down over the
+  viewport — mirrored by hand in both directions. Two surfaces for one state is
+  two chances to drift, and the panel's copy was the one you could not see the
+  model through while using it.
+
+  So the menu is where the settings are. The sections below still exist because
+  they *are* the state: every read in this module goes through those inputs and
+  the menu writes into them. They are not drawn. Turning that around — making the
+  menu's own inputs the model — is a rename of forty identifiers with nothing to
+  show for it, and this way the two cannot disagree at all.
+
+  What is left on screen is what a panel is for: a report too wide for a
+  drop-down, and the deviation ramp that is read while looking at the picture.
+-->
+<section data-el="settingsNote">
+  <h2 data-i18n="rt.settingsTitle">Réglages</h2>
+  <p class="rt-hint" data-i18n="rt.settingsMoved">Les réglages sont dans le menu de la barre, au-dessus du modèle : on les change en le regardant.</p>
+  <button class="seg" type="button" data-el="openMenu" data-i18n="rt.openSettings">Ouvrir les réglages</button>
+</section>
+
 <section data-el="resultSection" hidden>
   <h2 data-i18n="rt.reportTitle">Bilan</h2>
   <p class="rt-hint rt-err" data-el="err" hidden></p>
@@ -290,6 +313,7 @@ const PANEL = `
   </div>
 </section>
 
+<div data-el="settings" class="rt-mirror">
 <section>
   <h2 data-i18n="rt.method">Méthode</h2>
   <div class="segment" role="group" data-i18n-aria="rt.method" aria-label="Méthode">
@@ -441,6 +465,7 @@ const PANEL = `
   </div>
   <p class="rt-hint" data-el="sourceNote"></p>
 </section>
+</div>
 `;
 
 /** Triangles actually drawn, which is not the same as vertices. */
@@ -2328,6 +2353,11 @@ export function createRetopo({
     else run();
   });
   el.rebake.addEventListener("click", rebake);
+  // The panel points at the menu rather than holding a second copy of it.
+  el.openMenu?.addEventListener("click", () => {
+    showMenu(true);
+    el.menu.scrollIntoView?.({ block: "nearest" });
+  });
   el.close.addEventListener("click", () => api.hide());
   setMethod("decimate");
   paintScope();

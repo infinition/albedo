@@ -141,5 +141,8 @@
   "rt.menuTitle": "Réglages de décimation et de projection",
   "rt.menuRemesh": "Géométrie",
   "rt.menuBake": "Textures",
-  "rt.nothingToRun": "Aucun maillage à traiter : tout est masqué."
+  "rt.nothingToRun": "Aucun maillage à traiter : tout est masqué.",
+  "rt.settingsTitle": "Réglages",
+  "rt.settingsMoved": "Les réglages sont dans le menu de la barre, au-dessus du modèle : on les change en le regardant.",
+  "rt.openSettings": "Ouvrir les réglages"
 }

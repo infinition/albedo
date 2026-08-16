@@ -463,3 +463,14 @@ body.inspector #retopo .rt-bar {
   text-transform: uppercase;
   color: var(--dim, #8b929c);
 }
+
+/*
+ * The panel's settings are the state, not the surface.
+ *
+ * Every control below exists so that one set of inputs holds the truth and the
+ * bar's menu writes into it. Drawing them as well would be the same state on two
+ * surfaces, which is what this whole change removes. Hidden rather than deleted
+ * because deleting them means renaming forty identifiers to point at the menu's
+ * own inputs, for a result nobody can see.
+ */
+.rt-mirror { display: none; }
