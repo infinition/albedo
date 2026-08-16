@@ -114,7 +114,7 @@ const SHELL = `
       <div class="rt-menu-row">
         <button class="seg" type="button" data-mscope="all" data-i18n="rt.scopeAll">Tout</button>
         <button class="seg" type="button" data-mscope="visible" data-i18n="rt.scopeVisible">Visible</button>
-        <button class="seg" type="button" data-mscope="picked" data-i18n="rt.scopePicked">Sélection</button>
+        <button class="seg active" type="button" data-mscope="picked" data-i18n="rt.scopePicked">Sélection</button>
       </div>
       <label class="rt-check"><input type="checkbox" data-el="mQuads" /><span data-i18n="rt.pairQuads">Apparier en quads</span></label>
       <label class="rt-check"><input type="checkbox" data-el="mHoles" /><span data-i18n="rt.fillHoles">Combler les trous</span></label>
@@ -303,9 +303,9 @@ const PANEL = `
 
   <p class="rt-sub" data-i18n="rt.scope">Portée</p>
   <div class="segment" role="group" data-i18n-aria="rt.scope" aria-label="Portée">
-    <button class="seg active" type="button" data-scope="all" data-i18n-title="rt.scopeAllTitle" data-i18n="rt.scopeAll" title="Tout le modèle">Tout</button>
+    <button class="seg" type="button" data-scope="all" data-i18n-title="rt.scopeAllTitle" data-i18n="rt.scopeAll" title="Tout le modèle">Tout</button>
     <button class="seg" type="button" data-scope="visible" data-i18n-title="rt.scopeVisibleTitle" data-i18n="rt.scopeVisible" title="Seulement ce qui n'est pas masqué dans l'onglet Scène">Visible</button>
-    <button class="seg" type="button" data-scope="picked" data-i18n-title="rt.scopePickedTitle" data-i18n="rt.scopePicked" title="Seulement ce qui est sélectionné dans l'onglet Scène">Sélection</button>
+    <button class="seg active" type="button" data-scope="picked" data-i18n-title="rt.scopePickedTitle" data-i18n="rt.scopePicked" title="Seulement ce qui est sélectionné dans l'onglet Scène">Sélection</button>
   </div>
   <p class="rt-hint" data-el="scopeHint"></p>
 
@@ -577,7 +577,17 @@ export function createRetopo({
   let open = false;
   let method = "decimate";
   /** `all` or `visible`: which materials the run is allowed to touch. */
-  let scope = "all";
+  /*
+   * "Sélection", and it is the right default rather than a cautious one.
+   *
+   * The position already means "what is chosen, and everything when nothing is",
+   * which is exactly the rule a multi-mesh scene wants: point at the two meshes
+   * that need work and only those are touched; point at nothing and the whole
+   * scene goes through, one mesh at a time. "Tout" was the default while a run
+   * meant one merged export, when the distinction cost nothing because there was
+   * only ever one result either way.
+   */
+  let scope = "picked";
   /** The two files the last run left behind, so a bake can be redone alone. */
   let lastRun = null;
 
@@ -1440,15 +1450,19 @@ export function createRetopo({
     cursor = next;
     if (cursor >= 0) {
       const entry = history[cursor];
-      await importPart(entry.path);
-      const back = viewer.parts.at(-1);
-      claimResult(back?.object);
-      if (back?.object && entry.identity) {
-        back.name = restoreIdentity(viewer.root, back.object, entry.identity);
+      // Every low poly of that step comes back, not just one: a step is a whole
+      // run now, and a run is as many results as it had source meshes.
+      for (const item of entry.items) {
+        await importPart(item.path);
+        const back = viewer.parts.at(-1);
+        claimResult(back?.object);
+        if (back?.object && item.identity) {
+          back.name = restoreIdentity(viewer.root, back.object, item.identity);
+        }
+        await dressResult(back?.object, item.path);
       }
-      await dressResult(viewer.parts.at(-1)?.object, entry.path);
       last = entry.report;
-      lastRun = { high: entry.high, low: entry.path };
+      lastRun = entry.items.map((i) => ({ high: i.high, low: i.path, identity: i.identity }));
       reportOn(entry.report);
     } else {
       last = null;
@@ -1632,74 +1646,15 @@ export function createRetopo({
    * which is what makes a NIF or a USD retopologisable at all.
    */
   /**
-   * Meshes every one of whose materials is hidden, so the export can leave them
-   * out.
+   * The export path no longer needs a scope filter of its own.
    *
-   * Hiding swaps a material for one that writes neither colour nor depth, which
-   * is right for looking but invisible to an exporter: the geometry is still
-   * there and still gets written. So the meshes are marked not-visible for the
-   * duration of the export and put back straight after.
-   *
-   * All or nothing per mesh. A mesh carrying four materials with one hidden
-   * cannot be half exported without splitting its geometry, and splitting
-   * geometry to honour a display toggle is a much bigger promise than this
-   * control makes.
+   * `withScope` used to hide whatever the scope excluded, once, around a single
+   * export of the whole scene. A run is per mesh now, so the question at export
+   * time is not "what does the scope leave out" but "which one mesh is this",
+   * and `withOnly` below answers that. It also subsumes the rule that kept this
+   * mode's own output out of its own input: a result is not the mesh being
+   * exported, so it is hidden along with everything else.
    */
-  async function withScope(fn) {
-    /*
-     * The mode's own output never goes back into the mode's own input.
-     *
-     * The export walks the whole scene, and a previous result is in that scene:
-     * decimating twice fed the engine the source *and* the low poly made from
-     * it, so the second run's "input triangles" counted a mesh the user never
-     * put there. Invisible to the glTF fast path, which reads the file on disk,
-     * and therefore invisible on exactly the formats that get tested most.
-     *
-     * Marked not-visible for the length of the export, like everything else the
-     * scope leaves out, and put straight back after.
-     */
-    const mine = [];
-    for (const part of results()) {
-      part.object.traverse((o) => {
-        if ((o.isMesh || o.isSkinnedMesh) && o.visible) {
-          mine.push(o);
-          o.visible = false;
-        }
-      });
-    }
-    const restore = () => {
-      for (const o of mine) o.visible = true;
-    };
-
-    if (scope === "all") {
-      try {
-        return await fn();
-      } finally {
-        restore();
-      }
-    }
-
-    const covered = new Set(sourceMeshes());
-    const touched = [];
-    if (scope !== "picked" || selection.size) {
-      viewer.root.traverse((o) => {
-        if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible) return;
-        if (!covered.has(o)) {
-          touched.push(o);
-          o.visible = false;
-        }
-      });
-    }
-    try {
-      // Awaited, not returned. `finally` around a returned promise runs before
-      // the promise settles, so the meshes would come back visible while the
-      // exporter was still walking the scene and the filter would do nothing.
-      return await fn();
-    } finally {
-      for (const o of touched) o.visible = true;
-      restore();
-    }
-  }
 
   /**
    * Exactly which meshes the current scope covers.
@@ -1774,17 +1729,54 @@ export function createRetopo({
     entry.name = nameResult(viewer.root, entry.object, sources, documentLabel());
   }
 
-  async function inputFor(dirs) {
+  /** `…/result-17.glb` and an index into `…/result-17.2.glb`. */
+  const numbered = (path, i) =>
+    i === 0 ? path : path.replace(/(\.[^.\\/]+)$/, `.${i + 1}$1`);
+
+  /**
+   * Hide everything except these meshes, run something, put it all back.
+   *
+   * `withScope` hid what the scope *excluded*. This hides everything the current
+   * step is not about, which is the same operation asked the other way round and
+   * is what a per-mesh run needs: nine meshes means nine exports, each of one
+   * mesh, and eight of them are hidden every time.
+   */
+  async function withOnly(keep, fn) {
+    const wanted = new Set(keep);
+    const touched = [];
+    viewer.root.traverse((o) => {
+      if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible || wanted.has(o)) return;
+      touched.push(o);
+      o.visible = false;
+    });
+    try {
+      // Awaited, not returned. `finally` around a returned promise runs before
+      // the promise settles, so the meshes would come back visible while the
+      // exporter was still walking the scene and the filter would do nothing.
+      return await fn();
+    } finally {
+      for (const o of touched) o.visible = true;
+    }
+  }
+
+  /**
+   * Write one mesh out as the engine's input.
+   *
+   * The fast path — handing over the file on disk untouched — survives only for
+   * a scene that is a single mesh in a glTF, because that is the only case where
+   * "the file" and "this mesh" are the same thing. It used to apply whenever the
+   * scope was "all", which was true while a run meant the whole scene at once
+   * and is false now that a run means one mesh at a time.
+   */
+  async function inputForMesh(dirs, mesh, index, total) {
     const p = sourcePath?.();
-    // The fast path hands the engine the file on disk, which by definition
-    // carries the whole model: a restricted run has to go through the exporter.
-    if (isGltf(p) && scope === "all") return p;
+    if (total === 1 && isGltf(p) && scope === "all" && countMeshes() === 1) return p;
 
     say(t("rt.exporting"), 0);
     // The group, not the object inside it: the orientation buttons and the edit
     // handles both write to the group.
     const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-    const glb = await withScope(() =>
+    const glb = await withOnly([mesh], () =>
       new GLTFExporter().parseAsync(viewer.root, {
         binary: true,
         includeCustomExtensions: true,
@@ -1794,8 +1786,67 @@ export function createRetopo({
       })
     );
     const { writeFile } = await import("@tauri-apps/plugin-fs");
-    await writeFile(dirs.input, new Uint8Array(glb));
-    return dirs.input;
+    const path = numbered(dirs.input, index);
+    await writeFile(path, new Uint8Array(glb));
+    return path;
+  }
+
+  /** How many meshes the scene holds, this mode's own output aside. */
+  function countMeshes() {
+    const mine = new Set();
+    for (const part of results()) part.object.traverse((o) => mine.add(o));
+    let n = 0;
+    viewer.root.traverse((o) => {
+      if ((o.isMesh || o.isSkinnedMesh) && !mine.has(o)) n++;
+    });
+    return n;
+  }
+
+  /** The engine's settings, which are the same for every mesh in a run. */
+  function request(target) {
+    return {
+      method,
+      targetTriangles: target,
+      fillHoles: el.holes.checked,
+      preserveBoundary: el.boundary.checked,
+      sharpAngleDeg: Number(el.angle.value),
+      seamPenalty: Number(el.seam.value),
+      relaxIterations: Number(el.relax.value),
+      relaxAngleDeg: Number(el.relaxAngle.value),
+      maxError: Number(el.maxError.value) / 1000,
+      relaxStrength: Number(el.relaxStrength.value),
+      pairQuads: el.quads.checked,
+      ...bakeRequest(),
+      bake: el.bake.checked,
+    };
+  }
+
+  /**
+   * The budget, per mesh.
+   *
+   * The slider is a percentage, and a percentage is the one form of budget that
+   * survives being applied mesh by mesh: each keeps the same share of its own
+   * detail, so a bolt and a hull both come out at forty percent rather than the
+   * hull eating a whole scene-wide allowance and the bolt vanishing.
+   */
+  const budgetFor = (mesh) =>
+    Math.max(4, Math.round((countTriangles(mesh) * Number(el.target.value)) / 100));
+
+  /** Add up N per-mesh reports into the one the panel shows. */
+  function totalReport(reports) {
+    if (reports.length === 1) return reports[0];
+    const sum = (k) => reports.reduce((a, r) => a + (r?.[k] || 0), 0);
+    const worst = (k) => reports.reduce((a, r) => Math.max(a, r?.[k] || 0), 0);
+    return {
+      ...reports[reports.length - 1],
+      inputTriangles: sum("inputTriangles"),
+      outputTriangles: sum("outputTriangles"),
+      millis: sum("millis"),
+      // A deviation is a distance, and distances do not add up: the number that
+      // means anything across N meshes is the worst one.
+      maxDeviation: worst("maxDeviation"),
+      meshes: reports.length,
+    };
   }
 
   async function run() {
@@ -1820,70 +1871,118 @@ export function createRetopo({
       // that window would describe the scene the exporter saw rather than the
       // one the run is about.
       const sources = sourceMeshes();
-      const input = await inputFor(dirs);
+      if (!sources.length) throw new Error(t("rt.nothingToRun"));
 
       const verb = t(method === "isotropic" ? "rt.rebuilding" : "rt.decimating");
-      say(`${verb}…`, 0);
+      /*
+       * One mesh at a time, and one low poly per mesh.
+       *
+       * A run used to export the whole scene into a single file, decimate that,
+       * and bring back one object. On a scene of one mesh those are the same
+       * thing; on a scene of nine they are not, and the difference is
+       * everything: the result was a single merged blob with no relationship to
+       * any of the nine, so it could not be named after its source, could not be
+       * replaced without replacing all of them, and could not be baked against
+       * the mesh it actually came from.
+       *
+       * The engine still sees one mesh per call, which is what it is good at.
+       * The loop is here.
+       */
+      const done = [];
+      const reports = [];
+      let cancelled = false;
+
+      // The bar belongs to the whole run rather than to whichever call is
+      // talking: nine meshes each sweeping 0 to 100 is nine bars, and a person
+      // watching cannot tell the second from the last.
       stop = await tauri.event.listen("retopo://progress", (e) => {
         const f = e.payload || 0;
+        const at = (done.length + f) / sources.length;
         // The engine apportions its own bar by what each stage costs, so the
         // wording follows the fraction rather than being timed here.
         const what = !el.bake.checked || f < 0.5 ? verb : t("rt.projecting");
-        say(`${what}…`, f);
+        const of = sources.length > 1 ? ` ${done.length + 1}/${sources.length}` : "";
+        say(`${what}${of}…`, at);
       });
 
-      const r = await tauri.core.invoke("retopo_decimate", {
-        input,
-        output: dirs.output,
-        request: {
-          method,
-          targetTriangles: budget(),
-          fillHoles: el.holes.checked,
-          preserveBoundary: el.boundary.checked,
-          sharpAngleDeg: Number(el.angle.value),
-          seamPenalty: Number(el.seam.value),
-          relaxIterations: Number(el.relax.value),
-          relaxAngleDeg: Number(el.relaxAngle.value),
-          maxError: Number(el.maxError.value) / 1000,
-          relaxStrength: Number(el.relaxStrength.value),
-          pairQuads: el.quads.checked,
-          ...bakeRequest(),
-          bake: el.bake.checked,
-        },
-      });
+      // Everything this run supersedes goes before anything is written, not
+      // between the meshes: dropping as we go would renumber `viewer.parts`
+      // under the imports that follow it.
+      dropResult(sources);
+
+      for (const [i, mesh] of sources.entries()) {
+        const name = mesh.name || `#${i + 1}`;
+        say(`${verb} ${name}…`, done.length / sources.length);
+
+        const input = await inputForMesh(dirs, mesh, i, sources.length);
+        const output = numbered(dirs.output, i);
+        let r;
+        try {
+          r = await tauri.core.invoke("retopo_decimate", {
+            input,
+            output,
+            request: request(budgetFor(mesh)),
+          });
+        } catch (e) {
+          /*
+           * Cancelling stops the run; it does not undo it.
+           *
+           * The cancel button reaches the engine, so the call in flight rejects
+           * with "annulé" — and with one mesh per call that rejection is about
+           * *this* mesh, not about the five already finished. Throwing on would
+           * carry them all into `fail` and lose work the person watching has
+           * already seen appear.
+           */
+          if (String(e?.message || e).trim() === "annulé") {
+            cancelled = true;
+            break;
+          }
+          throw e;
+        }
+
+        await importPart(output);
+        const part = viewer.parts.at(-1);
+        claimResult(part?.object);
+        if (part?.object) {
+          // One source, so the result is that mesh low poly and says so. This is
+          // what the whole loop is for.
+          part.name = nameResult(viewer.root, part.object, [mesh], documentLabel());
+        }
+        await dressResult(part?.object, output);
+        reports.push(r);
+        done.push({ path: output, high: input, identity: snapshotIdentity(part?.object) });
+      }
+
+      // Cancelled before the first mesh finished: nothing was made, and that is
+      // the person's own decision rather than a failure to report at them.
+      if (!done.length) {
+        say(cancelled ? t("rt.cancelled") : "");
+        return;
+      }
 
       say(t("rt.loadingResult"), 1);
-      // The previous result leaves before the new one arrives. Without this a
-      // second run stacked a second low poly on the first, so the scene held
-      // three meshes claiming to be two and every count above was a lie. Only
-      // the low polys of *these* meshes: on a multi-mesh scene the others are
-      // somebody else's work and this run has nothing to say about them.
-      dropResult(sources);
-      await importPart(dirs.output);
-      claimResult(viewer.parts.at(-1)?.object);
-      nameResultPart(sources);
+      const r = totalReport(reports);
       last = r;
-      // Both files stay named, so the bake can be redone on its own without
+      // Every pair stays named, so each bake can be redone on its own without
       // touching the geometry again.
-      lastRun = { high: input, low: dirs.output };
+      lastRun = done.map((d) => ({ high: d.high, low: d.path, identity: d.identity }));
       // Anything ahead of the cursor is a branch nobody took; a new run replaces
       // it rather than leaving a redo that would jump to an unrelated result.
       history = history.slice(0, cursor + 1);
-      // The identity travels with the entry. Walking back to this step has to
-      // bring the name and the link back with it, or an undo would quietly turn
-      // `Casque_LP` into an unnamed import that no longer follows its source.
-      history.push({
-        path: dirs.output,
-        high: input,
-        report: r,
-        identity: snapshotIdentity(viewer.parts.at(-1)?.object),
-      });
+      // The identities travel with the entry. Walking back to this step has to
+      // bring the names and the links back with it, or an undo would quietly
+      // turn `Casque_LP` into an unnamed import that no longer follows its
+      // source.
+      history.push({ items: done, report: r });
       cursor = history.length - 1;
-      await dressResult(viewer.parts.at(-1)?.object, dirs.output);
       reportOn(r);
 
       const cut = (100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(0);
-      toast?.(t("rt.ranTriangles").replace("{n}", fr(r.outputTriangles)).replace("{cut}", cut));
+      toast?.(
+        (cancelled ? "⏹ " : "") +
+          t("rt.ranTriangles").replace("{n}", fr(r.outputTriangles)).replace("{cut}", cut) +
+          (sources.length > 1 ? ` · ${done.length}/${sources.length}` : "")
+      );
       say("");
     } catch (e) {
       fail(e);
@@ -1920,42 +2019,71 @@ export function createRetopo({
       onBusy?.(true);
 
       const dirs = await tauri.core.invoke("retopo_workdir");
+      const pairs = lastRun;
+      const baked = [];
+      const reports = [];
       stop = await tauri.event.listen("retopo://progress", (e) => {
         const f = e.payload || 0;
-        say(`${t("rt.projecting")}…`, f);
+        say(`${t("rt.projecting")} ${baked.length + 1}/${pairs.length}…`, (baked.length + f) / pairs.length);
       });
 
-      const r = await tauri.core.invoke("retopo_bake", {
-        high: lastRun.high,
-        low: lastRun.low,
-        output: dirs.rebake,
-        request: bakeRequest(),
-      });
-
-      say(t("rt.loadingResult"), 1);
       /*
-       * A bake replaces the result; it does not add one.
+       * A bake replaces the results; it does not add any.
        *
        * Baking does not touch the geometry — that is the whole reason it exists
-       * as its own button — so a bake that left the previous mesh in the scene
-       * put two identical low polys on top of each other, differing only in
+       * as its own button — so a bake that left the previous meshes in the scene
+       * would put identical low polys on top of each other, differing only in
        * their textures. Same reason the history entry is *rewritten* rather than
        * pushed: undo walks geometry, and a bake is not a step in that walk. It
        * would otherwise take two undos to get back one decimation.
+       *
+       * The identities are taken before anything is dropped: a bake changes the
+       * pixels on meshes the person has possibly renamed, and coming back as
+       * fresh imports would rename them after their sources and drop their links
+       * on the way.
        */
-      // Taken before the drop: a bake changes the pixels on a mesh the user has
-      // possibly renamed, and coming back as a fresh import would rename it to
-      // whatever the source is called now and drop its link on the way.
-      const identity = snapshotIdentity(results().at(-1)?.object);
-      dropResult();
-      await importPart(dirs.rebake);
-      const baked = viewer.parts.at(-1);
-      claimResult(baked?.object);
-      if (baked?.object && identity) {
-        baked.name = restoreIdentity(viewer.root, baked.object, identity);
+      for (const [i, pair] of pairs.entries()) {
+        const output = numbered(dirs.rebake, i);
+        try {
+          reports.push(
+            await tauri.core.invoke("retopo_bake", {
+              high: pair.high,
+              low: pair.low,
+              output,
+              request: bakeRequest(),
+            })
+          );
+        } catch (e) {
+          if (String(e?.message || e).trim() === "annulé") break;
+          throw e;
+        }
+        baked.push({ high: pair.high, low: output, identity: pair.identity });
       }
-      lastRun = { high: lastRun.high, low: dirs.rebake };
-      if (cursor >= 0) history[cursor] = { ...history[cursor], path: dirs.rebake, identity };
+      if (!baked.length) {
+        say(t("rt.cancelled"));
+        return;
+      }
+
+      say(t("rt.loadingResult"), 1);
+      dropResult();
+      for (const item of baked) {
+        await importPart(item.low);
+        const part = viewer.parts.at(-1);
+        claimResult(part?.object);
+        if (part?.object && item.identity) {
+          part.name = restoreIdentity(viewer.root, part.object, item.identity);
+        }
+        await dressResult(part?.object, item.low);
+      }
+
+      const r = totalReport(reports);
+      lastRun = baked;
+      if (cursor >= 0) {
+        history[cursor] = {
+          ...history[cursor],
+          items: baked.map((b) => ({ path: b.low, high: b.high, identity: b.identity })),
+        };
+      }
       last = { ...last, ...r, outputTriangles: r.outputTriangles || last.outputTriangles };
       reportOn(r, true);
       toast?.(t("rt.rebaked").replace("{s}", (r.millis / 1000).toFixed(1)));

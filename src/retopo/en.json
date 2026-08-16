@@ -129,9 +129,9 @@
   "rt.loadingResult": "Loading the result…",
   "rt.ranTriangles": "{n} triangles, {cut} % fewer",
   "rt.rebaked": "Maps redone in {s} s",
-  "rt.scopeHintPicked": "{n} item selected in the Scene tab.",
+  "rt.scopeHintPicked": "{n} item selected: one low poly per mesh.",
   "rt.scopeHintPickedN": "{n} items selected in the Scene tab.",
-  "rt.scopeHintPickedNone": "Nothing selected in the Scene tab: the scope changes nothing.",
+  "rt.scopeHintPickedNone": "Nothing selected: the whole scene goes through, one mesh at a time.",
   "rt.scopeHintVisible": "{n} material hidden, left alone.",
   "rt.scopeHintVisibleN": "{n} materials hidden, left alone.",
   "rt.scopeHintVisibleNone": "No material hidden: the scope changes nothing.",
@@ -140,5 +140,6 @@
   "rt.resultOf": "Result {n} of {total}",
   "rt.menuTitle": "Decimation and projection settings",
   "rt.menuRemesh": "Remesh",
-  "rt.menuBake": "Bake"
+  "rt.menuBake": "Bake",
+  "rt.nothingToRun": "No mesh to work on: everything is hidden."
 }

@@ -129,9 +129,9 @@
   "rt.loadingResult": "Chargement du résultat…",
   "rt.ranTriangles": "{n} triangles, {cut} % de moins",
   "rt.rebaked": "Cartes refaites en {s} s",
-  "rt.scopeHintPicked": "{n} élément sélectionné dans l'onglet Scène.",
+  "rt.scopeHintPicked": "{n} élément sélectionné : un bas poly par maillage.",
   "rt.scopeHintPickedN": "{n} éléments sélectionnés dans l'onglet Scène.",
-  "rt.scopeHintPickedNone": "Rien de sélectionné dans l'onglet Scène : la portée ne change rien.",
+  "rt.scopeHintPickedNone": "Rien de sélectionné : toute la scène y passe, maillage par maillage.",
   "rt.scopeHintVisible": "{n} matière masquée, laissée tranquille.",
   "rt.scopeHintVisibleN": "{n} matières masquées, laissées tranquilles.",
   "rt.scopeHintVisibleNone": "Aucune matière masquée : la portée ne change rien.",
@@ -140,5 +140,6 @@
   "rt.resultOf": "Résultat {n} sur {total}",
   "rt.menuTitle": "Réglages de décimation et de projection",
   "rt.menuRemesh": "Remesh",
-  "rt.menuBake": "Bake"
+  "rt.menuBake": "Bake",
+  "rt.nothingToRun": "Aucun maillage à traiter : tout est masqué."
 }
