@@ -257,5 +257,6 @@
   "pane.fogFalloff": "Vertical falloff",
   "pane.colour": "Colour",
   "pane.recentre": "Recentre",
-  "pan.graph": "File graph"
+  "pan.graph": "File graph",
+  "pan.saveTitle": "Save"
 }

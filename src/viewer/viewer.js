@@ -225,11 +225,41 @@ export class Viewer {
    * depth. The orthographic frustum follows the same number so switching
    * projection keeps the model the same size on screen.
    */
+  /**
+   * Change the lens, and stay where the framing was.
+   *
+   * Narrowing the field of view without moving the camera shrinks the subject by
+   * the ratio of the two tangents: going from 45° to 10° leaves a model at an
+   * eighth of the size it was, which is why reaching a usable picture then meant
+   * dragging the zoom to eight hundred percent. Geometrically correct, and
+   * useless — nobody changes the lens in order to lose the subject.
+   *
+   * So the camera dollies to compensate, exactly as a photographer steps back
+   * when fitting a longer lens. The subject keeps its size on screen and the
+   * control does the one thing anybody wants from it: change how much
+   * perspective there is, flattening the model at 10° and exaggerating it at
+   * 100°, without touching the framing.
+   */
   setFov(degrees) {
+    const before = this.fov;
     this.fov = Math.min(120, Math.max(5, degrees));
     this.perspective.fov = this.fov;
     this.perspective.updateProjectionMatrix();
+
+    // Only on a real change, and only with somewhere to measure from: the first
+    // call arrives before any model, when there is no framing to preserve.
+    const target = this.controls?.target;
+    if (target && before && before !== this.fov && this.current) {
+      const half = (a) => Math.tan((a * Math.PI) / 360);
+      const scale = half(before) / half(this.fov);
+      const offset = this.perspective.position.clone().sub(target);
+      if (offset.lengthSq() > 1e-12) {
+        this.perspective.position.copy(target).addScaledVector(offset, scale);
+        this.perspective.updateMatrixWorld();
+      }
+    }
     if (this.camera.isOrthographicCamera) this.syncOrtho();
+    this.controls?.update?.();
     this.invalidate();
   }
 

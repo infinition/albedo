@@ -257,5 +257,6 @@
   "pane.fogFalloff": "Dégradé vertical",
   "pane.colour": "Couleur",
   "pane.recentre": "Recentrer",
-  "pan.graph": "Graphe du fichier"
+  "pan.graph": "Graphe du fichier",
+  "pan.saveTitle": "Enregistrer"
 }

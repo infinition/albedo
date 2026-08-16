@@ -355,10 +355,101 @@
         <div id="outliner-dock">
           <div class="outliner-bar">
             <span data-i18n="pane.sceneTitle">Scène</span>
-            <button id="outliner-all" class="tree-mini" type="button" title="Tout réafficher et ne rien laisser sélectionné">Tout</button>
-            <button id="outliner-isolate" class="tree-mini" type="button" title="Masquer tout ce qui n'est pas sélectionné">Isoler</button>
+            <button id="outliner-all" class="tree-mini" type="button" title="Tout réafficher et ne rien laisser sélectionné">
+              <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+              <span>Tout</span>
+            </button>
+            <button id="outliner-isolate" class="tree-mini" type="button" title="Masquer tout ce qui n'est pas sélectionné">
+              <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 14h6v6h-6z" opacity=".35"/><path d="M14 4h6v6h-6z"/></svg>
+              <span>Isoler</span>
+            </button>
           </div>
           <div id="scene-tree"></div>
+        </div>
+
+        <!--
+          The tools, under the list and above the tabs, where the thing they act
+          on is.
+
+          They were in the Objet tab: the handles, the coordinates, the pivot,
+          importing, copying and undoing. So moving something meant looking at
+          the list to pick it, going to a tab to grab a handle, dragging in the
+          viewport, and going back to a third place to read what the numbers had
+          become. The list is the thing you point at; the tools belong under your
+          hand when you do.
+
+          The bar is always here. The numbers appear only when something is
+          selected, because a row of empty fields is a row of questions with no
+          subject.
+        -->
+        <div id="scene-tools">
+          <div class="mini-bar" role="toolbar" aria-label="Outils de scène">
+            <button id="mini-move" class="mini" type="button" data-i18n-title="pane.editMoveTitle" title="Déplacer (G)">
+              <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
+            </button>
+            <button id="mini-rotate" class="mini" type="button" data-i18n-title="pane.editRotateTitle" title="Tourner (R)">
+              <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>
+            </button>
+            <button id="mini-scale" class="mini" type="button" data-i18n-title="pane.editScaleTitle" title="Échelle (S)">
+              <svg viewBox="0 0 24 24"><path d="M4 20h7v-7"/><path d="M20 4h-7v7"/><path d="M4 20L20 4"/></svg>
+            </button>
+            <span class="mini-sep"></span>
+
+            <div class="mini-menu">
+              <button id="mini-pivot" class="mini" type="button" aria-expanded="false" data-i18n-title="pan.pivot" title="Centre de rotation">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+              </button>
+              <div id="pivot-menu" class="mini-pop" hidden>
+                <p class="mini-pop-title" data-i18n="pan.pivot">Centre de rotation</p>
+                <label class="chip" style="--tint:#b08cff">
+                  <input type="checkbox" id="pivot-show" />
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+                  <span data-i18n="pan.pivotShow">Montrer le centre</span>
+                </label>
+                <div class="row">
+                  <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées" data-i18n="pan.pivotMove">Déplacer</button>
+                  <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets" data-i18n="pan.pivotCentre">Centre géométrique</button>
+                </div>
+                <div class="row">
+                  <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante" data-i18n="pan.pivotReset">Restaurer</button>
+                </div>
+              </div>
+            </div>
+            <span class="mini-sep"></span>
+
+            <button id="part-import" class="mini" type="button" data-i18n-title="pane.importTitle" title="Importer un objet">
+              <svg viewBox="0 0 24 24"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
+            </button>
+            <button id="part-copy" class="mini" type="button" data-i18n-title="pane.copyTitle" title="Copier (Ctrl+C)">
+              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+            </button>
+            <button id="part-paste" class="mini" type="button" data-i18n-title="pane.pasteTitle" title="Coller (Ctrl+V)">
+              <svg viewBox="0 0 24 24"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/></svg>
+            </button>
+            <span class="mini-sep"></span>
+
+            <button id="undo" class="mini" type="button" data-i18n-title="pane.undoTitle" title="Annuler (Ctrl+Z)" disabled>
+              <svg viewBox="0 0 24 24"><path d="M4 10h10a5 5 0 0 1 0 10h-3"/><path d="M8 6l-4 4 4 4"/></svg>
+            </button>
+            <button id="redo" class="mini" type="button" data-i18n-title="pane.redoTitle" title="Rétablir (Ctrl+Maj+Z)" disabled>
+              <svg viewBox="0 0 24 24"><path d="M20 10H10a5 5 0 0 0 0 10h3"/><path d="M16 6l4 4-4 4"/></svg>
+            </button>
+          </div>
+
+          <div id="xform-block" hidden>
+            <p class="hint" id="edit-target" data-i18n="pane.editTarget">Cible : le modèle entier</p>
+            <div class="xform">
+              <label><span data-i18n="pane.pos">Position</span>
+                <input type="number" id="tx" step="0.01" /><input type="number" id="ty" step="0.01" /><input type="number" id="tz" step="0.01" />
+              </label>
+              <label><span data-i18n="pane.rot">Rotation °</span>
+                <input type="number" id="rx" step="1" /><input type="number" id="ry" step="1" /><input type="number" id="rz" step="1" />
+              </label>
+              <label><span data-i18n="pane.scale">Échelle</span>
+                <input type="number" id="sx" step="0.01" /><input type="number" id="sy" step="0.01" /><input type="number" id="sz" step="0.01" />
+              </label>
+            </div>
+          </div>
         </div>
 
         <div id="panes">
@@ -901,28 +992,14 @@
           <!-- The keys are on the buttons' own tooltips; a paragraph repeating
                them sat above the controls it described, every session, for ever. -->
           <p class="hint" data-i18n="pane.editHint">Maj pendant le glisser : par crans. Clique une surface pour n'agir que sur elle.</p>
-          <p class="hint" id="edit-target" data-i18n="pane.editTarget">Cible : le modèle entier</p>
-          <div class="xform">
-            <label><span data-i18n="pane.pos">Position</span>
-              <input type="number" id="tx" step="0.01" /><input type="number" id="ty" step="0.01" /><input type="number" id="tz" step="0.01" />
-            </label>
-            <label><span data-i18n="pane.rot">Rotation °</span>
-              <input type="number" id="rx" step="1" /><input type="number" id="ry" step="1" /><input type="number" id="rz" step="1" />
-            </label>
-            <label><span data-i18n="pane.scale">Échelle</span>
-              <input type="number" id="sx" step="0.01" /><input type="number" id="sy" step="0.01" /><input type="number" id="sz" step="0.01" />
-            </label>
-          </div>
           <div id="parts-list"></div>
-          <div class="row">
-            <button id="part-import" class="seg" type="button" data-i18n-title="pane.importTitle" data-i18n="pane.importPart" title="Ajouter un autre fichier 3D à la scène">Importer un objet</button>
-            <button id="undo" class="seg" type="button" data-i18n-title="pane.undoTitle" title="Annuler (Ctrl+Z)" disabled>←</button>
-            <button id="redo" class="seg" type="button" data-i18n-title="pane.redoTitle" title="Rétablir (Ctrl+Maj+Z)" disabled>→</button>
-          </div>
-          <div class="row">
-            <button id="part-copy" class="seg" type="button" data-i18n-title="pane.copyTitle" data-i18n="pane.copy" title="Copier la sélection (Ctrl+C)">Copier</button>
-            <button id="part-paste" class="seg" type="button" data-i18n-title="pane.pasteTitle" data-i18n="pane.paste" title="Coller (Ctrl+V)">Coller</button>
-          </div>
+          <!--
+            The numbers, the handles, the pivot, importing, copying and undoing
+            have all moved under the scene list, where the thing they act on is.
+            What stays here is what is true of the document rather than of a
+            selection: how it is turned, where it is written, and what the shell
+            does with it.
+          -->
         </section>
 
         <details id="shell-section" class="fold" hidden>
@@ -939,19 +1016,7 @@
         </details>
 
         <section>
-          <h2 data-i18n="pan.pivot">Centre de rotation</h2>
-          <div class="chips">
-            <label class="chip" style="--tint:#b08cff">
-              <input type="checkbox" id="pivot-show" />
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
-              <span data-i18n="pan.pivotShow">Montrer le centre</span>
-            </label>
-          </div>
-          <div class="row">
-            <button id="pivot-move" class="seg" type="button" title="Déplacer le centre avec les poignées" data-i18n="pan.pivotMove">Déplacer</button>
-            <button id="pivot-centre" class="seg" type="button" title="Le placer à la moyenne des sommets" data-i18n="pan.pivotCentre">Centre géométrique</button>
-            <button id="pivot-reset" class="seg" type="button" title="Le remettre au milieu de la boîte englobante" data-i18n="pan.pivotReset">Restaurer</button>
-          </div>
+          <h2 data-i18n="pan.saveTitle">Enregistrer</h2>
           <div class="row">
             <button id="save-transform" class="seg" type="button" title="Écrire le modèle redressé dans un nouveau fichier" data-i18n="pan.saveAs">Enregistrer sous</button>
             <button id="save-over" class="seg" type="button" title="Remplacer le fichier ouvert" data-i18n="pan.saveOver">Écraser l'original</button>

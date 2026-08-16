@@ -609,8 +609,96 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
  * scrolls — it pushes the panel instead, and the panes below it off the bottom.
  */
 #outliner-dock { order: 0; flex: 0 0 30%; min-height: 88px; overflow-y: auto; }
-#inspector > #tabs { order: 1; flex: none; }
-#panes { order: 2; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#scene-tools { order: 1; flex: none; }
+#inspector > #tabs { order: 2; flex: none; }
+#panes { order: 3; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/*
+ * The scene tools: a bar of glyphs, and the numbers of whatever is selected.
+ *
+ * Between the list and the tabs, so the three things a transform needs — what is
+ * chosen, the handle that moves it, and the numbers it lands on — are one column
+ * with nothing in between. They were in three places, one of them behind a tab.
+ */
+.mini-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0 4px;
+  flex-wrap: wrap;
+}
+.mini {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.mini svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mini:hover:not(:disabled) { color: var(--fg); background: rgb(255 255 255 / 0.08); }
+.mini:disabled { opacity: 0.3; cursor: default; }
+.mini.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.mini-sep { width: 1px; height: 15px; background: var(--line); margin: 0 4px; flex: none; }
+
+/* The pivot's own little plate, hung under its button. */
+.mini-menu { position: relative; display: inline-flex; }
+.mini-pop {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 8;
+  width: 232px;
+  padding: 9px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(14px);
+}
+.mini-pop[hidden] { display: none; }
+.mini-pop-title {
+  margin: 0 0 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.mini-pop .row { margin-top: 4px; }
+
+/* The numbers only exist while something is selected. */
+#xform-block[hidden] { display: none; }
+#xform-block { padding-bottom: 6px; }
+#xform-block #edit-target { margin: 0 0 5px; }
+
+/* The two list-wide actions carry a glyph now, like everything else. */
+.tree-mini { display: inline-flex; align-items: center; gap: 4px; }
+.tree-mini svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 /* A rule between the list and the tabs, so the two bands do not read as one. */
 #outliner-dock {

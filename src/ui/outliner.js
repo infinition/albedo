@@ -648,22 +648,33 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
 
     body.textContent = "";
 
+    /*
+     * The model first, the room after it, in that order.
+     *
+     * It read backdrop, lights, fog, stand, model — the order the viewer builds
+     * them in, which is a fact about the code. What somebody opens this list for
+     * is the thing they loaded, and it was at the bottom, under four groups of
+     * scenery, needing a scroll on any file with more than a few meshes. The
+     * subject leads and the room follows it, roughly in the order you would set
+     * one up: the thing, what it stands on, the air around it, what lights it,
+     * and what is behind it.
+     */
     const groups = [
-      { key: "bg", label: "Fonds", rows: backgroundRows() },
-      {
-        key: "light",
-        label: "Lumières",
-        rows: lightRows(),
-        add: { title: "Ajouter une lumière", act: () => actions.addLight?.() },
-      },
-      { key: "fog", label: "Atmosphère", rows: fogRows() },
+      { key: "model", label: "Modèle", rows: meshes.map(meshNode) },
       {
         key: "stand",
         label: "Socles",
         rows: pedestalRows(),
         add: { title: "Choisir un socle", act: () => actions.pickPedestal?.() },
       },
-      { key: "model", label: "Modèle", rows: meshes.map(meshNode) },
+      { key: "fog", label: "Atmosphère", rows: fogRows() },
+      {
+        key: "light",
+        label: "Lumières",
+        rows: lightRows(),
+        add: { title: "Ajouter une lumière", act: () => actions.addLight?.() },
+      },
+      { key: "bg", label: "Fonds", rows: backgroundRows() },
     ];
 
     for (const group of groups) {

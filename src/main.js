@@ -1476,6 +1476,7 @@ selection.subscribe(() => {
   paintTree();
   retopo?.onSelection?.();
   followDecorSelection();
+  paintTransformPanel();
   if (editMode) setEditMode(editMode);
 });
 
@@ -1493,7 +1494,26 @@ selection.subscribe(() => {
  */
 function followDecorSelection() {
   const picked = selection.primary;
-  if (!picked) return;
+  /*
+   * Nothing selected means nothing to act on, so the handles go.
+   *
+   * They used to survive an empty selection: clicking off a model left a gizmo
+   * standing in the middle of the viewport, attached to whatever had been
+   * chosen last, ready to move something the person had just stopped pointing
+   * at. Every kind of handle at once — the object's, the stand's, a light's, the
+   * fog's — because "which one is out" is not a question anybody should have to
+   * answer before clicking on empty space.
+   */
+  if (!picked) {
+    if (editMode) setEditMode(null);
+    setGizmoMode(null);
+    setLightGizmoMode(null);
+    viewer.showLightHelper(null);
+    viewer.setFogState({ selected: false });
+    viewer.setGizmo(null);
+    paintTransformPanel();
+    return;
+  }
   const key = decorKey(picked.id);
   if (picked.kind === "light") selectDecorItem({ type: "light", id: Number(key) });
   else if (picked.kind === "stand") selectDecorItem({ type: "pedestal" });
@@ -4382,6 +4402,31 @@ function paintEditTarget() {
 }
 
 /**
+ * The coordinates appear with a subject and go with it.
+ *
+ * A row of empty number fields is three questions with nothing to ask them
+ * about, and they sat under the scene list permanently while the answer to
+ * "which object" was "none". They show when something is chosen — from the
+ * list, from the viewport, either way — and the numbers under them are the ones
+ * a drag is changing, live.
+ */
+function paintTransformPanel() {
+  const block = $("xform-block");
+  if (!block) return;
+  const kind = selection.primary?.kind;
+  // Meshes and stands are things with a transform. A material is a property of
+  // one, a backdrop has no position at all, and a light is placed by bearing and
+  // height rather than by coordinates — so none of the three gets fields that
+  // would either lie or do nothing.
+  const has = viewer.current && (kind === "mesh" || kind === "stand" || !!selectedPart);
+  block.hidden = !has;
+  if (has) {
+    paintEditTarget();
+    paintTransform();
+  }
+}
+
+/**
  * What the scene is made of.
  *
  * Only shown once there is more than one thing in it: a single opened file
@@ -4450,8 +4495,9 @@ function setEditMode(mode) {
   for (const [id, value] of [
     ["edit-off", null], ["edit-translate", "translate"],
     ["edit-rotate", "rotate"], ["edit-scale", "scale"],
+    ["mini-move", "translate"], ["mini-rotate", "rotate"], ["mini-scale", "scale"],
   ]) {
-    $(id).classList.toggle("active", editMode === value);
+    $(id)?.classList.toggle("active", editMode === value);
   }
   // The bar shows the same state as the pane, because it is the same state.
   for (const b of document.querySelectorAll("[data-giz]")) {
@@ -4461,6 +4507,7 @@ function setEditMode(mode) {
   }
   paintEditTarget();
   paintTransform();
+  paintTransformPanel();
   if (editMode) {
     const label = { translate: "Déplacer", rotate: "Tourner", scale: "Échelle" }[editMode];
     toast(`${label} · ${editTargetName()} · Maj pour les crans`);
@@ -4475,6 +4522,51 @@ for (const [id, mode] of [
   ["edit-rotate", "rotate"], ["edit-scale", "scale"],
 ]) {
   $(id).addEventListener("click", () => setEditMode(mode));
+}
+
+/*
+ * The same three modes, under the scene list.
+ *
+ * Relays into the one `setEditMode`, like the bar over the model. No fourth
+ * button for "none": clicking the mode you are already in puts the handles away,
+ * which is the gesture people reach for before they look for a button that says
+ * Aucun.
+ */
+for (const [id, mode] of [
+  ["mini-move", "translate"], ["mini-rotate", "rotate"], ["mini-scale", "scale"],
+]) {
+  $(id)?.addEventListener("click", () => setEditMode(editMode === mode ? null : mode));
+}
+
+/*
+ * The pivot, on a plate that opens under its glyph.
+ *
+ * Four controls that are needed for about ten seconds, twice a session, and had
+ * a whole titled section of the Objet tab to themselves. Reachable the moment
+ * something is selected, and out of the way the rest of the time — which is the
+ * whole argument for a menu over a panel.
+ */
+{
+  const button = $("mini-pivot");
+  const menu = $("pivot-menu");
+  const show = (on) => {
+    menu.hidden = !on;
+    button.setAttribute("aria-expanded", String(!!on));
+  };
+  button?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    show(menu.hidden);
+  });
+  // Reaching past it closes it, like every other drawer here. On pointerdown, so
+  // it shuts on the press that begins an orbit rather than waiting for a release
+  // a drag never delivers.
+  document.addEventListener("pointerdown", (e) => {
+    if (menu.hidden || menu.contains(e.target) || button.contains(e.target)) return;
+    show(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) show(false);
+  });
 }
 
 /*
