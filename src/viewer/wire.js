@@ -37,6 +37,55 @@ const ALL_EDGES = 7;
  * `mask` is one entry per triangle across the whole object, in traversal order,
  * which is the order the engine wrote it in.
  */
+/**
+ * The attributes this overlay writes onto a geometry.
+ *
+ * Named here so that anything writing a geometry to a file can take them off
+ * first. They are scaffolding for a shader — a barycentric coordinate, an edge
+ * mask, a chart index, a deviation — and they belong to how the model is being
+ * *looked at*, not to the model.
+ *
+ * That distinction is not cosmetic. glTF only allows custom vertex semantics as
+ * `_UPPERCASE`, which is what three's exporter writes them as, and readers are
+ * entitled to refuse anything they do not know: the retopology engine rejects
+ * the whole file with "invalid semantic name" rather than skipping four
+ * attributes it has no use for.
+ */
+export const WIRE_ATTRIBUTES = ["aBary", "aEdges", "aChart", "aDev"];
+
+/**
+ * Take the overlay's attributes off for the duration of something, and put them
+ * back exactly as they were.
+ *
+ * Detached rather than deleted: turning the wireframe off and on again would
+ * otherwise have to rebuild them, and rebuilding un-indexes the geometry, which
+ * triples its vertex buffer and cannot be undone.
+ *
+ * @param {any} root the subtree to strip
+ * @param {() => Promise<any>} fn what to do while it is stripped
+ */
+export async function withoutWireAttributes(root, fn) {
+  const parked = [];
+  root?.traverse?.((o) => {
+    const g = o.geometry;
+    if (!g?.attributes) return;
+    for (const name of WIRE_ATTRIBUTES) {
+      const attribute = g.attributes[name];
+      if (!attribute) continue;
+      parked.push([g, name, attribute]);
+      g.deleteAttribute(name);
+    }
+  });
+  try {
+    // Awaited, not returned: `finally` around a returned promise runs before it
+    // settles, so the attributes would come back while the exporter was still
+    // walking the scene.
+    return await fn();
+  } finally {
+    for (const [g, name, attribute] of parked) g.setAttribute(name, attribute);
+  }
+}
+
 export function prepareWire(object, mask = null, charts = null, dev = null) {
   // Whether this call brings data worth overwriting what is already there.
   const carries = !!(mask || charts || dev);

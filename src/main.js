@@ -2233,16 +2233,25 @@ async function exportModel(format = "glb", { overwrite = false } = {}) {
       mime = "model/stl";
     } else {
       const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+      const { withoutWireAttributes } = await import("./viewer/wire.js");
       // The group, not the object inside it. The orientation buttons and the
       // handles both write to the group, so exporting the object alone wrote out
       // a model still lying on its side after it had been stood up.
+      //
+      // And without the wireframe overlay's attributes. They are shader
+      // scaffolding, written out as the custom semantics `_ABARY`, `_AEDGES`,
+      // `_ACHART` and `_ADEV`; a reader is entitled to refuse a file over a
+      // semantic it does not know, and some do. Every glb this application wrote
+      // after the wireframe had once been switched on carried all four.
       bytes = new Uint8Array(
-        await new GLTFExporter().parseAsync(viewer.root, {
-          binary: true,
-          animations: viewer.clips || [],
-          // Skinned models need their bones, and three drops them otherwise
-          includeCustomExtensions: true,
-        })
+        await withoutWireAttributes(viewer.root, () =>
+          new GLTFExporter().parseAsync(viewer.root, {
+            binary: true,
+            animations: viewer.clips || [],
+            // Skinned models need their bones, and three drops them otherwise
+            includeCustomExtensions: true,
+          })
+        )
       );
       ext = "glb";
       mime = "model/gltf-binary";
@@ -2296,7 +2305,13 @@ async function copySelection() {
   const target = selectedPart?.object || viewer.root;
   try {
     const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-    const result = await new GLTFExporter().parseAsync(target, { binary: true });
+    const { withoutWireAttributes } = await import("./viewer/wire.js");
+    // Same reason as the export: what goes on the clipboard is read back by
+    // `paste`, and carrying the overlay's custom semantics through a round trip
+    // is carrying them into whatever the paste is dropped into.
+    const result = await withoutWireAttributes(target, () =>
+      new GLTFExporter().parseAsync(target, { binary: true })
+    );
     clipboardGLB = new Uint8Array(result);
     toast(t("toast.copied"));
   } catch (e) {

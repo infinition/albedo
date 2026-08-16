@@ -1776,14 +1776,32 @@ export function createRetopo({
     // The group, not the object inside it: the orientation buttons and the edit
     // handles both write to the group.
     const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+    const { withoutWireAttributes } = await import("../viewer/wire.js");
+    /*
+     * The wireframe overlay's attributes never reach the engine.
+     *
+     * They are shader scaffolding — barycentric coordinates, an edge mask, a
+     * chart index, a deviation — and three's exporter writes them as custom
+     * glTF semantics, `_ABARY` and friends. The engine's reader refuses the
+     * whole file over them: "invalid semantic name", nothing decimated, no clue
+     * which of four attributes it meant.
+     *
+     * This was invisible until a run stopped going through the fast path. A glTF
+     * file opened whole used to be handed to the engine as a path on disk, so
+     * nothing was ever exported and the attributes never travelled; per mesh,
+     * every run exports. The fault was always there, waiting for the first
+     * non-glTF model or the first restricted run.
+     */
     const glb = await withOnly([mesh], () =>
-      new GLTFExporter().parseAsync(viewer.root, {
-        binary: true,
-        includeCustomExtensions: true,
-        // The default, said out loud because the whole scope control rests on
-        // it: anything marked not-visible does not reach the file.
-        onlyVisible: true,
-      })
+      withoutWireAttributes(viewer.root, () =>
+        new GLTFExporter().parseAsync(viewer.root, {
+          binary: true,
+          includeCustomExtensions: true,
+          // The default, said out loud because the whole scope control rests on
+          // it: anything marked not-visible does not reach the file.
+          onlyVisible: true,
+        })
+      )
     );
     const { writeFile } = await import("@tauri-apps/plugin-fs");
     const path = numbered(dirs.input, index);
