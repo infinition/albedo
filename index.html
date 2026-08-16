@@ -645,13 +645,8 @@
                   </select>
                 </div>
 
-                <div class="row" style="margin-top:6px">
-                  <div class="segment" role="group" aria-label="Gizmo Lumière">
-                    <button id="light-giz-move" class="seg" type="button" title="Déplacer en 3D">Déplacer</button>
-                    <button id="light-giz-rotate" class="seg" type="button" title="Tourner en 3D">Tourner</button>
-                    <button id="light-giz-off" class="seg active" type="button" title="Helper seul">Helper</button>
-                  </div>
-                </div>
+                <!-- Les poignees vivent sous la liste de scene, une seule fois,
+                     et visent ce qui est selectionne - y compris cette lumiere. -->
               </div>
 
               <!-- Paramètres Socle -->
@@ -673,14 +668,7 @@
                       <button id="stand-unlit" class="seg" type="button" data-i18n-title="pane.standUnlitTitle" data-i18n="pane.standUnlit" title="Texture telle quelle">Unlit</button>
                     </div>
                   </div>
-                  <div class="row">
-                    <div class="segment" role="group" data-i18n-aria="pane.gizmo" aria-label="Gizmo">
-                      <button id="giz-move" class="seg" type="button" data-i18n-title="pane.gizMove" data-i18n="pane.gizMove" title="Déplacer">Déplacer</button>
-                      <button id="giz-rotate" class="seg" type="button" data-i18n-title="pane.gizRotate" data-i18n="pane.gizRotate" title="Tourner">Tourner</button>
-                      <button id="giz-scale" class="seg" type="button" data-i18n-title="pane.gizScale" data-i18n="pane.gizScale" title="Échelle">Échelle</button>
-                      <button id="giz-off" class="seg active" type="button" data-i18n-title="pane.gizOffTitle" data-i18n="pane.gizOff" title="Masquer le gizmo">Aucun</button>
-                    </div>
-                  </div>
+                  <!-- Idem: la rangee sous la liste vise le socle quand il est choisi. -->
                   <div class="row" style="gap:6px">
                     <button id="pedestal-refit" class="seg" style="flex:1" type="button" data-i18n="pane.pedestalRefit">Replacer auto</button>
                     <button id="pedestal-remove" class="seg" type="button" title="Retirer ce socle">Retirer</button>

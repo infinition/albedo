@@ -4647,9 +4647,22 @@ function editTarget() {
     const node = meshByUuid(picked[0]);
     if (node) return node;
   }
-  // The stand is a thing with a transform like any other, and choosing it in
-  // the list is a statement about which object the handles are for.
-  if (selection.primary?.kind === "stand" && viewer.pedestal) return viewer.pedestal;
+  /*
+   * Everything that has a place answers here.
+   *
+   * The stand, a light and the fog each had a Déplacer / Tourner set of their
+   * own, in their own panel, because this function only knew about meshes — so
+   * "move the thing I have selected" was one control for meshes and three other
+   * controls elsewhere for everything else. One question, one answer, and the
+   * row under the scene list drives all of them.
+   */
+  const chosen = selection.primary;
+  if (chosen?.kind === "stand" && viewer.pedestal) return viewer.pedestal;
+  if (chosen?.kind === "light") {
+    const entry = viewer.lights.find((l) => l.id === Number(decorKey(chosen.id)));
+    if (entry) return entry.object;
+  }
+  if (chosen?.kind === "fog") return viewer.fogHandle();
   const uuid = selection.material;
   const meshes = uuid ? channels.usersOf(uuid).meshes : [];
   return meshes.length === 1 ? meshes[0] : viewer.root;
@@ -4775,7 +4788,17 @@ function setEditMode(mode) {
   if (mode && !viewer.current) return;
   editMode = mode || null;
   const target = editMode ? editTarget() : null;
-  viewer.setGizmo(editMode, null, target);
+  // A stand placed by hand replaces the automatic fit and is remembered. That
+  // used to hang off the stand's own gizmo buttons; those are gone, so the
+  // promise travels with the target instead of with the control that made it.
+  const onChange =
+    target && target === viewer.pedestal
+      ? (placing) => {
+          viewer.pedestalTransform = placing;
+          prefs.set("pedestalTransform", placing);
+        }
+      : null;
+  viewer.setGizmo(editMode, onChange, target);
   viewer.setGizmoSnap(false);
   for (const [id, value] of [
     ["edit-off", null], ["edit-translate", "translate"],

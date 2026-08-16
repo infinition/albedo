@@ -11,6 +11,8 @@ import { ICONS } from "./icons.js";
  */
 import { selection } from "../selection.js";
 import {
+  byUuid,
+  lowPolyOf,
   nameResult,
   restoreIdentity,
   snapshotIdentity,
@@ -636,6 +638,62 @@ export function createRetopo({
    * interaction: the number only means something while you are watching the
    * shell move.
    */
+  /**
+   * Wrap the low poly the person is actually looking at.
+   *
+   * The cage is the shell the baker fires its rays from, so it belongs on *a*
+   * low poly — and until a run meant one mesh at a time there was only ever one
+   * to choose. Now a scene holds several, `dressResult` runs once per result,
+   * and the cage simply ended up on whichever finished last. Selecting a
+   * different mesh moved nothing: the drawn shell went on describing a bake
+   * somewhere else in the scene.
+   *
+   * The subject is the selection, resolved through the link: choosing a low poly
+   * wraps it, and choosing the high poly it came from wraps the low poly made
+   * from it, because "the cage of this mesh" is the question either click asks.
+   */
+  function cageSubject() {
+    const mine = results().map((p) => p.object);
+    if (!mine.length) return null;
+
+    const holds = (root, uuid) => {
+      let found = false;
+      root.traverse((o) => {
+        if (o.uuid === uuid) found = true;
+      });
+      return found;
+    };
+
+    for (const id of selection.ids) {
+      // The selected node itself, when it is one of this mode's results.
+      const direct = mine.find((o) => holds(o, id));
+      if (direct) return direct;
+      // Or the result made from it, when a high poly is what is selected.
+      const node = byUuid(viewer.root, id);
+      const low = node && lowPolyOf(viewer.root, node);
+      if (low) {
+        const owner = mine.find((o) => o === low || holds(o, low.uuid));
+        if (owner) return owner;
+      }
+    }
+    // Nothing chosen: the newest result, which is what a run has just produced
+    // and what somebody is most likely looking at.
+    return mine.at(-1);
+  }
+
+  /** Put the cage on one result, taking it off whatever held it before. */
+  function retargetCage(preferred = null) {
+    const subject = preferred || cageSubject();
+    if (cage?.object?.parent === subject) {
+      syncCage();
+      return;
+    }
+    cage?.dispose();
+    cage = subject ? buildCage(subject) : null;
+    if (cage && subject) subject.add(cage.object);
+    syncCage();
+  }
+
   function syncCage() {
     if (!cage) {
       el.showCage.checked = false;
@@ -720,12 +778,7 @@ export function createRetopo({
     const src = viewer.parts?.[0]?.object;
     if (src && src !== object) applyWire(src, wireU, null);
 
-    // The cage wraps the low poly, because that is the surface the baker fires
-    // its rays from.
-    cage?.dispose();
-    cage = buildCage(object);
-    if (cage) object.add(cage.object);
-    syncCage();
+    retargetCage(object);
     syncViewport();
     // A new result has to join whatever comparison was already on screen.
     setAB(compareMode);
@@ -2302,7 +2355,12 @@ export function createRetopo({
       refresh();
     },
     /** The shared selection moved: only the scope line depends on it. */
-    onSelection: paintScope,
+    onSelection() {
+      paintScope();
+      // The cage follows what is chosen, so a scene of several low polys shows
+      // the shell of the one being judged rather than the one made last.
+      retargetCage();
+    },
     /**
      * The one wireframe changed, from wherever.
      *
