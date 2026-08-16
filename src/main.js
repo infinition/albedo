@@ -16,7 +16,7 @@ import {
 import { createPrefs } from "./prefs.js";
 import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
-import { selection, decorId } from "./selection.js";
+import { selection, decorId, decorKey } from "./selection.js";
 import { adopt, renameNode } from "./naming.js";
 import { createTabs } from "./ui/tabs.js";
 import { setLang, initLang, applyStatic, currentLang, t } from "./i18n/index.js";
@@ -329,7 +329,7 @@ function adoptDocument(doc) {
   paintHistory();
   paintTransform();
   paintEditTarget();
-  tree?.reset();
+  outliner?.reset();
   $("tree").textContent = viewer.current ? viewer.sceneTree() : "";
   buildAnimationUi(viewer.clips || []);
   $("btn-export").disabled = !viewer.current;
@@ -1100,7 +1100,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     paintMaterialList();
     // A different model: different portraits, different branches, and nothing
     // worth keeping open from the last one.
-    tree?.reset();
+    outliner?.reset();
     $("empty").classList.add("hidden");
     buildAnimationUi(animations);
     if (info?.warnings?.length) console.warn("[albedo]", info.warnings);
@@ -1432,8 +1432,34 @@ selection.subscribe(() => {
   paintMaterialList();
   paintTree();
   retopo?.onSelection?.();
+  followDecorSelection();
   if (editMode) setEditMode(editMode);
 });
+
+/**
+ * The panel follows the row that was just clicked.
+ *
+ * The decor panel used to hold its own idea of what was selected, in
+ * `decorSelection`, set only by its own list. Clicking a light anywhere else
+ * changed nothing, which was tolerable while "anywhere else" did not exist and
+ * is not now that the lights are rows of the same list as the meshes.
+ *
+ * One direction only: `selection` decides, this reads. The reverse — the panel
+ * writing back into the selection — is what would make the two disagree again,
+ * and there is nothing it could say that the click had not already said.
+ */
+function followDecorSelection() {
+  const picked = selection.primary;
+  if (!picked) return;
+  const key = decorKey(picked.id);
+  if (picked.kind === "light") selectDecorItem({ type: "light", id: Number(key) });
+  else if (picked.kind === "stand") selectDecorItem({ type: "pedestal" });
+  else if (picked.kind === "bg") selectDecorItem({ type: "background", kind: key });
+  else return;
+  // The parameters of the thing just chosen, without a second click on a tab to
+  // go and find them.
+  showPane("decor");
+}
 
 function highlightSelection() {
   const uuid = selection.material;
@@ -2390,9 +2416,8 @@ const PANE_WAKE = {
   // reads across the bridge, and nobody needs the answer until they are looking
   // at the panel that shows it.
   object: () => refreshShellState(),
-  // The tree draws a portrait per mesh through the renderer, so its module is
-  // fetched on the first click and never at startup.
-  scene: () => wakeTree(),
+  // No `scene` entry any more: the list is not a pane, it is above them all, so
+  // it is woken with the panel rather than with a tab.
 };
 
 function showPane(name, remember = true) {
@@ -2419,21 +2444,25 @@ const currentPane = () =>
   document.querySelector("div.pane.active")?.dataset.pane || "view";
 
 /**
- * The scene tree, fetched the first time its tab is looked at.
+ * The outliner: everything in the scene, in one list, above the tabs.
  *
  * A module and a stylesheet rather than markup in the page, for the reason that
  * outranks the rest: this executable is also the Explorer thumbnail provider,
- * one process per file, and the tree renders a portrait per row. A headless run
- * never calls `applyPrefs`, so it never reaches this.
+ * one process per file, and the list renders a portrait per row.
+ *
+ * It is no longer woken by a tab, because it no longer has one — it is on
+ * screen whichever panel is open. So the guard is said out loud instead of
+ * being inherited from the fact that a headless run never clicks anything: a
+ * thumbnail job renders one file and exits, and must not build a list about it.
  */
-let tree = null;
-let treeArriving = null;
+let outliner = null;
+let outlinerArriving = null;
 
 function wakeTree() {
-  if (tree || treeArriving) return;
-  treeArriving = import("./ui/tree.js")
-    .then(({ createTree }) => {
-      tree = createTree({
+  if (outliner || outlinerArriving || headless) return;
+  outlinerArriving = import("./ui/outliner.js")
+    .then(({ createOutliner }) => {
+      outliner = createOutliner({
         host: $("scene-tree"),
         viewer,
         channels,
@@ -2442,17 +2471,33 @@ function wakeTree() {
         // is an afternoon of work that already exists and is already debugged.
         swapTexture,
         onNotice: toast,
+        actions: {
+          addLight: () => $("decor-act-add")?.click(),
+          pickPedestal: () => $("btn-pedestal")?.click(),
+          removePedestal: () => dropPedestal(),
+          setBackground: (kind) => useEnvironment(kind),
+          setBackgroundVisible: (on) => {
+            $("env-background").checked = on;
+            viewer.showEnvBackground = on;
+            viewer.applyBackground();
+            prefs.set("environmentBackground", on);
+          },
+          onLightsChanged: () => saveLights(),
+          onLightRenamed: () => saveLights(),
+        },
       });
+      $("outliner-all")?.addEventListener("click", () => outliner.reveal());
+      $("outliner-isolate")?.addEventListener("click", () => outliner.isolate());
     })
     .catch((e) => console.error("[albedo] arbre de scène :", e))
     .finally(() => {
-      treeArriving = null;
+      outlinerArriving = null;
     });
 }
 
-/** Repaint the tree, if it has ever been opened. */
+/** Repaint the list, if it has ever been built. */
 function paintTree() {
-  tree?.paint();
+  outliner?.paint();
 }
 
 // --- camera ---------------------------------------------------------------
@@ -2786,6 +2831,11 @@ function neutralLook() {
 /** Put the saved settings back, without writing them out again as we go. */
 function applyPrefs() {
   const p = prefs.all();
+  // The list is on screen whatever the pane, so it is built with the panel and
+  // not with a tab. Here rather than at module scope because a headless
+  // thumbnail run never reaches this function, which is the guard that keeps a
+  // portrait-per-row list out of a one-file render process.
+  wakeTree();
   showPane(migratePane(p.pane), false);
   $("shot-alpha").checked = p.shotAlpha;
   $("shot-grid").checked = p.shotGrid;
@@ -3034,7 +3084,7 @@ if (import.meta.env && import.meta.env.DEV) {
       return retopo;
     },
     get tree() {
-      return tree;
+      return outliner;
     },
   };
 }
@@ -3403,7 +3453,9 @@ function selectDecorItem(sel, { showHelper = true } = {}) {
   } else if (sel.type === "background") {
     viewer.showLightHelper(null);
     setGizmoMode(null);
-    if (sel.kind) useEnvironment(sel.kind);
+    // Switching to it is the outliner's job, on the click that chose the row.
+    // Doing it here as well ran `useEnvironment` twice for one click, which on
+    // the image source meant loading and decoding the panorama twice.
   }
 
   if ($("decor-act-dup")) $("decor-act-dup").disabled = sel.type !== "light";
@@ -3432,210 +3484,17 @@ function setLightGizmoMode(mode) {
   }
 }
 
+/**
+ * Repaint the list of what is in the scene.
+ *
+ * It used to build a second tree of its own, in the Décor tab, with its own
+ * rows for the lights, the stand and the backdrops — two hundred lines saying
+ * the same things about the same scene as the tree in the Scène tab, in a
+ * different visual language, kept in step by hand. The two are one list now, so
+ * this is the one call that redraws it.
+ */
 function paintDecorTree() {
-  if (!$("decor-tree")) return;
-
-  // 1. Lights list
-  const lightsList = $("decor-lights-list");
-  if (lightsList) {
-    lightsList.textContent = "";
-    if ($("decor-count-lights"))
-      $("decor-count-lights").textContent = String(viewer.lights.length);
-
-    for (const entry of viewer.lights) {
-      const isPicked =
-        decorSelection.type === "light" && decorSelection.id === entry.id;
-      const row = document.createElement("div");
-      row.className = `decor-item-row${isPicked ? " picked" : ""}${
-        !entry.enabled ? " muted" : ""
-      }`;
-
-      // Caret spacer
-      const spacer = document.createElement("span");
-      spacer.style.cssText = "width:10px;flex:none;";
-
-      // Light type icon tinted with colour
-      const icon = document.createElement("span");
-      icon.className = "decor-light-icon";
-      icon.style.color = entry.colour;
-      icon.textContent = LIGHT_KIND_ICONS[entry.kind] || "☀️";
-      icon.title = LIGHT_KIND_LABELS[entry.kind] || entry.kind;
-
-      // Light name
-      const name = document.createElement("span");
-      name.className = "decor-item-name";
-      name.textContent = entry.name;
-      name.title = `${entry.name} (${LIGHT_KIND_LABELS[entry.kind]})`;
-
-      // Visual gauge bar
-      const pct = lightIntensityPercent(entry);
-      const barWrap = document.createElement("div");
-      barWrap.className = "decor-bar-wrap";
-      barWrap.title = `Intensité : ${pct}%`;
-      const barFill = document.createElement("div");
-      barFill.className = "decor-bar-fill";
-      barFill.style.width = `${pct}%`;
-      barFill.style.backgroundColor = entry.colour;
-      barWrap.appendChild(barFill);
-
-      // Percentage text
-      const percent = document.createElement("span");
-      percent.className = "decor-percent";
-      percent.textContent = `${pct}%`;
-
-      // Gizmo toggle icon button
-      const gizBtn = document.createElement("button");
-      gizBtn.type = "button";
-      gizBtn.className = `decor-icon-btn${
-        isPicked && decorGizmoMode ? " active" : ""
-      }`;
-      gizBtn.textContent = "⌖";
-      gizBtn.title = "Activer le gizmo 3D sur cette lumière";
-      gizBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        selectDecorItem({ type: "light", id: entry.id });
-        setLightGizmoMode(decorGizmoMode ? null : "translate");
-      });
-
-      // Eye button
-      const eyeBtn = document.createElement("button");
-      eyeBtn.type = "button";
-      eyeBtn.className = `decor-icon-btn${entry.enabled ? "" : " off"}`;
-      eyeBtn.textContent = entry.enabled ? "◉" : "◌";
-      eyeBtn.title = entry.enabled
-        ? "Masquer la lumière"
-        : "Afficher la lumière";
-      eyeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        viewer.setLight(entry.id, { enabled: !entry.enabled });
-        saveLights();
-        paintDecorTree();
-      });
-
-      row.append(spacer, icon, name, barWrap, percent, gizBtn, eyeBtn);
-      row.addEventListener("click", () =>
-        selectDecorItem({ type: "light", id: entry.id })
-      );
-      lightsList.appendChild(row);
-    }
-  }
-
-  // 2. Pedestals list
-  const pList = $("decor-pedestals-list");
-  if (pList) {
-    pList.textContent = "";
-    if ($("decor-count-pedestals"))
-      $("decor-count-pedestals").textContent = viewer.pedestal ? "1" : "0";
-
-    if (viewer.pedestal) {
-      const isPicked = decorSelection.type === "pedestal";
-      const row = document.createElement("div");
-      row.className = `decor-item-row${isPicked ? " picked" : ""}${
-        !viewer.pedestal.visible ? " muted" : ""
-      }`;
-
-      const spacer = document.createElement("span");
-      spacer.style.cssText = "width:10px;flex:none;";
-
-      const icon = document.createElement("span");
-      icon.className = "decor-light-icon";
-      icon.textContent = "🧊";
-
-      const name = document.createElement("span");
-      name.className = "decor-item-name";
-      name.textContent = prefs?.get?.("pedestal")
-        ? fileLabel(prefs.get("pedestal"))
-        : "Socle 3D";
-
-      const eyeBtn = document.createElement("button");
-      eyeBtn.type = "button";
-      eyeBtn.className = `decor-icon-btn${viewer.pedestal.visible ? "" : " off"}`;
-      eyeBtn.textContent = viewer.pedestal.visible ? "◉" : "◌";
-      eyeBtn.title = viewer.pedestal.visible
-        ? "Masquer le socle"
-        : "Afficher le socle";
-      eyeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        viewer.pedestal.visible = !viewer.pedestal.visible;
-        viewer.invalidate();
-        paintDecorTree();
-      });
-
-      const trashBtn = document.createElement("button");
-      trashBtn.type = "button";
-      trashBtn.className = "decor-icon-btn";
-      trashBtn.textContent = "🗑";
-      trashBtn.title = "Retirer le socle";
-      trashBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        dropPedestal();
-      });
-
-      row.append(spacer, icon, name, eyeBtn, trashBtn);
-      row.addEventListener("click", () => selectDecorItem({ type: "pedestal" }));
-      pList.appendChild(row);
-    } else {
-      const row = document.createElement("div");
-      row.className = "decor-item-row muted";
-      row.style.fontStyle = "italic";
-      row.innerHTML = `<span style="width:10px;flex:none;"></span><span class="decor-light-icon">🧊</span><span class="decor-item-name">Aucun socle (+ Choisir)</span>`;
-      row.addEventListener("click", () => {
-        selectDecorItem({ type: "pedestal" });
-        $("btn-pedestal")?.click();
-      });
-      pList.appendChild(row);
-    }
-  }
-
-  // 3. Backgrounds list
-  const bgList = $("decor-backgrounds-list");
-  if (bgList) {
-    bgList.textContent = "";
-    const bgItems = [
-      { kind: "studio", label: "Studio Neutre", icon: "🏛️" },
-      { kind: "gradient", label: "Fond Dégradé", icon: "🏁" },
-      {
-        kind: "image",
-        label: prefs?.get?.("environmentPath")
-          ? fileLabel(prefs.get("environmentPath"))
-          : "Image HDRI",
-        icon: "🖼️",
-      },
-    ];
-
-    for (const bg of bgItems) {
-      const isActive = viewer.envKind === bg.kind;
-      const isPicked =
-        decorSelection.type === "background" && decorSelection.kind === bg.kind;
-      const row = document.createElement("div");
-      row.className = `decor-item-row${isPicked ? " picked" : ""}${
-        !isActive ? " muted" : ""
-      }`;
-
-      const spacer = document.createElement("span");
-      spacer.style.cssText = "width:10px;flex:none;";
-
-      const icon = document.createElement("span");
-      icon.className = "decor-light-icon";
-      icon.textContent = bg.icon;
-
-      const name = document.createElement("span");
-      name.className = "decor-item-name";
-      name.textContent = bg.label;
-
-      const activeDot = document.createElement("span");
-      activeDot.className = "tree-num";
-      activeDot.textContent = isActive ? "●" : "○";
-      activeDot.style.color = isActive ? "var(--accent)" : "var(--muted)";
-
-      row.append(spacer, icon, name, activeDot);
-      row.addEventListener("click", () => {
-        useEnvironment(bg.kind);
-        selectDecorItem({ type: "background", kind: bg.kind });
-      });
-      bgList.appendChild(row);
-    }
-  }
+  outliner?.paint();
 }
 
 const paintLights = paintDecorTree;

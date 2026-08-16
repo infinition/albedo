@@ -50,7 +50,8 @@ register({ fr: rtFr, en: rtEn });
  *
  * What is left here is the mode itself: the engine's parameters in one pane of
  * that shared panel, the icon bar of shortcuts over the viewport, and the action
- * bar. The scene tree moved to `src/ui/tree.js`, the material numbers to the
+ * bar. The scene tree moved to `src/ui/outliner.js`, where it grew to hold the
+ * lights, the stand and the backdrops too; the material numbers went to the
  * Matière pane, and the view controls were always Albedo's own.
  *
  * This module, its stylesheet and the exporter it reaches for are one lazy

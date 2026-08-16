@@ -571,7 +571,18 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
      lines: a switch, a name, a slider worth dragging, a number and a sign. */
   width: var(--panel-reserve);
   padding: 8px 16px 18px;
-  overflow-y: auto;
+  /*
+   * A column of three bands rather than one long scroll.
+   *
+   * The outliner is pinned to the top and scrolls inside itself, so the list of
+   * what exists is on screen whichever panel is open: it is the thing you point
+   * at to decide what the panel below should be about, and scrolling it off the
+   * top to reach a slider made every second click a round trip. The panes keep
+   * the rest of the height and their own scrollbar.
+   */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   background: var(--panel);
   /* One border, on the one edge that has a viewport on the other side of it. */
@@ -585,6 +596,45 @@ input[type="range"]:active::-webkit-slider-thumb { background: var(--accent); }
   transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s;
 }
 #inspector.open { transform: none; opacity: 1; }
+
+/*
+ * The three bands, in the order they are read rather than the order they are
+ * written. The tab bar is declared first in the markup because it is the
+ * panel's own navigation; the outliner belongs above it, and saying so here
+ * beats moving a hundred lines of markup to express one number.
+ *
+ * `min-height: 0` on both scrolling bands is not decoration: a flex child
+ * defaults to `min-height: auto`, which means "at least as tall as my content",
+ * and a scroll container that refuses to be shorter than its content never
+ * scrolls — it pushes the panel instead, and the panes below it off the bottom.
+ */
+#outliner-dock { order: 0; flex: 0 0 30%; min-height: 88px; overflow-y: auto; }
+#inspector > #tabs { order: 1; flex: none; }
+#panes { order: 2; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* A rule between the list and the tabs, so the two bands do not read as one. */
+#outliner-dock {
+  border-bottom: 1px solid var(--line);
+  margin: 0 -16px 4px;
+  padding: 0 16px 6px;
+}
+
+.outliner-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  /* Opaque, because the rows scroll under it. */
+  background: var(--panel);
+  padding: 4px 0 5px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.outliner-bar > span { flex: 1; }
 
 /* Give the top-right buttons room when the panel is out */
 /*

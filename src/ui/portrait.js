@@ -18,16 +18,30 @@ import * as THREE from "three";
  * material struck out. That answers a question a colour swatch cannot: a swatch
  * says "this material is blue", the portrait says "this material is the visor".
  *
+ * **And they are drawn with their own textures**, which is the whole difference
+ * between an icon and a silhouette. A flat blue stand-in tells two armour plates
+ * apart by outline alone; the painted one tells them apart at a glance, and on a
+ * model whose parts really are near-identical shapes it is the only thing that
+ * does.
+ *
  * Three things make it affordable, and all three matter:
  *
  * 1. **The existing renderer is borrowed**, not a second one built. A second
  *    WebGL context costs a few megabytes and, on a machine with a modest GPU, a
  *    visible stutter the moment it is created.
- * 2. **Every portrait is cached** against the geometry it came from, so opening
- *    and closing branches, toggling eyes and repainting the tree draw nothing.
- * 3. **Materials are borrowed too, never cloned.** A clone would compile a fresh
- *    shader program per portrait, which is the one cost here that would actually
- *    be felt.
+ * 2. **Every portrait is cached** against the geometry *and the materials* it
+ *    came from, so opening and closing branches, toggling eyes and repainting
+ *    draw nothing — while a texture that finishes loading after the first paint
+ *    still produces a new key and therefore a redrawn, textured portrait.
+ * 3. **Materials are borrowed, never cloned.** A clone would compile a fresh
+ *    shader program per portrait, which is the one cost here that would
+ *    actually be felt. Borrowing costs one extra program per material, once,
+ *    because this scene lights differently from the real one.
+ *
+ * That last point is why the lighting here is *only* an environment map, and the
+ * scene's own by preference: no punctual lights at all means one lighting
+ * configuration, so a material compiles one extra variant rather than one per
+ * combination it happens to meet.
  */
 
 const SIZE = 28;
@@ -37,19 +51,23 @@ const cache = new Map();
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
-// Two lights and no environment: an environment map would make the portrait
-// depend on the scene's lighting, so the same mesh would look different in two
-// files and stop being recognisable, which is the whole point.
-scene.add(new THREE.AmbientLight(0xffffff, 1.15));
-const key = new THREE.DirectionalLight(0xffffff, 2.1);
-key.position.set(0.6, 1, 0.8);
-scene.add(key);
+/**
+ * The stand-in lighting, for a viewer that has no environment yet.
+ *
+ * Added and removed around the render rather than left in, so the ordinary path
+ * — an environment map and nothing else — keeps its single lighting
+ * configuration and its single compiled variant per material.
+ */
+const fallbackKey = new THREE.DirectionalLight(0xffffff, 2.1);
+fallbackKey.position.set(0.6, 1, 0.8);
+const fallbackFill = new THREE.AmbientLight(0xffffff, 1.15);
 
 const target = new THREE.WebGLRenderTarget(SIZE, SIZE, {
   format: THREE.RGBAFormat,
   type: THREE.UnsignedByteType,
 });
 
+/** For a mesh whose materials cannot be borrowed, and only then. */
 const flat = new THREE.MeshStandardMaterial({
   color: 0x9db8ff,
   roughness: 0.65,
@@ -67,25 +85,51 @@ const muted = new THREE.MeshStandardMaterial({
 const pixels = new Uint8Array(SIZE * SIZE * 4);
 let canvas = null;
 
+/** What a material's look depends on, flattened into a cache key. */
+function materialStamp(list) {
+  return list
+    .map((m) => {
+      if (!m) return "-";
+      // The maps are part of the stamp because they arrive late: a portrait
+      // drawn while the textures were still loading is a correct portrait of an
+      // untextured material, and it must not be the one kept for ever.
+      const maps = [m.map, m.emissiveMap, m.normalMap, m.aoMap]
+        .map((t) => t?.uuid || "0")
+        .join(",");
+      return `${m.uuid}:${maps}`;
+    })
+    .join("|");
+}
+
 /**
  * Draw one portrait and hand back a data URL, or null when it cannot be drawn.
  *
- * `only` is the index of the material to feature; everything else on the mesh is
- * drawn muted. Leave it out for a portrait of the whole mesh.
+ * @param {any} renderer the viewer's own renderer, borrowed mid-frame
+ * @param {any} mesh the mesh to draw
+ * @param {number} [only] index of the material to feature; everything else on
+ *   the mesh is drawn muted. Leave it out for a portrait of the whole mesh.
+ * @param {{materials?: any[], environment?: any}} [opts] `materials` is the
+ *   mesh's *real* materials, which the caller has because a channel view may
+ *   have swapped stand-ins onto the mesh itself; `environment` is the scene's
+ *   probe, so a metal reads as metal rather than as a black hole.
  */
-export function portrait(renderer, mesh, only = -1) {
+export function portrait(renderer, mesh, only = -1, opts = {}) {
   const geometry = mesh?.geometry;
   if (!renderer || !geometry?.attributes?.position) return null;
 
-  const id = `${geometry.uuid}|${only}`;
+  const real = (opts.materials || (Array.isArray(mesh.material) ? mesh.material : [mesh.material]))
+    .filter(Boolean);
+  const id = `${geometry.uuid}|${only}|${materialStamp(real)}`;
   if (cache.has(id)) return cache.get(id);
 
-  const stand = new THREE.Mesh(geometry, flat);
+  const stand = new THREE.Mesh(geometry, real.length ? (real.length === 1 ? real[0] : real) : flat);
   if (only >= 0 && geometry.groups?.length) {
     // One material slot lit, the rest of the same mesh ghosted behind it, so the
     // portrait says *where on this part* the material sits rather than merely
     // what colour it is.
-    stand.material = geometry.groups.map((g) => (g.materialIndex === only ? flat : muted));
+    stand.material = geometry.groups.map((g) =>
+      g.materialIndex === only ? real[only] || flat : muted
+    );
   }
 
   // Framed on the geometry's own box, so a bolt and a hull both fill their
@@ -106,6 +150,11 @@ export function portrait(renderer, mesh, only = -1) {
   camera.updateProjectionMatrix();
 
   scene.add(stand);
+  // The viewer's own probe, so a painted surface is lit rather than guessed at.
+  // Without one there is nothing to light a standard material and every portrait
+  // comes back black, which is worse than the flat blue this replaced.
+  scene.environment = opts.environment || null;
+  if (!scene.environment) scene.add(fallbackKey, fallbackFill);
 
   // Everything the renderer is holding is put back exactly as it was: this runs
   // in the middle of somebody else's frame loop.
@@ -137,6 +186,8 @@ export function portrait(renderer, mesh, only = -1) {
     url = null;
   } finally {
     scene.remove(stand);
+    scene.remove(fallbackKey, fallbackFill);
+    scene.environment = null;
     renderer.setRenderTarget(oldTarget);
     renderer.setClearColor(oldClear, oldAlpha);
   }
