@@ -946,6 +946,19 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
    the controls it names instead of halfway between two groups. */
 #panes section + section { margin-top: 14px; }
 
+/*
+ * Nothing in a pane is allowed to be wider than the pane.
+ *
+ * A range input carries a default margin and its own box, so `width: 100%` came
+ * out two pixels over and every pane holding a slider scrolled sideways by two
+ * pixels — enough for a scrollbar to appear and for the column to twitch, not
+ * enough for anybody to see why. The action bar overflowed the honest way, by
+ * refusing to wrap.
+ */
+#panes input[type="range"] { box-sizing: border-box; width: 100%; margin: 0; }
+#panes { overflow-x: hidden; }
+.decor-actions-bar { flex-wrap: wrap; }
+
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .grid button {
   padding: 6px 8px;
