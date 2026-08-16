@@ -204,6 +204,36 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     return tag;
   }
 
+  /**
+   * A button that starts a rename, because the double click could not.
+   *
+   * A `dblclick` is only emitted when both clicks land on the *same* element,
+   * and the first click selects — which repaints the list and replaces every
+   * row. The second click therefore lands on a different object and the browser
+   * never fires the event at all. Delegating the listener did not help: the
+   * problem was never that the handler had gone, it was that the event was never
+   * produced. Twice I tested it by dispatching a synthetic `dblclick`, which
+   * skips exactly the step that was broken.
+   *
+   * A button has no such requirement. The double click stays wired for the
+   * cases where a row survives the click, but this is the one that always works.
+   */
+  function pencil(span) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tree-pencil";
+    b.title = "Renommer";
+    b.textContent = "✎";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // The row may have been rebuilt since this button was made, so the rename
+      // is looked up on whichever name cell is in the list right now.
+      const live = b.closest(".tree-row")?.querySelector(".tree-name");
+      (live?.__rename || span.__rename)?.(live || span);
+    });
+    return b;
+  }
+
   /** Turn a name into a text field, and put the name back if it is cancelled. */
   function startRename(span, text, rename) {
     {
@@ -434,15 +464,14 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       bulb.title = LIGHT_LABEL[entry.kind] || entry.kind;
       row.appendChild(bulb);
 
-      row.appendChild(
-        nameCell(entry.name || `light${entry.id}`, (next) => {
+      const lightNameCell = nameCell(entry.name || `light${entry.id}`, (next) => {
           const clean = String(next || "").trim();
           if (!clean) return entry.name;
           entry.name = clean;
           actions.onLightRenamed?.(entry);
           return clean;
-        })
-      );
+      });
+      row.appendChild(lightNameCell);
 
       const power = document.createElement("span");
       power.className = "tree-num";
@@ -456,6 +485,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       row.addEventListener("click", (e) =>
         selection.choose(id, "light", e.ctrlKey || e.metaKey)
       );
+      row.appendChild(pencil(lightNameCell));
       row.appendChild(
         eye(entry.enabled, entry.enabled ? "Éteindre" : "Allumer", () => {
           viewer.setLight(entry.id, { enabled: !entry.enabled });
@@ -602,9 +632,8 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         ? `<span class="tree-face" style="background-image:url(${face})"></span>`
         : `<span class="tree-glyph">▦</span>`
     );
-    row.appendChild(
-      nameCell(mesh.name, (next) => renameNode(viewer.root, mesh.node, next))
-    );
+    const meshName = nameCell(mesh.name, (next) => renameNode(viewer.root, mesh.node, next));
+    row.appendChild(meshName);
     /*
      * A badge saying which side of a retopology this mesh is on.
      *
@@ -628,6 +657,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       // of forty meshes that is the question the click was asking.
       if (!(e.ctrlKey || e.metaKey)) actions.focus?.({ object: mesh.node });
     });
+    row.appendChild(pencil(meshName));
     row.appendChild(
       eye(mesh.visible, mesh.visible ? "Masquer ce maillage" : "Afficher ce maillage", () => {
         mesh.node.visible = !mesh.node.visible;

@@ -31,10 +31,28 @@ import { MAP_SLOTS } from "../viewer/materials.js";
  */
 
 /** Everything the tree needs to draw itself, gathered in one traverse. */
+/**
+ * Whether this node, or anything it hangs from, is scaffolding.
+ *
+ * Overlays get built as real meshes in the scene — the bake cage is a shell
+ * sharing the low poly's own geometry, hung off it. Anything walking the graph
+ * counts them, so the outliner listed the cage as an unnamed mesh with the low
+ * poly's exact triangle count, which reads as the bake having produced a second
+ * object out of nowhere. A flag rather than a name test, because a name is
+ * something a person is allowed to change.
+ */
+function isHelper(node) {
+  for (let o = node; o; o = o.parent) {
+    if (o.userData?.helper) return true;
+  }
+  return false;
+}
+
 export function readScene(viewer, channels) {
   const meshes = [];
   viewer.root.traverse((node) => {
     if (!node.isMesh && !node.isSkinnedMesh) return;
+    if (isHelper(node)) return;
     const g = node.geometry;
     if (!g?.attributes?.position) return;
 

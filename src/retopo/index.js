@@ -102,16 +102,25 @@ const SHELL = `
     </div>
 
     <div data-mtabpane="remesh">
-      <div class="rt-menu-row">
+      <!--
+        The two methods, as one control with two positions rather than two
+        buttons side by side. They are exclusive — a run either simplifies the
+        mesh it has or builds a new one — and a plain row of buttons said
+        nothing about that. The tab above them used to be called "Remesh", which
+        is the name of one of the two things inside it: a heading that competes
+        with its own contents.
+      -->
+      <p class="rt-sub" data-i18n="rt.method">Méthode — choisis l'une des deux</p>
+      <div class="segment" role="group" data-i18n-aria="rt.method" aria-label="Méthode">
         <button class="seg" type="button" data-el="mmDecimate" data-i18n="rt.decimate">Décimer</button>
         <button class="seg" type="button" data-el="mmIsotropic" data-i18n="rt.rebuild">Reconstruire</button>
       </div>
       <label class="rt-field">
-        <span data-i18n="rt.triangles">Triangles <span class="rt-num" data-el="mTargetValue">—</span></span>
+        <span><span data-i18n="rt.triangles">Triangles</span> <span class="rt-num" data-el="mTargetValue">—</span></span>
         <input type="range" data-el="mTarget" min="1" max="90" step="1" value="10" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.maxDeviation">Déviation max <span class="rt-num" data-el="mMaxErrorValue">—</span></span>
+        <span><span data-i18n="rt.maxDeviation">Déviation max</span> <span class="rt-num" data-el="mMaxErrorValue">—</span></span>
         <input type="range" data-el="mMaxError" min="0" max="50" step="1" value="0" />
       </label>
       <div class="rt-menu-row">
@@ -123,30 +132,30 @@ const SHELL = `
       <label class="rt-check"><input type="checkbox" data-el="mHoles" /><span data-i18n="rt.fillHoles">Combler les trous</span></label>
       <label class="rt-check"><input type="checkbox" data-el="mBoundary" /><span data-i18n="rt.pinBoundary">Épingler les bords</span></label>
       <label class="rt-field">
-        <span data-i18n="rt.creaseAngle">Angle de pli <span class="rt-num" data-el="mAngleValue">—</span></span>
+        <span><span data-i18n="rt.creaseAngle">Angle de pli</span> <span class="rt-num" data-el="mAngleValue">—</span></span>
         <input type="range" data-el="mAngle" min="5" max="90" step="1" value="40" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.seamCost">Coût d'une couture <span class="rt-num" data-el="mSeamValue">—</span></span>
+        <span><span data-i18n="rt.seamCost">Coût d'une couture</span> <span class="rt-num" data-el="mSeamValue">—</span></span>
         <input type="range" data-el="mSeam" min="0" max="20" step="1" value="4" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.passes">Passes <span class="rt-num" data-el="mRelaxValue">—</span></span>
+        <span><span data-i18n="rt.passes">Passes</span> <span class="rt-num" data-el="mRelaxValue">—</span></span>
         <input type="range" data-el="mRelax" min="0" max="10" step="1" value="0" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.strength">Force <span class="rt-num" data-el="mRelaxStrengthValue">—</span></span>
+        <span><span data-i18n="rt.strength">Force</span> <span class="rt-num" data-el="mRelaxStrengthValue">—</span></span>
         <input type="range" data-el="mRelaxStrength" min="0.05" max="1" step="0.05" value="0.5" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.smoothAngle">Angle du lissage <span class="rt-num" data-el="mRelaxAngleValue">—</span></span>
+        <span><span data-i18n="rt.smoothAngle">Angle du lissage</span> <span class="rt-num" data-el="mRelaxAngleValue">—</span></span>
         <input type="range" data-el="mRelaxAngle" min="20" max="150" step="5" value="75" />
       </label>
     </div>
 
     <div data-mtabpane="bake" hidden>
       <label class="rt-field">
-        <span data-i18n="rt.atlasSize">Taille de l'atlas <span class="rt-num" data-el="mMapSizeValue">—</span></span>
+        <span><span data-i18n="rt.atlasSize">Taille de l'atlas</span> <span class="rt-num" data-el="mMapSizeValue">—</span></span>
         <input type="range" data-el="mMapSize" min="8" max="13" step="1" value="11" />
       </label>
       <label class="rt-check"><input type="checkbox" data-el="mmMR" /><span data-i18n="rt.metalRough">Métal et rugosité</span></label>
@@ -154,32 +163,32 @@ const SHELL = `
       <label class="rt-check"><input type="checkbox" data-el="mmEmissive" /><span data-i18n="rt.emissive">Émissif</span></label>
       <label class="rt-check"><input type="checkbox" data-el="mmAo" /><span data-i18n="rt.ao">Occlusion ambiante</span></label>
       <label class="rt-field">
-        <span data-i18n="rt.raysPerTexel">Rayons par texel <span class="rt-num" data-el="mAoSamplesValue">—</span></span>
+        <span><span data-i18n="rt.raysPerTexel">Rayons par texel</span> <span class="rt-num" data-el="mAoSamplesValue">—</span></span>
         <input type="range" data-el="mAoSamples" min="4" max="128" step="4" value="16" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.aoDistance">Portée de l'occlusion <span class="rt-num" data-el="mAoDistanceValue">—</span></span>
+        <span><span data-i18n="rt.aoDistance">Portée de l'occlusion</span> <span class="rt-num" data-el="mAoDistanceValue">—</span></span>
         <input type="range" data-el="mAoDistance" min="0.01" max="1" step="0.01" value="0.15" />
       </label>
       <label class="rt-check"><input type="checkbox" data-el="mShowCage" /><span data-i18n="rt.drawCage">Dessiner la cage</span></label>
       <label class="rt-field">
-        <span data-i18n="rt.cageOut">Vers l'extérieur <span class="rt-num" data-el="mCageOutValue">—</span></span>
+        <span><span data-i18n="rt.cageOut">Vers l'extérieur</span> <span class="rt-num" data-el="mCageOutValue">—</span></span>
         <input type="range" data-el="mCageOut" min="0.001" max="0.2" step="0.001" value="0.02" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.cageIn">Vers l'intérieur <span class="rt-num" data-el="mCageInValue">—</span></span>
+        <span><span data-i18n="rt.cageIn">Vers l'intérieur</span> <span class="rt-num" data-el="mCageInValue">—</span></span>
         <input type="range" data-el="mCageIn" min="0.001" max="0.2" step="0.001" value="0.02" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.gutter">Écart entre îlots <span class="rt-num" data-el="mGutterValue">—</span></span>
+        <span><span data-i18n="rt.gutter">Écart entre îlots</span> <span class="rt-num" data-el="mGutterValue">—</span></span>
         <input type="range" data-el="mGutter" min="0" max="32" step="1" value="4" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.bleed">Bavure hors des îlots <span class="rt-num" data-el="mBleedValue">—</span></span>
+        <span><span data-i18n="rt.bleed">Bavure hors des îlots</span> <span class="rt-num" data-el="mBleedValue">—</span></span>
         <input type="range" data-el="mBleed" min="0" max="32" step="1" value="8" />
       </label>
       <label class="rt-field">
-        <span data-i18n="rt.islandAngle">Angle de rupture d'îlot <span class="rt-num" data-el="mIslandValue">—</span></span>
+        <span><span data-i18n="rt.islandAngle">Angle de rupture d'îlot</span> <span class="rt-num" data-el="mIslandValue">—</span></span>
         <input type="range" data-el="mIsland" min="10" max="120" step="1" value="50" />
       </label>
     </div>

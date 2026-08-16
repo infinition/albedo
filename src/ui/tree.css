@@ -121,6 +121,26 @@
 .tree-badge.high { color: #ffc061; }
 .tree-badge.low { color: #7ee0c0; }
 
+/* Renaming, on a button, because the double click cannot be relied on: the
+   first click repaints the row and the browser never emits the pair. */
+.tree-pencil {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #8b929c);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tree-row:hover .tree-pencil,
+.tree-row.picked .tree-pencil { opacity: 0.75; }
+.tree-pencil:hover { opacity: 1; color: var(--accent, #7cc4ff); background: rgb(255 255 255 / 0.08); }
+
 .tree-row {
   display: flex;
   align-items: center;

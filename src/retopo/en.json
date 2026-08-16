@@ -24,7 +24,7 @@
   "rt.reportTitle": "Report",
   "rt.devScale": "Deviation scale",
   "rt.redAt": "Red at",
-  "rt.method": "Method",
+  "rt.method": "Method — pick one of the two",
   "rt.decimateTitle": "Spend the budget where the silhouette needs it",
   "rt.decimate": "Decimate",
   "rt.rebuildTitle": "Rebuild towards even edges and a valence of six",
@@ -139,7 +139,7 @@
   "rt.backToSource": "Back to the original model",
   "rt.resultOf": "Result {n} of {total}",
   "rt.menuTitle": "Decimation and projection settings",
-  "rt.menuRemesh": "Remesh",
-  "rt.menuBake": "Bake",
+  "rt.menuRemesh": "Geometry",
+  "rt.menuBake": "Textures",
   "rt.nothingToRun": "No mesh to work on: everything is hidden."
 }

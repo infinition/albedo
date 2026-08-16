@@ -65,6 +65,7 @@ export function buildCage(object) {
   const group = new THREE.Group();
   group.name = "retopo-cage";
   group.visible = false;
+  group.userData.helper = true;
   // Not raycastable: the cage is a diagram, and picking a material through it
   // would select the shell instead of the model under it.
   group.raycast = () => {};
@@ -93,6 +94,16 @@ export function buildCage(object) {
       })
     );
     mesh.raycast = () => {};
+    /*
+     * Not a mesh of the model, whatever the scene graph thinks.
+     *
+     * The shell is a `Mesh` sharing the source geometry, hung off the result, so
+     * anything walking the scene counts it: the outliner listed it as an unnamed
+     * mesh with the low poly's exact triangle count, which looks precisely like
+     * the bake having produced a second object. It is a drawing of a distance,
+     * and it belongs in no list of what the scene contains.
+     */
+    mesh.userData.helper = true;
     // The shell shares the source geometry, so it has to land in the same place.
     // The group hangs off the object itself, which means each mesh's transform
     // has to be expressed *relative to that object* rather than in world space:

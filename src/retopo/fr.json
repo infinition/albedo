@@ -24,7 +24,7 @@
   "rt.reportTitle": "Bilan",
   "rt.devScale": "Échelle de l'écart",
   "rt.redAt": "Rouge à",
-  "rt.method": "Méthode",
+  "rt.method": "Méthode — choisis l'une des deux",
   "rt.decimateTitle": "Dépenser le budget là où la silhouette en a besoin",
   "rt.decimate": "Décimer",
   "rt.rebuildTitle": "Reconstruire vers des arêtes régulières et une valence de six",
@@ -139,7 +139,7 @@
   "rt.backToSource": "Retour au modèle d'origine",
   "rt.resultOf": "Résultat {n} sur {total}",
   "rt.menuTitle": "Réglages de décimation et de projection",
-  "rt.menuRemesh": "Remesh",
-  "rt.menuBake": "Bake",
+  "rt.menuRemesh": "Géométrie",
+  "rt.menuBake": "Textures",
   "rt.nothingToRun": "Aucun maillage à traiter : tout est masqué."
 }
