@@ -10,6 +10,12 @@ import { ICONS } from "./icons.js";
  * cannot end up driving two different copies of the same state.
  */
 import { selection } from "../selection.js";
+import {
+  nameResult,
+  restoreIdentity,
+  snapshotIdentity,
+  supersededBy,
+} from "../naming.js";
 import { applyStaticIn, register, t } from "../i18n/index.js";
 import rtFr from "./fr.json";
 import rtEn from "./en.json";
@@ -1362,9 +1368,25 @@ export function createRetopo({
   /** Every part this mode put in the scene, newest last. */
   const results = () => (viewer.parts || []).filter((p) => p.object?.userData?.retopoResult);
 
-  /** Drop the result currently in the scene, if there is one. */
-  function dropResult() {
-    const mine = results();
+  /**
+   * Drop results, and be precise about which.
+   *
+   * With no argument this clears everything the mode put in the scene, which is
+   * what stepping through the history wants: it is about to import the state at
+   * another cursor position and nothing of the current one should survive.
+   *
+   * A run passes the meshes it covers, and then only the low polys made *from
+   * those meshes* go. This used to be unconditional, and on a scene of three
+   * meshes retopologising the second one silently threw away the first one's
+   * low poly: "my output" was a boolean on the object, so every result answered
+   * to it. Ownership is not the question a re-run asks; descent is.
+   *
+   * @param {any[]} [sources] meshes whose derived results are being replaced
+   */
+  function dropResult(sources) {
+    const mine = sources
+      ? supersededBy(results(), new Set(sources.map((o) => o.uuid)), viewer.root)
+      : results();
     if (!mine.length) return;
     // All of them, not the last one. A stacked result is a bug this function is
     // also the repair for, so it must not leave one behind.
@@ -1394,7 +1416,11 @@ export function createRetopo({
     if (cursor >= 0) {
       const entry = history[cursor];
       await importPart(entry.path);
-      claimResult(viewer.parts.at(-1)?.object);
+      const back = viewer.parts.at(-1);
+      claimResult(back?.object);
+      if (back?.object && entry.identity) {
+        back.name = restoreIdentity(viewer.root, back.object, entry.identity);
+      }
       await dressResult(viewer.parts.at(-1)?.object, entry.path);
       last = entry.report;
       lastRun = { high: entry.high, low: entry.path };
@@ -1628,35 +1654,12 @@ export function createRetopo({
       }
     }
 
-    /*
-     * Which meshes the exporter is allowed to see.
-     *
-     * Two ways of saying it, and they answer different questions. **Visible**
-     * means "leave alone what I have hidden", which is subtractive and suits a
-     * model you have been pruning. **Selection** means "touch only this", which
-     * is additive and suits a model where you know exactly which part you want.
-     * Both end in the same place: a set of meshes marked not-visible for the
-     * length of the export and put straight back after.
-     */
-    const keep = (o) => {
-      const source = channels?.original?.get(o) ?? o.material;
-      const mats = (Array.isArray(source) ? source : [source]).filter(Boolean);
-      if (scope === "picked") {
-        return selection.has(o.uuid) || mats.some((m) => selection.has(m.uuid));
-      }
-      const hidden = new Set(
-        (channels?.materials?.() || []).filter((m) => m.hidden).map((m) => m.uuid)
-      );
-      // All or nothing per mesh: one carrying four materials with a single one
-      // hidden cannot be half exported without splitting its geometry.
-      return !mats.length || !mats.every((m) => hidden.has(m.uuid));
-    };
-
+    const covered = new Set(sourceMeshes());
     const touched = [];
     if (scope !== "picked" || selection.size) {
       viewer.root.traverse((o) => {
         if ((!o.isMesh && !o.isSkinnedMesh) || !o.visible) return;
-        if (!keep(o)) {
+        if (!covered.has(o)) {
           touched.push(o);
           o.visible = false;
         }
@@ -1673,11 +1676,78 @@ export function createRetopo({
     }
   }
 
-  /** The result is the source's own name, low poly: table.glb yields table_LP. */
-  const resultLabel = () => {
+  /**
+   * Exactly which meshes the current scope covers.
+   *
+   * Two ways of saying it, and they answer different questions. **Visible**
+   * means "leave alone what I have hidden", which is subtractive and suits a
+   * model you have been pruning. **Selection** means "touch only this", which
+   * is additive and suits a model where you know exactly which part you want.
+   *
+   * It used to be a predicate buried inside the export, used once, to decide
+   * what to hide. It is a list now because two other things need the same
+   * answer and must not compute it a second way: the result takes its *name*
+   * from these meshes, and a re-run replaces the low polys made from these
+   * meshes and no others. Three readers, one definition of "what this run is
+   * about".
+   *
+   * This mode's own output is never in it. Feeding a low poly back in as a
+   * source is how a second run came to count meshes the user never put there.
+   */
+  function sourceMeshes() {
+    const hidden = new Set(
+      (channels?.materials?.() || []).filter((m) => m.hidden).map((m) => m.uuid)
+    );
+    const mine = new Set();
+    for (const part of results()) part.object.traverse((o) => mine.add(o));
+
+    const list = [];
+    viewer.root.traverse((o) => {
+      if ((!o.isMesh && !o.isSkinnedMesh) || mine.has(o)) return;
+      // Whatever the scope says, the exporter is called with `onlyVisible`, so a
+      // hidden mesh reaches the engine under no setting at all. Tested here for
+      // every scope rather than only for "visible", or a hidden mesh that
+      // happened to be selected would be named as a source of a run it took no
+      // part in.
+      if (!o.visible) return;
+
+      const source = channels?.original?.get(o) ?? o.material;
+      const mats = (Array.isArray(source) ? source : [source]).filter(Boolean);
+
+      if (scope === "picked") {
+        // An empty selection is not an empty scope: the export leaves the scene
+        // alone in that case, so the run really does cover everything.
+        if (selection.size && !(selection.has(o.uuid) || mats.some((m) => selection.has(m.uuid))))
+          return;
+      } else if (scope === "visible") {
+        // All or nothing per mesh: one carrying four materials with a single one
+        // hidden cannot be half exported without splitting its geometry.
+        if (mats.length && mats.every((m) => hidden.has(m.uuid))) return;
+      }
+      list.push(o);
+    });
+    return list;
+  }
+
+  /** The document's own name, for a result that covers more than one mesh. */
+  const documentLabel = () => {
     const file = (sourcePath?.() || "").split(/[\\/]/).pop() || "modele";
-    return `${file.replace(/\.[^.]+$/, "")}_LP`;
+    return file.replace(/\.[^.]+$/, "");
   };
+
+  /**
+   * Give the freshly imported result its name and its link back to the source.
+   *
+   * The part *entry* is renamed alongside the object, because the two are read
+   * by different lists — the outliner walks the objects, the parts list shows
+   * the entry — and a result called `Head_LP` in one and `output.glb` in the
+   * other is the same confusion this whole change is about.
+   */
+  function nameResultPart(sources) {
+    const entry = viewer.parts.at(-1);
+    if (!entry?.object) return;
+    entry.name = nameResult(viewer.root, entry.object, sources, documentLabel());
+  }
 
   async function inputFor(dirs) {
     const p = sourcePath?.();
@@ -1720,6 +1790,11 @@ export function createRetopo({
       onBusy?.(true);
 
       const dirs = await tauri.core.invoke("retopo_workdir");
+      // Read before the export, while the scene is still as the user left it:
+      // the export hides half of it and puts it back, and a list taken during
+      // that window would describe the scene the exporter saw rather than the
+      // one the run is about.
+      const sources = sourceMeshes();
       const input = await inputFor(dirs);
 
       const verb = t(method === "isotropic" ? "rt.rebuilding" : "rt.decimating");
@@ -1755,10 +1830,13 @@ export function createRetopo({
       say(t("rt.loadingResult"), 1);
       // The previous result leaves before the new one arrives. Without this a
       // second run stacked a second low poly on the first, so the scene held
-      // three meshes claiming to be two and every count above was a lie.
-      dropResult();
-      await importPart(dirs.output, resultLabel());
+      // three meshes claiming to be two and every count above was a lie. Only
+      // the low polys of *these* meshes: on a multi-mesh scene the others are
+      // somebody else's work and this run has nothing to say about them.
+      dropResult(sources);
+      await importPart(dirs.output);
       claimResult(viewer.parts.at(-1)?.object);
+      nameResultPart(sources);
       last = r;
       // Both files stay named, so the bake can be redone on its own without
       // touching the geometry again.
@@ -1766,7 +1844,15 @@ export function createRetopo({
       // Anything ahead of the cursor is a branch nobody took; a new run replaces
       // it rather than leaving a redo that would jump to an unrelated result.
       history = history.slice(0, cursor + 1);
-      history.push({ path: dirs.output, high: input, report: r });
+      // The identity travels with the entry. Walking back to this step has to
+      // bring the name and the link back with it, or an undo would quietly turn
+      // `Casque_LP` into an unnamed import that no longer follows its source.
+      history.push({
+        path: dirs.output,
+        high: input,
+        report: r,
+        identity: snapshotIdentity(viewer.parts.at(-1)?.object),
+      });
       cursor = history.length - 1;
       await dressResult(viewer.parts.at(-1)?.object, dirs.output);
       reportOn(r);
@@ -1832,11 +1918,19 @@ export function createRetopo({
        * pushed: undo walks geometry, and a bake is not a step in that walk. It
        * would otherwise take two undos to get back one decimation.
        */
+      // Taken before the drop: a bake changes the pixels on a mesh the user has
+      // possibly renamed, and coming back as a fresh import would rename it to
+      // whatever the source is called now and drop its link on the way.
+      const identity = snapshotIdentity(results().at(-1)?.object);
       dropResult();
-      await importPart(dirs.rebake, resultLabel());
-      claimResult(viewer.parts.at(-1)?.object);
+      await importPart(dirs.rebake);
+      const baked = viewer.parts.at(-1);
+      claimResult(baked?.object);
+      if (baked?.object && identity) {
+        baked.name = restoreIdentity(viewer.root, baked.object, identity);
+      }
       lastRun = { high: lastRun.high, low: dirs.rebake };
-      if (cursor >= 0) history[cursor] = { ...history[cursor], path: dirs.rebake };
+      if (cursor >= 0) history[cursor] = { ...history[cursor], path: dirs.rebake, identity };
       last = { ...last, ...r, outputTriangles: r.outputTriangles || last.outputTriangles };
       reportOn(r, true);
       toast?.(t("rt.rebaked").replace("{s}", (r.millis / 1000).toFixed(1)));

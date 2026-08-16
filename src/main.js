@@ -16,7 +16,8 @@ import {
 import { createPrefs } from "./prefs.js";
 import { Navigation, ACTIONS } from "./viewer/navigation.js";
 import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
-import { selection } from "./selection.js";
+import { selection, decorId } from "./selection.js";
+import { adopt, renameNode } from "./naming.js";
 import { createTabs } from "./ui/tabs.js";
 import { setLang, initLang, applyStatic, currentLang, t } from "./i18n/index.js";
 
@@ -1019,6 +1020,11 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     ignoreDeadVertexColors(object);
     ensureAoUv(object);
     const stats = viewer.setModel(object, animations, label || "");
+    // A file is allowed to call two of its meshes the same thing, and plenty
+    // do. The outliner cannot, and neither can anything that names a result
+    // after its source: two rows reading `Cube` are two rows you cannot tell
+    // apart, and a low poly made from "the second one" has nothing to say.
+    adopt(viewer.root, object);
     /*
      * The veil comes down here, the instant there is something behind it.
      *
@@ -4021,7 +4027,11 @@ let altHeld = false;
 viewer.onGizmoAltDrag = (object) => {
   if (!altHeld || editMode !== "translate" || !object || object === viewer.pivotMarker) return;
   const clone = object.clone();
-  const entry = viewer.addPart(clone, `${selectedPart?.name || "objet"} copie`);
+  // `clone()` copies the name along with everything else, so the scene ended up
+  // holding two rows called `Head` and no way to say which one the handles were
+  // on. Numbered the way Blender numbers them: `Head`, then `Head.001`.
+  adopt(viewer.root, clone);
+  const entry = viewer.addPart(clone, clone.name || `${selectedPart?.name || "objet"} copie`);
   markDirty();
   selectedPart = entry;
   paintParts();
@@ -4341,6 +4351,10 @@ async function importPart(path, label) {
     fixColorSpaces(object);
     ignoreDeadVertexColors(object);
     ensureAoUv(object);
+    // Imported beside a model that may already hold these names, which is the
+    // common case rather than the odd one: importing the same file twice, or
+    // two exports of one asset, arrives with a full set of collisions.
+    adopt(viewer.root, object);
     const entry = viewer.addPart(object, name);
     markDirty();
     selectedPart = entry;
