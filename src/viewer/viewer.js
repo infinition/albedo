@@ -1217,6 +1217,8 @@ export class Viewer {
     if (!mode || !target) {
       this.gizmoReady = null;
       this.gizmoBuiltFor = null;
+      // Nothing stands for anything once the handles are away.
+      this._handleFor = null;
       if (this.gizmo) {
         this.gizmo.detach();
         this.gizmo.dispose();
@@ -1253,8 +1255,82 @@ export class Viewer {
     this.onGizmoChange = onChange;
     this.gizmo.setMode(mode);
     this.recentreOrigin(target);
-    this.gizmo.attach(target);
+    this.gizmo.attach(this.handleFor(target));
     this.invalidate();
+  }
+
+  /**
+   * What the handles actually hold, which is not always the target.
+   *
+   * `recentreOrigin` can put a *group's* origin in the middle of its own shape,
+   * by moving its children one way and itself the other. A leaf mesh has no
+   * children to move, and the tempting repair — translating the vertex buffer —
+   * destroys any geometry stored as quantised integers, which is most modern
+   * glTF. So the leaf keeps its origin and the handles are put on a stand-in
+   * placed at the middle of the shape.
+   *
+   * Whatever the stand-in is moved by, the mesh is moved by. The two matrices
+   * are remembered as the drag begins and the mesh is given `delta × start`,
+   * which is the same transform expressed about a different point — so a
+   * rotation turns the model on the spot rather than swinging it through an arc
+   * from an origin somewhere outside it.
+   */
+  handleFor(target) {
+    this._handleFor = null;
+    if (!target || target.children.length || !target.geometry) return target;
+
+    const box = new THREE.Box3().setFromObject(target);
+    if (box.isEmpty()) return target;
+    const centre = box.getCenter(new THREE.Vector3());
+    target.updateMatrixWorld(true);
+    // Already centred: a stand-in would only add a layer of arithmetic.
+    if (target.getWorldPosition(new THREE.Vector3()).distanceToSquared(centre) < 1e-10) {
+      return target;
+    }
+
+    if (!this.gizmoHandle) {
+      this.gizmoHandle = new THREE.Object3D();
+      this.gizmoHandle.name = "albedo:handle";
+      this.scene.add(this.gizmoHandle);
+    }
+    const handle = this.gizmoHandle;
+    target.matrixWorld.decompose(
+      new THREE.Vector3(),
+      handle.quaternion,
+      handle.scale
+    );
+    handle.position.copy(centre);
+    handle.updateMatrixWorld(true);
+
+    this._handleFor = target;
+    this._handleStart = handle.matrixWorld.clone();
+    this._targetStart = target.matrixWorld.clone();
+    return handle;
+  }
+
+  /**
+   * Carry the stand-in's movement onto the mesh it stands for.
+   *
+   * `delta = handleNow × handleStart⁻¹` in world space, applied to the target's
+   * own starting world matrix, then expressed back in its parent's space —
+   * because that is where a three.js object's position, quaternion and scale
+   * live.
+   */
+  followHandle() {
+    const target = this._handleFor;
+    const handle = this.gizmoHandle;
+    if (!target || !handle) return false;
+
+    const delta = handle.matrixWorld.clone().multiply(this._handleStart.clone().invert());
+    const world = delta.multiply(this._targetStart);
+    const parent = target.parent;
+    if (parent) {
+      parent.updateMatrixWorld(true);
+      world.premultiply(parent.matrixWorld.clone().invert());
+    }
+    world.decompose(target.position, target.quaternion, target.scale);
+    target.updateMatrixWorld(true);
+    return true;
   }
 
   /** The handles themselves, built once per camera. */
@@ -1281,6 +1357,8 @@ export class Viewer {
     // knowing what you started from and by how much it has moved is the whole
     // complaint about dragging a handle blind.
     this.gizmo.addEventListener("objectChange", () => {
+      // The stand-in moved: the mesh it stands for moves with it.
+      this.followHandle();
       if (this.gizmo.object) {
         const lightEntry = this.lights.find((l) => l.object === this.gizmo.object);
         if (lightEntry) {
@@ -1305,7 +1383,9 @@ export class Viewer {
       if (this.gizmo.object === this.fogAnchor && this.fogMarker) {
         this.fogMarker.position.copy(this.fogAnchor.position);
       }
-      this.onGizmoDrag?.("move", this.gizmo.object);
+      // The panel's number fields read the object being moved, which is the
+      // mesh rather than the stand-in holding the handles.
+      this.onGizmoDrag?.("move", this._handleFor || this.gizmo.object);
     });
     // Before the drag begins, so a duplication can swap the object out from
     // under the handles and the drag then moves the copy, Blender style.
@@ -1317,7 +1397,20 @@ export class Viewer {
       this.controls.enabled = !e.value;
       // Announced before and after, so whatever is keeping a history can take
       // its snapshot of the object as it was rather than as it ended up.
-      this.onGizmoDrag?.(e.value ? "start" : "end", this.gizmo.object);
+      /*
+       * The reference pair is re-taken at the end of a drag.
+       *
+       * Both matrices moved, so the next drag has to measure its delta from
+       * where things now are. Re-taken rather than rebuilt through `handleFor`,
+       * which would re-run its "is it already centred" test and could hand back
+       * the mesh itself mid-gesture, leaving the handles on a stand-in nothing
+       * follows any more.
+       */
+      if (!e.value && this._handleFor && this.gizmoHandle) {
+        this._handleStart = this.gizmoHandle.matrixWorld.clone();
+        this._targetStart = this._handleFor.matrixWorld.clone();
+      }
+      this.onGizmoDrag?.(e.value ? "start" : "end", this._handleFor || this.gizmo.object);
       if (!e.value && this.onGizmoChange) this.onGizmoChange(this.pedestalPlacing());
     });
   }
