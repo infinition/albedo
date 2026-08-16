@@ -5258,8 +5258,20 @@ window.addEventListener("keydown", (e) => {
     // one. Escape usually never reaches us, the webview eats it to release the
     // pointer, which the navigation already reads as the way out; this covers
     // the case where the capture was refused and fly mode has the keys only.
+    /*
+     * Escape lets go of things, in the order you are holding them.
+     *
+     * The handles first, then the selection, then fly mode. Clearing the
+     * selection was reachable only through the list's "Tout" button, which also
+     * reveals everything hidden — so somebody who merely wanted to stop pointing
+     * at one mesh had to undo their own isolation to do it. Selecting nothing is
+     * a state the whole application now depends on: it is what puts the handles
+     * away, and what makes the comparison fall back to the newest result rather
+     * than to whatever happened to be lit.
+     */
     case "Escape":
       if (editMode) setEditMode(null);
+      else if (selection.size) selection.clear();
       else hud.setMode("orbit");
       break;
     // G, R and S belong to the edit mode while it is on, and to the grid, the
