@@ -382,7 +382,12 @@
             shading is losing the thing you opened a wireframe to judge — and the
             bar in Retopo mirrors this switch rather than owning a second one.
           -->
-          <label class="check"><input type="checkbox" id="opt-wireframe" /><span data-i18n="pane.wireframe">Fil de fer (W)</span></label>
+          <div class="chips">
+          <label class="chip" style="--tint:#7cc4ff" title="Fil de fer (W)">
+            <input type="checkbox" id="opt-wireframe" />
+            <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z"/><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7"/></svg>
+            <span data-i18n="pane.wireframe">Fil de fer</span>
+          </label>
           <!--
             Checked in the markup, because dark is the default the preferences
             already declare (`wireDark: true`) and the box was the one place
@@ -391,10 +396,26 @@
             checkbox, so an unchecked default meant the first wireframe of every
             session came up in light lines whatever had been saved.
           -->
-          <label class="check" id="opt-wire-dark-row"><input type="checkbox" id="opt-wire-dark" checked /><span data-i18n="pane.wireDark">Traits sombres</span></label>
-          <label class="check"><input type="checkbox" id="opt-grid" checked /><span data-i18n="pane.grid">Grille</span></label>
-          <label class="check"><input type="checkbox" id="opt-bounds" /><span data-i18n="pane.bounds">Boîte englobante</span></label>
-          <label class="check"><input type="checkbox" id="opt-skeleton" /><span data-i18n="pane.skeleton">Squelette</span></label>
+          <label class="chip" id="opt-wire-dark-row" style="--tint:#8899aa">
+            <input type="checkbox" id="opt-wire-dark" checked />
+            <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+            <span data-i18n="pane.wireDark">Traits sombres</span>
+          </label>
+          <label class="chip" style="--tint:#7ee0c0">
+            <input type="checkbox" id="opt-grid" checked />
+            <svg viewBox="0 0 24 24"><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+            <span data-i18n="pane.grid">Grille</span>
+          </label>
+          <label class="chip" style="--tint:#ffc061">
+            <input type="checkbox" id="opt-bounds" />
+            <svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>
+            <span data-i18n="pane.bounds">Boîte</span>
+          </label>
+          <label class="chip" style="--tint:#ff9f7a">
+            <input type="checkbox" id="opt-skeleton" />
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M12 7v6M8 19l4-6 4 6M7 10h10"/></svg>
+            <span data-i18n="pane.skeleton">Squelette</span>
+          </label>
           <!--
             Here, among the things that say what is drawn, and unchecked.
 
@@ -404,7 +425,12 @@
             marker of the light you are editing is the only one on screen, which
             is the one you asked for.
           -->
-          <label class="check"><input type="checkbox" id="opt-lights-visible" /><span data-i18n="pane.lightsAlways">Toujours montrer les lumières</span></label>
+          <label class="chip" style="--tint:#ffe066">
+            <input type="checkbox" id="opt-lights-visible" />
+            <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3 11v1h6v-1a6 6 0 0 0-3-11z"/></svg>
+            <span data-i18n="pane.lightsAlways">Lumières</span>
+          </label>
+          </div>
           <!--
             Exposure is in Effets now. It sat here, among the grid and the
             bounding box, which are answers to "what is drawn"; how bright the
@@ -573,8 +599,18 @@
                   </div>
                 </div>
                 <div class="row" style="margin-top:6px">
-                  <label class="check"><input type="checkbox" id="env-background" checked /><span data-i18n="pane.envBg">Fond visible</span></label>
-                  <label class="check"><input type="checkbox" id="env-lighting" checked /><span data-i18n="pane.envLight">Éclaire la scène</span></label>
+                  <div class="chips">
+                    <label class="chip" style="--tint:#7cc4ff">
+                      <input type="checkbox" id="env-background" checked />
+                      <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M3 15l5-4 4 3 3-2 6 5"/></svg>
+                      <span data-i18n="pane.envBg">Fond visible</span>
+                    </label>
+                    <label class="chip" style="--tint:#ffe066">
+                      <input type="checkbox" id="env-lighting" checked />
+                      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+                      <span data-i18n="pane.envLight">Éclaire</span>
+                    </label>
+                  </div>
                 </div>
                 <label class="field">
                   <span><span data-i18n="pane.envIntensity">Intensité de l'éclairage</span> <span id="env-intensity-value" class="mono">1.0</span></span>
@@ -828,9 +864,25 @@
               <button id="shot-x4" class="seg" type="button" data-i18n-title="pane.shotX4Title" title="Le quadruple">×4</button>
             </div>
           </div>
-          <label class="check"><input type="checkbox" id="shot-alpha" /><span data-i18n="pane.shotAlpha">Fond détouré</span></label>
-          <label class="check"><input type="checkbox" id="shot-grid" /><span data-i18n="pane.shotGrid">Garder la grille</span></label>
-          <label class="check"><input type="checkbox" id="shot-stand" checked /><span data-i18n="pane.shotStand">Garder le socle</span></label>
+          <!-- What goes in the picture, as three chips on one line rather than
+               three ticked lines saying the same. -->
+          <div class="chips">
+            <label class="chip" style="--tint:#7ee0c0">
+              <input type="checkbox" id="shot-alpha" />
+              <svg viewBox="0 0 24 24"><path d="M4 4h8v8H4zM12 12h8v8h-8z"/><path d="M12 4h8v8h-8zM4 12h8v8H4z" opacity=".35"/></svg>
+              <span data-i18n="pane.shotAlpha">Détouré</span>
+            </label>
+            <label class="chip" style="--tint:#7cc4ff">
+              <input type="checkbox" id="shot-grid" />
+              <svg viewBox="0 0 24 24"><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+              <span data-i18n="pane.shotGrid">Grille</span>
+            </label>
+            <label class="chip" style="--tint:#ffc061">
+              <input type="checkbox" id="shot-stand" checked />
+              <svg viewBox="0 0 24 24"><path d="M4 17h16M7 17V9h10v8"/><path d="M9 9V6h6v3"/></svg>
+              <span data-i18n="pane.shotStand">Socle</span>
+            </label>
+          </div>
           <div class="row">
             <button id="shot-save" class="wide" type="button" data-i18n="pane.shotSave">Enregistrer la photo</button>
           </div>

@@ -1129,7 +1129,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     showDimensions();
     paintOrientation();
     paintParts();
-    paintChannelThumbs();
+    forgetChannelThumbs();
     paintSaveButtons();
     $("btn-export").disabled = false;
     $("btn-export-obj").disabled = false;
@@ -1966,10 +1966,35 @@ function stepChannel(delta) {
   applyChannel(CHANNELS[next].id);
 }
 
+/**
+ * Each channel gets a colour, and it is the colour of the thing it shows.
+ *
+ * Thirteen buttons in one grey is thirteen buttons you read. A normal map is
+ * violet because that is what a normal map looks like; roughness and metalness
+ * are the two ends of a grey scale; emissive is the colour of light. Once the
+ * association is made, the grid is aimed at rather than read.
+ */
+const CHANNEL_TINT = {
+  shaded: "#ffffff",
+  unlit: "#ffd9a0",
+  albedo: "#ff9f7a",
+  normalMap: "#8f9dff",
+  roughness: "#c8ccd4",
+  metalness: "#9fd8ff",
+  ao: "#8a8f99",
+  emissive: "#ffe066",
+  opacity: "#7ee0c0",
+  normalGeom: "#b08cff",
+  uv: "#6ad4ff",
+  clay: "#c9a98a",
+  clayUnlit: "#a8917a",
+};
+
 for (const c of CHANNELS) {
   const b = document.createElement("button");
   b.type = "button";
   b.dataset.id = c.id;
+  b.style.setProperty("--tint", CHANNEL_TINT[c.id] || "#9aa6b8");
   const img = document.createElement("img");
   img.className = "channel-thumb";
   img.alt = "";
@@ -1977,6 +2002,11 @@ for (const c of CHANNELS) {
   label.textContent = t(c.labelKey);
   b.append(img, label);
   b.addEventListener("click", () => applyChannel(c.id));
+  // Drawn when it is looked at, not when the model loads. See `channelThumb`.
+  b.addEventListener("pointerenter", () => channelThumb(c.id));
+  // A pointer never arrives on a touch screen or from the keyboard, so focus
+  // counts as looking at it too.
+  b.addEventListener("focus", () => channelThumb(c.id));
   $("channels").appendChild(b);
 }
 // The channel list is built once but its words change with the language.
@@ -1989,17 +2019,45 @@ window.addEventListener("i18n", () => {
 });
 applyChannel("shaded");
 
-/** A small preview of the model per channel, drawn in the channel list. */
-async function paintChannelThumbs() {
-  if (!viewer.current) return;
+/**
+ * One channel's preview, drawn the first time anybody looks at that channel.
+ *
+ * It used to draw all thirteen at once, on every load. Each one swaps a
+ * stand-in material onto every mesh in the scene, renders the model offscreen,
+ * and swaps back: thirteen full material passes and thirteen renders before the
+ * first frame of a model somebody may only have wanted to look at. On a heavy
+ * file that is the whole of the delay between dropping it and seeing it.
+ *
+ * Drawn on hover instead, once, and kept. Hovering is the moment the picture is
+ * about to be useful, and it is also the only moment anyone can tell it was not
+ * there a second ago.
+ */
+const channelThumbs = new Set();
+
+function channelThumb(id) {
+  if (!viewer.current || channelThumbs.has(id)) return;
+  const button = $("channels").querySelector(`[data-id="${id}"]`);
+  if (!button) return;
+  channelThumbs.add(id);
   const prev = currentChannel;
+  // Through `channels.apply` rather than `applyChannel`: the latter repaints the
+  // toolbar, the panel and the wireframe, which for a 32 pixel picture that is
+  // about to be undone is a great deal of work about nothing.
+  channels.apply(id);
+  button.querySelector(".channel-thumb")?.setAttribute("src", viewer.preview(32));
+  channels.apply(prev);
+  viewer.invalidate();
+}
+
+/** A new model invalidates every preview: they are pictures of the old one. */
+function forgetChannelThumbs() {
+  channelThumbs.clear();
   for (const b of $("channels").children) {
-    const id = b.dataset.id;
-    channels.apply(id);
-    const url = viewer.preview(32);
-    b.querySelector(".channel-thumb")?.setAttribute("src", url);
+    b.querySelector(".channel-thumb")?.removeAttribute("src");
   }
-  applyChannel(prev);
+  // The one already in force is the one on screen, so it costs nothing to know
+  // and is the only one that would look wrong left blank.
+  channelThumb(currentChannel);
 }
 
 // --- display toggles ------------------------------------------------------

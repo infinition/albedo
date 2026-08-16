@@ -916,14 +916,35 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
 }
 
 #inspector section { margin-top: 18px; }
+/*
+ * Section headings that separate as well as name.
+ *
+ * They were grey uppercase text with nine pixels under them, which on a panel of
+ * six sections gives six labels floating in one continuous column: nothing says
+ * where one section stops. A rule that runs out from the title does the
+ * separating, and costs no height at all.
+ */
 #inspector h2 {
-  margin: 0 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--muted);
+  white-space: nowrap;
 }
+#inspector h2::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line), transparent);
+}
+/* Sections get air between them rather than inside them, so a heading sits with
+   the controls it names instead of halfway between two groups. */
+#panes section + section { margin-top: 14px; }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .grid button {
@@ -934,20 +955,108 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
   border-radius: 6px;
 }
 .grid button.active { background: var(--accent); color: #fff; }
-/* The channel list carries a small preview of the model per channel. */
-#channels button { display: flex; align-items: center; gap: 7px; }
-#channels button.active .channel-thumb { border-color: rgb(255 255 255 / 0.5); }
+/*
+ * The channels: thirteen tiles, each in the colour of the thing it shows.
+ *
+ * They were thirteen identical grey rows, and a list of thirteen identical
+ * things is a list you read from the top every time. A normal map is violet, UV
+ * is cyan, emissive is the colour of light: the tint is on the thumbnail's
+ * frame and on the label, so the grid becomes something you aim at.
+ *
+ * The preview itself is empty until the tile is hovered — thirteen offscreen
+ * renders on every load was most of the pause between dropping a file and
+ * seeing it. An empty frame in that colour is a perfectly good tile meanwhile.
+ */
+#channels { grid-template-columns: 1fr 1fr; gap: 3px; }
+#channels button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+#channels button:hover {
+  background: rgb(255 255 255 / 0.05);
+  border-color: color-mix(in srgb, var(--tint) 35%, transparent);
+}
+#channels button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+#channels button.active {
+  background: color-mix(in srgb, var(--tint) 20%, transparent);
+  border-color: color-mix(in srgb, var(--tint) 60%, transparent);
+  color: var(--fg);
+}
+#channels button.active span { font-weight: 600; }
+#channels button.active .channel-thumb { border-color: var(--tint); }
 .channel-thumb {
   width: 22px;
   height: 22px;
   border-radius: 4px;
-  border: 1px solid var(--line, #2a2e35);
+  /* The frame carries the colour, so a tile means something before its picture
+     has been drawn — which, being drawn on hover, is most of the time. */
+  border: 1px solid color-mix(in srgb, var(--tint) 45%, var(--line));
   background: #16191e;
   object-fit: cover;
   flex: none;
 }
 .grid.axes { grid-template-columns: repeat(3, 1fr); }
 .grid.axes button { text-align: center; font-size: 11px; padding: 5px 2px; }
+
+/*
+ * Toggles as a row of chips rather than as a column of tick boxes.
+ *
+ * A stack of six `.check` rows is six lines of the panel spent on six words and
+ * six identical squares, and reading it means reading all six. As chips they
+ * wrap into two lines, each carries the glyph of what it does, and the ones that
+ * are *on* are the ones with colour in them — which is the only question anybody
+ * asks of a row of toggles.
+ *
+ * Still a real checkbox underneath, so the label, the keyboard and the form
+ * state all work exactly as they did.
+ */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.chip:hover { background: rgb(255 255 255 / 0.05); color: var(--fg); }
+.chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+.chip svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+  opacity: 0.55;
+}
+.chip:has(input:checked) {
+  background: color-mix(in srgb, var(--tint, var(--accent)) 20%, transparent);
+  border-color: color-mix(in srgb, var(--tint, var(--accent)) 55%, transparent);
+  color: var(--fg);
+}
+.chip:has(input:checked) svg { opacity: 1; color: var(--tint, var(--accent)); }
+.chip:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* `display: inline-flex` beats the `hidden` attribute, and two of these chips
+   are hidden by code — the wireframe colour when there are no lines, and
+   "éclaire" on the studio probe, which always does. */
+.chip[hidden] { display: none; }
 
 .check {
   display: flex;
