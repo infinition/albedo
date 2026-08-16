@@ -202,7 +202,18 @@ function snapThumb() {
   }
 }
 
-/** The look settings, per document: how this scene is shown. */
+/**
+ * The look settings, per document: how *this* scene is shown.
+ *
+ * Everything in here is a property of the picture rather than of the
+ * application, which is the line this list is drawn along. A second model opened
+ * beside the first starts from the defaults — its own lights, its own backdrop,
+ * its own effects — because inheriting a rig somebody built for another asset is
+ * inheriting a set of decisions that were never about this one.
+ *
+ * The preferences still exist and still matter: they are what a *session* starts
+ * from. What they stopped being is what every scene shares.
+ */
 function captureViewState() {
   return {
     channel: currentChannel,
@@ -213,13 +224,22 @@ function captureViewState() {
     grid: $("opt-grid").checked,
     bounds: $("opt-bounds").checked,
     skeleton: $("opt-skeleton").checked,
+    lightsAlwaysVisible: $("opt-lights-visible").checked,
     exposure: Number($("opt-exposure")?.value || 0),
     environment: viewer.envKind,
     environmentPath: prefs?.get?.("environmentPath") ?? null,
     envBackground: viewer.showEnvBackground,
     envLighting: viewer.envLighting,
-    envIntensity: prefs?.get?.("environmentIntensity") ?? 1.0,
+    envIntensity: viewer.scene.environmentIntensity ?? 1,
+    bgBrightness: Number($("bg-brightness")?.value ?? 1),
     lights: viewer.lightState(),
+    // The stand travels with the scene it was chosen for: a plinth picked to sit
+    // a figurine on has nothing to say about the next file.
+    pedestal: prefs?.get?.("pedestal") ?? null,
+    pedestalTransform: viewer.pedestalPlacing(),
+    // The whole effects stack, which used to be one global set shared by every
+    // tab: grading a photograph in one left the next model graded.
+    post: structuredClone(postState),
   };
 }
 
@@ -238,17 +258,32 @@ async function restoreViewState(s) {
   viewer.setBounds(s.bounds);
   $("opt-skeleton").checked = s.skeleton;
   viewer.setSkeleton(s.skeleton);
+  $("opt-lights-visible").checked = !!s.lightsAlwaysVisible;
+  viewer.setAlwaysShowLights(!!s.lightsAlwaysVisible);
   $("opt-exposure").value = String(s.exposure);
   viewer.setExposure(s.exposure);
   if (s.environment !== "studio") await useEnvironment(s.environment, s.environmentPath, false);
   else await viewer.setEnvironment("studio");
   viewer.showEnvBackground = s.envBackground;
+  $("env-background").checked = s.envBackground !== false;
   viewer.setEnvironmentLighting(s.envLighting);
   viewer.setEnvironmentIntensity(s.envIntensity);
-  viewer.setKeyLight(s.keyLight);
-  viewer.setKeyLightPower(s.keyLightPower);
-  viewer.setKeyLightColour(s.keyLightColour);
+  $("env-intensity").value = String(s.envIntensity);
+  $("bg-brightness").value = String(s.bgBrightness ?? 1);
+  viewer.setBackgroundBrightness(s.bgBrightness ?? 1);
+  // No `setKeyLight`/`setKeyLightPower`/`setKeyLightColour` here any more. They
+  // wrote to light zero from three fields `captureViewState` never wrote, so
+  // they were three calls acting on `undefined` — and `applyLights` on the very
+  // next line rebuilds every light from scratch anyway, so even when they
+  // happened to do something, they did it to an object about to be replaced.
   viewer.applyLights(s.lights || []);
+  if (s.pedestal) {
+    await usePedestal(s.pedestal, false);
+    if (s.pedestalTransform) viewer.setPedestalTransform(s.pedestalTransform);
+  } else {
+    viewer.clearPedestal();
+  }
+  await applyPost(s.post);
   paintViewbar();
   paintLights();
 }
@@ -265,14 +300,22 @@ async function resetViewSettings() {
   viewer.setBounds(false);
   $("opt-skeleton").checked = false;
   viewer.setSkeleton(false);
+  $("opt-lights-visible").checked = false;
+  viewer.setAlwaysShowLights(false);
   $("opt-exposure").value = "1";
   viewer.setExposure(1);
   await viewer.setEnvironment("studio");
   viewer.setEnvironmentIntensity(1);
-  viewer.setKeyLight(true);
-  viewer.setKeyLightPower(1.6);
-  viewer.setKeyLightColour("#ffffff");
+  $("env-intensity").value = "1";
+  $("bg-brightness").value = "1";
+  viewer.setBackgroundBrightness(1);
+  viewer.showEnvBackground = true;
+  $("env-background").checked = true;
+  // Empty, which `applyLights` reads as "give me the standard rig": one key
+  // light, where the standard rig puts it.
   viewer.applyLights([]);
+  viewer.clearPedestal();
+  await applyPost(structuredClone(POST_DEFAULTS));
   paintViewbar();
   paintLights();
 }
@@ -3321,15 +3364,63 @@ const POST_CONTROLS = [
   ["aa", "on", "aa-on"],
 ];
 
+/**
+ * What every control in the pane is set to, mirrored here.
+ *
+ * Read straight off the markup, once, before anything has had a chance to write
+ * to it. That makes it the *defaults*, which is what a new scene has to go back
+ * to: an effects stack is a property of the picture being made, not of the
+ * application, so opening a second model beside the first must not inherit its
+ * bloom.
+ */
+const POST_DEFAULTS = (() => {
+  const bag = {};
+  for (const [group, key, id] of POST_CONTROLS) {
+    const el = $(id);
+    if (!el) continue;
+    bag[group] ??= {};
+    bag[group][key] = el.type === "checkbox" ? el.checked : Number(el.value);
+  }
+  return bag;
+})();
+
+/** The live state, so a document can be handed a copy of it. */
+let postState = structuredClone(POST_DEFAULTS);
+
 let postPending = null;
 async function setPost(group, key, value) {
-  const saved = { ...(prefs.get("post") || {}) };
-  saved[group] = { ...(saved[group] || {}), [key]: value };
-  prefs.set("post", saved);
+  postState[group] = { ...(postState[group] || {}), [key]: value };
+  // Still written to the preferences, which is what a *new session* starts
+  // from. The document carries its own copy from here on.
+  prefs.set("post", structuredClone(postState));
   // One chain, even if three sliders move before it has finished loading
   postPending ||= viewer.effects();
   const fx = await postPending;
   fx.set(group, key, value);
+  viewer.invalidate();
+}
+
+/** Put a whole effects stack on, controls and chain together. */
+async function applyPost(bag) {
+  postState = structuredClone(bag || POST_DEFAULTS);
+  for (const [group, key, id] of POST_CONTROLS) {
+    const el = $(id);
+    const value = postState[group]?.[key];
+    if (!el || value === undefined) continue;
+    if (el.type === "checkbox") el.checked = !!value;
+    else el.value = String(value);
+  }
+  for (const box of document.querySelectorAll(".fx-switch")) paintFxCard(box);
+  refreshSliderValues();
+
+  // A stack that is entirely off, on a session that never built the chain, is
+  // nothing to do: bringing a composer in to switch everything off is the one
+  // cost this whole lazy arrangement exists to avoid.
+  const wanted = Object.values(postState).some((g) => g && g.on);
+  if (!wanted && !postPending) return;
+  postPending ||= viewer.effects();
+  const fx = await postPending;
+  fx.apply(postState);
   viewer.invalidate();
 }
 
@@ -3437,25 +3528,11 @@ for (const head of document.querySelectorAll(".fx-head")) {
 // Restore what was left on, and only then: a saved set that is entirely off
 // must not drag the chain in at launch.
 void shellReady.then(() => {
+  // The saved set is merged over the markup defaults rather than used as-is: a
+  // set written before a control existed says nothing about it, and reading it
+  // raw would leave that control at whatever `undefined` does to it.
   const saved = prefs.get("post");
-  const wanted = saved && Object.values(saved).some((g) => g && g.on);
-  for (const [group, key, id] of POST_CONTROLS) {
-    const value = saved?.[group]?.[key];
-    if (value === undefined || !$(id)) continue;
-    if ($(id).type === "checkbox") $(id).checked = !!value;
-    else $(id).value = String(value);
-  }
-  // The cards catch up with the switches, including the ones no saved set
-  // mentions: `aa` is ticked in the markup, so its card is on from the start.
-  for (const box of document.querySelectorAll(".fx-switch")) paintFxCard(box);
-  refreshSliderValues();
-  if (wanted) {
-    postPending = viewer.effects();
-    postPending.then((fx) => {
-      fx.apply(saved);
-      viewer.invalidate();
-    });
-  }
+  void applyPost({ ...structuredClone(POST_DEFAULTS), ...structuredClone(saved || {}) });
 });
 
 
