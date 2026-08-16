@@ -12,6 +12,7 @@ import { ICONS } from "./icons.js";
 import { selection } from "../selection.js";
 import {
   byUuid,
+  highPolyOf,
   lowPolyOf,
   nameResult,
   restoreIdentity,
@@ -1046,30 +1047,90 @@ export function createRetopo({
     el.splitLine.style.left = `${r.left - box.left + t * r.width}px`;
   }
 
+  /** True when `root` is, or holds, `node`. */
+  function holds(root, node) {
+    let found = false;
+    root?.traverse?.((o) => {
+      if (o === node) found = true;
+    });
+    return found;
+  }
+
+  /**
+   * The two meshes a comparison is between.
+   *
+   * "The first part and the last part" was the answer while a run meant the
+   * whole scene: there was one source and one result and the order settled it.
+   * On a scene of nine meshes with three of them retopologised, first and last
+   * name two objects with no relationship at all — so "voir le résultat
+   * uniquement" hid an arbitrary mesh and showed another.
+   *
+   * The pair comes from the selection, resolved through the high/low link, which
+   * is the same question the cage asks: point at either half and the comparison
+   * is about that couple. With nothing selected it falls back to the newest
+   * result and the mesh it was made from, which is what a run has just produced.
+   */
+  function comparePair() {
+    const mine = results().map((p) => p.object);
+    if (!mine.length) return null;
+
+    const pairFor = (low) => {
+      const high = highPolyOf(viewer.root, low);
+      return high ? { high, low } : null;
+    };
+
+    for (const id of selection.ids) {
+      const node = byUuid(viewer.root, id);
+      if (!node) continue;
+      // A high poly was chosen: compare it with what came off it.
+      const low = lowPolyOf(viewer.root, node);
+      if (low) {
+        const owner = mine.find((o) => holds(o, low)) || low;
+        return { high: node, low: owner };
+      }
+      // Or a result was chosen, directly or through a mesh inside it.
+      const owner = mine.find((o) => holds(o, node));
+      if (owner) {
+        const pair = pairFor(owner);
+        if (pair) return pair;
+      }
+    }
+    return pairFor(mine.at(-1));
+  }
+
+  /** Nodes whose visibility a comparison mode is holding down. */
+  let abTouched = [];
+
   function setAB(mode) {
     compareMode = mode;
     const parts = viewer.parts || [];
     unghost();
-    for (const p of parts) {
-      p.object.visible = true;
-      setSide(p.object, 0);
-    }
+    // Only what a comparison hid comes back. Forcing every part visible would
+    // undo the outliner's own eyes, which is a different promise made by a
+    // different control.
+    for (const node of abTouched) node.visible = true;
+    abTouched = [];
+    for (const p of parts) setSide(p.object, 0);
+
     el.splitLine.hidden = mode !== "split";
     if (mode === "split") paintSplit();
 
-    // With nothing to compare against, every mode is "both".
-    const src = parts[0]?.object;
-    const res = parts.length > 1 ? parts.at(-1).object : null;
-    if (src && res) {
-      if (mode === "source") res.visible = false;
-      else if (mode === "result") src.visible = false;
+    const pair = comparePair();
+    if (pair) {
+      const { high, low } = pair;
+      const hide = (node) => {
+        node.visible = false;
+        abTouched.push(node);
+      };
+      if (mode === "source") hide(low);
+      else if (mode === "result") hide(high);
       else if (mode === "none") {
-        src.visible = false;
-        res.visible = false;
+        hide(high);
+        hide(low);
       } else if (mode === "split") {
-        setSide(src, -1);
-        setSide(res, 1);
-      } else if (mode === "ghost") ghost(src);
+        setSide(high, -1);
+        setSide(low, 1);
+      } else if (mode === "ghost") ghost(high);
     }
     viewer.invalidate?.();
   }
@@ -1129,9 +1190,15 @@ export function createRetopo({
    * result to compare, and it hands the mode back exactly what it found.
    */
   let peekPrev = null;
+  /*
+   * Hold X to see the other half of the pair.
+   *
+   * It reveals the high poly of whatever is selected, because `setAB` resolves
+   * the pair from the selection — so on a scene with three retopologies, X shows
+   * the source of the one being judged rather than of whichever ran last.
+   */
   function peekAb() {
-    const parts = viewer.parts || [];
-    if (peekPrev !== null || parts.length < 2) return;
+    if (peekPrev !== null || !comparePair()) return;
     peekPrev = compareMode;
     setAB("source");
     el.peek.setAttribute("aria-pressed", "true");
