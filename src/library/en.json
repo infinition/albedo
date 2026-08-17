@@ -23,5 +23,7 @@
   "lib.expand": "Expand",
   "lib.allLibrary": "The whole library",
   "lib.tagHint": "Select an item to tag it.",
-  "lib.allFormats": "All formats"
+  "lib.allFormats": "All formats",
+  "lib.removeTagOne": "Remove",
+  "lib.removeTagMany": "Remove from {n} items"
 }

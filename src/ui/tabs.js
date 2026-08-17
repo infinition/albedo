@@ -18,6 +18,8 @@
  * and a full width title bar would be the first thing to break that.
  */
 
+import { t } from "../i18n/index.js";
+
 const MAX_TITLE = 28;
 
 export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
@@ -27,7 +29,7 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
   const rail = document.createElement("div");
   rail.className = "tabs-rail";
   rail.setAttribute("role", "tablist");
-  rail.setAttribute("aria-label", "Modèles ouverts");
+  rail.setAttribute("aria-label", t("tabs.openModels"));
 
   /*
    * Two arrows, and they only exist when there is somewhere to go.
@@ -54,18 +56,31 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
     });
     return b;
   };
-  const back = arrow("left", "M15 6l-6 6 6 6", "Onglets précédents");
-  const fwd = arrow("right", "M9 6l6 6-6 6", "Onglets suivants");
+  const back = arrow("left", "M15 6l-6 6 6 6", t("tabs.prevTitle"));
+  const fwd = arrow("right", "M9 6l6 6-6 6", t("tabs.nextTitle"));
 
   const add = document.createElement("button");
   add.type = "button";
   add.className = "tabs-new";
-  add.title = "Nouvel onglet vide, pour composer une scène (Ctrl+T)";
-  add.setAttribute("aria-label", "Nouvel onglet");
+  add.title = t("tabs.newTitle");
+  add.setAttribute("aria-label", t("tabs.newAria"));
   add.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>';
   add.addEventListener("click", () => onNew?.());
 
   host.append(back, rail, fwd, add);
+
+  // The strip is built once; these four are outside the per-paint loop below,
+  // so a language switch has to reach them by hand.
+  window.addEventListener("i18n", () => {
+    rail.setAttribute("aria-label", t("tabs.openModels"));
+    back.title = t("tabs.prevTitle");
+    back.setAttribute("aria-label", t("tabs.prevTitle"));
+    fwd.title = t("tabs.nextTitle");
+    fwd.setAttribute("aria-label", t("tabs.nextTitle"));
+    add.title = t("tabs.newTitle");
+    add.setAttribute("aria-label", t("tabs.newAria"));
+    paint(lastDocs, lastActive);
+  });
 
   /**
    * Whether the rail has anything hidden off either end, and say so.
@@ -140,7 +155,7 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
          * gesture, and until now it did nothing. Double-clicking the tab already
          * does the same; this is the version you find without being told.
          */
-        eye.title = "Garder cet onglet : le prochain aperçu en ouvrira un autre";
+        eye.title = t("tabs.keepTitle");
         eye.addEventListener("click", (e) => {
           e.stopPropagation();
           onKeep?.(doc.id);
@@ -181,9 +196,9 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
       // The whole path, because two files called `scene.glb` in two folders is
       // the ordinary case and the tab can only show one of those words.
       tab.title = doc.dirty
-        ? `${doc.path || label} · modifié`
+        ? t("tabs.titleModified").replace("{path}", doc.path || label)
         : doc.preview
-          ? `${doc.path || label} · aperçu, remplacé par le prochain modèle regardé`
+          ? t("tabs.titlePreview").replace("{path}", doc.path || label)
           : doc.path || label;
 
       /*
@@ -200,8 +215,8 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
       const shut = document.createElement("button");
       shut.type = "button";
       shut.className = "tabs-close";
-      shut.title = "Fermer cet onglet";
-      shut.setAttribute("aria-label", `Fermer ${label}`);
+      shut.title = t("tabs.closeTitle");
+      shut.setAttribute("aria-label", t("tabs.closeAria").replace("{label}", label));
       shut.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>';
       shut.addEventListener("click", (e) => {
         e.stopPropagation();

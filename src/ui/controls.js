@@ -1,4 +1,5 @@
 import { ACTIONS } from "../viewer/navigation.js";
+import { t } from "../i18n/index.js";
 
 /**
  * Overlay wiring: navigation, framing, fullscreen, the inspector panel, device
@@ -24,11 +25,7 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
     const free = mode === "fly";
     $("nav-free").classList.toggle("active", free);
     $("nav-free").setAttribute("aria-pressed", String(free));
-    onNotice(
-      mode === "fly"
-        ? "Vol : ZQSD/WASD, bouton gauche maintenu pour regarder, Espace monte, Maj descend, molette règle la vitesse, Échap revient en orbite"
-        : ""
-    );
+    onNotice(mode === "fly" ? t("toast.flyHelp") : "");
   };
   nav.onMode = paintMode;
   paintMode(nav.mode);
@@ -93,9 +90,9 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
     }
     try {
       const name = await nav.connectSpaceMouse();
-      if (!name) onNotice("Aucun périphérique choisi");
+      if (!name) onNotice(t("toast.noDeviceChosen"));
     } catch (e) {
-      onNotice(`SpaceMouse : ${e.message}`);
+      onNotice(t("toast.spacemouseError").replace("{msg}", e.message));
     }
   });
 
@@ -145,7 +142,7 @@ function wireDeviceSettings(nav, onChange = () => {}) {
     const on = document.createElement("input");
     on.type = "checkbox";
     on.checked = cfg.on?.[key] !== false;
-    on.title = `Écouter ${label}`;
+    on.title = t("pane.smListenTitle").replace("{label}", label);
 
     const name = document.createElement("span");
     name.className = "axis-name";
@@ -159,7 +156,7 @@ function wireDeviceSettings(nav, onChange = () => {}) {
     gain.step = "0.05";
     gain.value = String(cfg.gain?.[key] ?? 1);
     gain.dataset.novalue = "";
-    gain.title = `Vitesse de ${label}`;
+    gain.title = t("pane.smSpeedTitle").replace("{label}", label);
 
     const value = document.createElement("span");
     value.className = "axis-value mono";
@@ -175,7 +172,7 @@ function wireDeviceSettings(nav, onChange = () => {}) {
     flip.type = "button";
     flip.className = "seg";
     flip.textContent = "±";
-    flip.title = `Inverser ${label}`;
+    flip.title = t("pane.smInvertTitle").replace("{label}", label);
     flip.classList.toggle("active", !!cfg.invert[key]);
 
     on.addEventListener("change", () => {

@@ -757,7 +757,7 @@ let wireOnlyOn = false;
 $("vb-wire-only").addEventListener("click", () => {
   const on = $("vb-wire-only").getAttribute("aria-pressed") !== "true";
   setWireOnly(on);
-  toast(on ? "Fil de fer seul" : "Faces rendues");
+  toast(t(on ? "toast.wireOnlyOn" : "toast.facesRendered"));
 });
 
 $("vb-wire-dark").addEventListener("click", async () => {
@@ -945,7 +945,7 @@ const nav = new Navigation(viewer, {
     // stays readable instead of flashing the same number a hundred times.
     if (deg !== lastFovToast) {
       lastFovToast = deg;
-      toast(`Champ ${deg}°`);
+      toast(t("toast.fov").replace("{deg}", deg));
     }
     prefs.set("fov", deg);
   },
@@ -953,7 +953,7 @@ const nav = new Navigation(viewer, {
   onEnvRotate: (deg) => {
     $("env-rotation").value = String(deg);
     $("rot-value").textContent = `${deg}°`;
-    toast(`Environnement ${deg}°`);
+    toast(t("toast.envRotationDeg").replace("{deg}", deg));
     prefs.set("environmentRotation", deg);
   },
   onLightRotate: (entry) => {
@@ -972,7 +972,7 @@ viewer.onFrame = (dt) => {
   // one notch over several frames, so the number on the event is not yet true.
   if (performance.now() < zoomAnnounceUntil) {
     const percent = viewer.zoomPercent();
-    if (percent !== null) toast(`Zoom ${percent} %`);
+    if (percent !== null) toast(t("toast.zoomPercent").replace("{percent}", percent));
   }
 };
 
@@ -1255,7 +1255,7 @@ function showStats(stats, extra) {
   $("file-tris").hidden = !count;
   if (count) {
     $("file-tris").textContent = `${shortCount(count)} ${stats.points && !stats.triangles ? "pts" : "tri"}`;
-    $("file-tris").title = `${n(count)} ${stats.points && !stats.triangles ? "points" : "triangles"}`;
+    $("file-tris").title = t(stats.points && !stats.triangles ? "pane.ptsCountTitle" : "pane.trisCountTitle").replace("{n}", n(count));
   }
   const parts = [];
   // A point cloud carries points, not triangles; saying "0 tri" about one
@@ -1685,7 +1685,7 @@ async function swapTexture(uuid, slot) {
     showStats(viewer.stats());
     paintMaterialList();
   } catch (e) {
-    $("stats").title = `Texture illisible : ${picked.name}`;
+    $("stats").title = t("pane.textureUnreadableTitle").replace("{name}", picked.name);
     console.warn("[albedo] remplacement de texture:", e);
   }
 }
@@ -2096,6 +2096,7 @@ window.addEventListener("i18n", () => {
     if (c) b.querySelector("span").textContent = t(c.labelKey);
   }
   paintViewbar();
+  outliner?.paint();
 });
 applyChannel("shaded");
 
@@ -2838,9 +2839,8 @@ function wakeTree() {
      */
     .catch((e) => {
       console.error("[albedo] arbre de scène :", e);
-      toast("L'arbre de scène n'a pas pu se construire", 4000);
-      $("scene-tree").innerHTML =
-        '<p class="hint tree-empty">L\'arbre n\'a pas pu se construire. Voir la console.</p>';
+      toast(t("toast.treeFailed"), 4000);
+      $("scene-tree").innerHTML = `<p class="hint tree-empty">${t("tree.buildFailed")}</p>`;
     })
     .finally(() => {
       outlinerArriving = null;
@@ -2880,13 +2880,13 @@ $("opt-fov").addEventListener("input", (e) => {
 $("cam-frame").addEventListener("click", () => {
   if (!viewer.current) return;
   viewer.frameCurrent();
-  toast("Recadré");
+  toast(t("toast.cropped"));
 });
 $("cam-reset-roll").addEventListener("click", () => {
   viewer.camera.up.set(0, 1, 0);
   viewer.controls?.update?.();
   viewer.invalidate();
-  toast("Horizon redressé");
+  toast(t("toast.levelled"));
 });
 
 function setProjection(kind, remember = true) {
@@ -3183,7 +3183,7 @@ function paintGradient(remember = true) {
     // The one slider with nothing to state: where the stop sits is drawn in the
     // strip right above it, at the size of the strip rather than of a number.
     at.dataset.novalue = "";
-    at.title = "Position de la couleur dans le dégradé";
+    at.title = t("pane.gradientStopTitle");
     at.addEventListener("input", () => {
       stop.at = Number(at.value);
       refreshGradient();
@@ -3193,7 +3193,7 @@ function paintGradient(remember = true) {
     remove.type = "button";
     remove.className = "seg";
     remove.textContent = "×";
-    remove.title = "Retirer cette couleur";
+    remove.title = t("pane.gradientRemoveTitle");
     remove.disabled = stops.length <= 2;
     remove.addEventListener("click", () => {
       stops.splice(index, 1);
@@ -3943,7 +3943,7 @@ for (const [group, key, id] of POST_CONTROLS) {
 
 $("fog-recentre")?.addEventListener("click", () => {
   viewer.placeFog(true);
-  toast("Brouillard recentré");
+  toast(t("toast.fogRecentred"));
 });
 
 /*
@@ -4335,7 +4335,7 @@ $("decor-act-dup")?.addEventListener("click", () => {
 $("decor-act-del")?.addEventListener("click", () => {
   if (decorSelection.type === "light") {
     if (viewer.lights.length <= 1) {
-      toast("Au moins une lumière doit être présente");
+      toast(t("toast.lightMinOne"));
       return;
     }
     const idToDelete = decorSelection.id;
@@ -4351,7 +4351,7 @@ $("decor-act-reset")?.addEventListener("click", () => {
   const primary = viewer.resetLights();
   selectDecorItem({ type: "light", id: primary.id });
   saveLights();
-  toast("Éclairage réinitialisé");
+  toast(t("toast.lightingReset"));
 });
 
 // Group collapse carets
@@ -4497,18 +4497,18 @@ async function refreshShellState() {
   paintShellState(state);
 }
 
-for (const [id, command, said] of [
-  ["shell-on", "shell_integration_enable", "Vignettes Windows activées"],
-  ["shell-off", "shell_integration_disable", "Vignettes Windows retirées"],
+for (const [id, command, saidKey] of [
+  ["shell-on", "shell_integration_enable", "toast.shellOnDone"],
+  ["shell-off", "shell_integration_disable", "toast.shellOffDone"],
 ]) {
   $(id).addEventListener("click", async () => {
     $(id).disabled = true;
     try {
       paintShellState(await tauri.core.invoke(command));
-      toast(said);
+      toast(t(saidKey));
     } catch (e) {
       $("shell-state").textContent = String(e);
-      toast(`Échec : ${e}`);
+      toast(t("toast.failed").replace("{e}", e));
     }
     refreshShellState();
   });
@@ -4598,7 +4598,7 @@ function stepHistory(back) {
   paintOrientation();
   showDimensions();
   paintHistory();
-  toast(back ? "Annulé" : "Rétabli");
+  toast(t(back ? "toast.undone" : "toast.redone"));
 }
 
 $("undo").addEventListener("click", () => stepHistory(true));
@@ -4653,14 +4653,17 @@ function liveTransform(object) {
   const round = (v, n = 2) => Number(v.toFixed(n));
   if (editMode === "rotate") {
     const d = (r) => Math.round((r * 180) / Math.PI);
-    return `Rotation ${d(object.rotation.x)}° ${d(object.rotation.y)}° ${d(object.rotation.z)}°`;
+    return t("toast.liveRotation")
+      .replace("{x}", d(object.rotation.x)).replace("{y}", d(object.rotation.y)).replace("{z}", d(object.rotation.z));
   }
   if (editMode === "scale") {
     const s = object.scale;
-    return `Échelle ${round(s.x)} ${round(s.y)} ${round(s.z)}`;
+    return t("toast.liveScale")
+      .replace("{x}", round(s.x)).replace("{y}", round(s.y)).replace("{z}", round(s.z));
   }
   const p = object.position;
-  return `Position ${round(p.x, 3)} ${round(p.y, 3)} ${round(p.z, 3)}`;
+  return t("toast.livePosition")
+    .replace("{x}", round(p.x, 3)).replace("{y}", round(p.y, 3)).replace("{z}", round(p.z, 3));
 }
 
 function paintTransform() {
@@ -4854,7 +4857,7 @@ function paintParts() {
     name.className = "mat-name" + (selectedPart === entry ? " active" : "");
     name.style.textAlign = "left";
     name.textContent = entry.name || "(sans nom)";
-    name.title = "Viser cet objet avec les poignées";
+    name.title = t("pane.objectAimTitle");
     name.addEventListener("click", () => {
       const next = selectedPart === entry ? null : entry;
       // After: `selectMaterial(null)` fires the selection subscription, which
@@ -4870,7 +4873,7 @@ function paintParts() {
     drop.type = "button";
     drop.className = "seg";
     drop.textContent = "×";
-    drop.title = "Retirer de la scène";
+    drop.title = t("pane.objectRemoveTitle");
     // The first entry is the file that was opened, and removing it would leave
     // a window that says it is showing a file it no longer holds.
     drop.disabled = entry === viewer.parts[0];
@@ -4887,7 +4890,7 @@ function paintParts() {
       paintMaterialList();
       showStats(viewer.stats());
       if (editMode) setEditMode(editMode);
-      toast(`${entry.name || "Objet"} retiré`);
+      toast(t("toast.removed").replace("{name}", entry.name || t("toast.objectDefault")));
     });
 
     row.append(name, drop);
@@ -4928,8 +4931,8 @@ function setEditMode(mode) {
   paintTransform();
   paintTransformPanel();
   if (editMode) {
-    const label = { translate: "Déplacer", rotate: "Tourner", scale: "Échelle" }[editMode];
-    toast(`${label} · ${editTargetName()} · Maj pour les crans`);
+    const label = t({ translate: "pane.editMove", rotate: "pane.editRotate", scale: "pane.editScale" }[editMode]);
+    toast(t("toast.editMode").replace("{label}", label).replace("{target}", editTargetName()));
   } else {
     paintOrientation();
     showDimensions();
@@ -5092,10 +5095,10 @@ async function importPart(path, label) {
     showDimensions();
     if (editMode) setEditMode(editMode);
     else paintEditTarget();
-    toast(`${name} importé · E pour le placer`);
+    toast(t("toast.imported").replace("{name}", name));
   } catch (e) {
     console.error("[albedo] import :", e);
-    toast(`Import impossible : ${e?.message || e}`);
+    toast(t("toast.importFailed").replace("{e}", e?.message || e));
   } finally {
     setBusy(false);
   }
@@ -5143,7 +5146,7 @@ async function importFromDisk() {
     importing = true;
     await toggleLibrary();
     if (!library?.isOpen) library?.show();
-    toast("Choisis un modèle à importer");
+    toast(t("toast.chooseToImport"));
   });
   document.addEventListener("pointerdown", (e) => {
     if (menu.hidden || menu.contains(e.target) || button.contains(e.target)) return;
@@ -5321,7 +5324,7 @@ window.addEventListener("keydown", (e) => {
     case "KeyH":
       // show nothing but the model
       document.body.classList.toggle("clean");
-      toast(document.body.classList.contains("clean") ? "Interface masquée · H" : "Interface visible");
+      toast(t(document.body.classList.contains("clean") ? "toast.uiHidden" : "toast.uiVisible"));
       break;
     case "KeyF":
       if (e.ctrlKey || e.altKey) return;
@@ -5405,7 +5408,7 @@ window.addEventListener("keydown", (e) => {
       if (e.shiftKey) {
         $("opt-grid").checked = !$("opt-grid").checked;
         viewer.setGrid($("opt-grid").checked);
-        toast($("opt-grid").checked ? "Grille affichée" : "Grille masquée");
+        toast(t($("opt-grid").checked ? "toast.gridShown" : "toast.gridHidden"));
       } else setEditMode("translate");
       break;
     case "KeyS":
@@ -5426,12 +5429,12 @@ window.addEventListener("keydown", (e) => {
         toast(t("toast.newTab"));
       } else if (nav.mode === "orbit") {
         toggleTurntable();
-        toast(viewer.spin ? "Rotation continue" : "Rotation arrêtée");
+        toast(t(viewer.spin ? "toast.turntableOn" : "toast.turntableOff"));
       }
       break;
     case "KeyU":
       toggleUnlit();
-      toast(currentChannel === "unlit" ? "Unlit" : "PBR");
+      toast(t(currentChannel === "unlit" ? "pane.standUnlit" : "pane.standPbr"));
       break;
     case "KeyB":
       e.preventDefault();

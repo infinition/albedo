@@ -2,6 +2,7 @@ import { readScene, thumbnail, toggleMap } from "./outline.js";
 import { forgetPortraits, portrait } from "./portrait.js";
 import { selection, decorId } from "../selection.js";
 import { renameNode } from "../naming.js";
+import { t } from "../i18n/index.js";
 import "./tree.css";
 
 /**
@@ -45,24 +46,33 @@ import "./tree.css";
 
 const fr = (n) => n.toLocaleString("fr-FR");
 
+/** The key into the shared dictionary for each backdrop's name and hint. */
+const BG_LABEL_KEY = {
+  studio: "pane.envStudio",
+  gradient: "pane.envGradient",
+  image: "pane.envImage",
+  picture: "pane.envPicture",
+};
+const BG_HINT_KEY = {
+  studio: "tree.bgStudioHint",
+  gradient: "tree.bgGradientHint",
+  image: "tree.bgImageHint",
+  picture: "tree.bgPictureHint",
+};
+
 /** The three backdrop sources, in the order they escalate. */
 const BACKDROPS = [
-  { kind: "studio", label: "Studio", hint: "Éclairage neutre généré, sans fond visible", lights: true },
-  { kind: "gradient", label: "Dégradé", hint: "Fond en dégradé, qui éclaire aussi", lights: true },
-  { kind: "image", label: "Image", hint: "Panorama 360, HDR ou image", lights: true },
-  {
-    kind: "picture",
-    label: "Toile",
-    hint: "Une image fixe derrière le modèle. Elle ne tourne pas avec la caméra et n'éclaire pas.",
-    lights: false,
-  },
+  { kind: "studio", lights: true },
+  { kind: "gradient", lights: true },
+  { kind: "image", lights: true },
+  { kind: "picture", lights: false },
 ];
 
 /** What the environment's own light looks like, per source. */
 const ENV_TINT = { studio: "#e8ecf4", gradient: "#9fb4d0", image: "#ffd9a0" };
 
 const LIGHT_GLYPH = { directional: "☀", point: "●", spot: "▼" };
-const LIGHT_LABEL = { directional: "Directionnelle", point: "Ponctuelle", spot: "Projecteur" };
+const LIGHT_LABEL_KEY = { directional: "pane.lightDirectional", point: "pane.lightPoint", spot: "pane.lightSpot" };
 
 export function createOutliner({ host, viewer, channels, swapTexture, onNotice, actions = {} }) {
   host.textContent = "";
@@ -109,7 +119,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     b.className = "tree-caret" + (has ? "" : " empty");
     b.textContent = has ? (opened.has(id) ? "▾" : "▸") : "";
     if (has) {
-      b.title = opened.has(id) ? "Replier" : "Déplier";
+      b.title = opened.has(id) ? t("tree.collapse") : t("tree.expand");
       b.addEventListener("click", (e) => {
         e.stopPropagation();
         opened.has(id) ? opened.delete(id) : opened.add(id);
@@ -163,7 +173,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     span.textContent = text;
     if (!rename) return span;
 
-    span.title = `${text} — double-clic pour renommer`;
+    span.title = t("tree.renameHint").replace("{text}", text);
     /*
      * The handler is hung on the row's own list, not on this span.
      *
@@ -198,9 +208,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     const tag = document.createElement("span");
     tag.className = "tree-badge " + (isLow ? "low" : "high");
     tag.textContent = isLow ? "LP" : "HP";
-    tag.title = isLow
-      ? "Bas poly, issu d'un autre maillage de cette scène"
-      : "Haut poly : un bas poly de cette scène en descend";
+    tag.title = t(isLow ? "tree.lowPolyTitle" : "tree.highPolyTitle");
     return tag;
   }
 
@@ -222,7 +230,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     const b = document.createElement("button");
     b.type = "button";
     b.className = "tree-pencil";
-    b.title = "Renommer";
+    b.title = t("tree.rename");
     b.textContent = "✎";
     b.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -252,7 +260,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         editing = null;
         if (commit) {
           const applied = rename(input.value);
-          if (applied && applied !== text) notice(`Renommé en ${applied}`);
+          if (applied && applied !== text) notice(t("toast.renamed").replace("{name}", applied));
         }
         paint();
       };
@@ -346,8 +354,8 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         "tree-row tree-child" + (selection.has(id) ? " picked" : "") + (active ? " on" : " muted");
       row.appendChild(caret(id, false));
       row.appendChild(backdropChip(source.kind));
-      row.appendChild(nameCell(source.label, null));
-      row.title = source.hint;
+      row.appendChild(nameCell(t(BG_LABEL_KEY[source.kind]), null));
+      row.title = t(BG_HINT_KEY[source.kind]);
 
       // What it is doing right now, said on the row: a backdrop that lights the
       // model and one that merely sits behind it are two different things and
@@ -357,10 +365,10 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       state.textContent = !active
         ? ""
         : !source.lights
-          ? "fond seul"
+          ? t("tree.bgAloneState")
           : viewer.envLighting !== false
-            ? "éclaire"
-            : "fond";
+            ? t("tree.bgLightsState")
+            : t("tree.bgBehindState");
       row.appendChild(state);
 
       row.addEventListener("click", (e) => {
@@ -375,7 +383,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         row.appendChild(
           eye(
             viewer.showEnvBackground !== false,
-            viewer.showEnvBackground !== false ? "Masquer le fond" : "Afficher le fond",
+            viewer.showEnvBackground !== false ? t("tree.hideBg") : t("tree.showBg"),
             () => {
               actions.setBackgroundVisible?.(!(viewer.showEnvBackground !== false));
               paint();
@@ -427,19 +435,19 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     bulb.className = "tree-bulb";
     bulb.style.background = ENV_TINT[source.kind] || "#e8ecf4";
     bulb.textContent = "◍";
-    bulb.title = "La lumière qui vient de l'environnement";
+    bulb.title = t("tree.envLightTitle");
     row.appendChild(bulb);
 
-    row.appendChild(nameCell("Environnement", null));
+    row.appendChild(nameCell(t("pane.environment"), null));
     const which = document.createElement("span");
     which.className = "tree-num";
-    which.textContent = source.label;
+    which.textContent = t(BG_LABEL_KEY[source.kind]);
     row.appendChild(which);
-    row.title = `${source.label} — ${source.hint}`;
+    row.title = `${t(BG_LABEL_KEY[source.kind])} — ${t(BG_HINT_KEY[source.kind])}`;
 
     row.addEventListener("click", (e) => selection.choose(id, "bg", e.ctrlKey || e.metaKey));
     row.appendChild(
-      eye(on, on ? "Éteindre l'environnement" : "Rallumer l'environnement", () => {
+      eye(on, on ? t("tree.envOff") : t("tree.envOn"), () => {
         actions.setEnvLighting?.(!on);
         paint();
       })
@@ -461,7 +469,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       bulb.className = "tree-bulb";
       bulb.style.background = entry.colour || "#ffffff";
       bulb.textContent = LIGHT_GLYPH[entry.kind] || "☀";
-      bulb.title = LIGHT_LABEL[entry.kind] || entry.kind;
+      bulb.title = LIGHT_LABEL_KEY[entry.kind] ? t(LIGHT_LABEL_KEY[entry.kind]) : entry.kind;
       row.appendChild(bulb);
 
       const lightNameCell = nameCell(entry.name || `light${entry.id}`, (next) => {
@@ -487,17 +495,17 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       );
       row.appendChild(pencil(lightNameCell));
       row.appendChild(
-        eye(entry.enabled, entry.enabled ? "Éteindre" : "Allumer", () => {
+        eye(entry.enabled, entry.enabled ? t("tree.turnOff") : t("tree.turnOn"), () => {
           viewer.setLight(entry.id, { enabled: !entry.enabled });
-          notice(`${entry.name} ${entry.enabled ? "allumée" : "éteinte"}`);
+          notice(t(entry.enabled ? "toast.lightOn" : "toast.lightOff").replace("{name}", entry.name));
           paint();
         })
       );
       row.appendChild(
-        trash("Supprimer cette lumière", () => {
+        trash(t("tree.deleteLight"), () => {
           viewer.removeLight(entry.id);
           selection.delete(id);
-          notice(`${entry.name} supprimée`);
+          notice(t("toast.lightRemoved").replace("{name}", entry.name));
           actions.onLightsChanged?.();
           paint();
         })
@@ -532,10 +540,10 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     chip.className = "tree-bulb";
     chip.style.background = state.colour || "#aebdd0";
     chip.textContent = "≈";
-    chip.title = "Brouillard volumétrique";
+    chip.title = t("tree.fogTitle");
     row.appendChild(chip);
 
-    row.appendChild(nameCell("Brouillard", null));
+    row.appendChild(nameCell(t("pane.fog"), null));
     const num = document.createElement("span");
     num.className = "tree-num";
     num.textContent = state.on ? state.density.toFixed(1) : "";
@@ -543,7 +551,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
 
     row.addEventListener("click", (e) => selection.choose(id, "fog", e.ctrlKey || e.metaKey));
     row.appendChild(
-      eye(state.on, state.on ? "Éteindre le brouillard" : "Allumer le brouillard", () => {
+      eye(state.on, state.on ? t("tree.fogOff") : t("tree.fogOn"), () => {
         actions.setFog?.(!state.on);
         paint();
       })
@@ -586,20 +594,20 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         : `<span class="tree-glyph">▬</span>`
     );
     row.appendChild(
-      nameCell(stand.name || "Socle", (next) => renameNode(viewer.root, stand, next))
+      nameCell(stand.name || t("pane.stand"), (next) => renameNode(viewer.root, stand, next))
     );
     // Same as a light: the stand is scenery around the subject, and framing it
     // takes the subject off screen.
     row.addEventListener("click", (e) => selection.choose(id, "stand", e.ctrlKey || e.metaKey));
     row.appendChild(
-      eye(stand.visible, stand.visible ? "Masquer le socle" : "Afficher le socle", () => {
+      eye(stand.visible, stand.visible ? t("tree.hideStand") : t("tree.showStand"), () => {
         stand.visible = !stand.visible;
         viewer.invalidate?.();
         paint();
       })
     );
     row.appendChild(
-      trash("Retirer le socle", () => {
+      trash(t("tree.removeStand"), () => {
         actions.removePedestal?.();
         selection.delete(id);
         paint();
@@ -650,7 +658,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     num.className = "tree-num";
     num.textContent = fr(mesh.triangles);
     row.appendChild(num);
-    row.title = `${mesh.name} · ${fr(mesh.triangles)} triangles`;
+    row.title = t("tree.trisTitle").replace("{name}", mesh.name).replace("{n}", fr(mesh.triangles));
     row.addEventListener("click", (e) => {
       selection.choose(mesh.id, "mesh", e.ctrlKey || e.metaKey);
       // Choosing a row says which one it is and nothing about where. On a model
@@ -659,18 +667,18 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     });
     row.appendChild(pencil(meshName));
     row.appendChild(
-      eye(mesh.visible, mesh.visible ? "Masquer ce maillage" : "Afficher ce maillage", () => {
+      eye(mesh.visible, mesh.visible ? t("tree.hideMesh") : t("tree.showMesh"), () => {
         mesh.node.visible = !mesh.node.visible;
-        notice(`${mesh.name} ${mesh.node.visible ? "affiché" : "masqué"}`);
+        notice(t(mesh.node.visible ? "toast.meshShown" : "toast.meshHidden").replace("{name}", mesh.name));
         viewer.invalidate?.();
         paint();
       })
     );
     row.appendChild(
-      trash("Supprimer ce maillage", () => {
+      trash(t("tree.deleteMesh"), () => {
         viewer.removeMesh(mesh.node);
         selection.delete(mesh.id);
-        notice(`${mesh.name} supprimé`);
+        notice(t("toast.meshRemoved").replace("{name}", mesh.name));
         viewer.invalidate?.();
         paint();
       })
@@ -719,14 +727,14 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     num.className = "tree-num";
     num.textContent = fr(mat.triangles);
     row.appendChild(num);
-    row.title = `${mat.name} · ${fr(mat.triangles)} triangles`;
+    row.title = t("tree.trisTitle").replace("{name}", mat.name).replace("{n}", fr(mat.triangles));
     row.addEventListener("click", (e) =>
       selection.choose(mat.id, "material", e.ctrlKey || e.metaKey)
     );
     row.appendChild(
-      eye(!mat.hidden, mat.hidden ? "Afficher cette matière" : "Masquer cette matière", () => {
+      eye(!mat.hidden, mat.hidden ? t("tree.showMat") : t("tree.hideMat"), () => {
         channels?.setMaterialHidden?.(mat.id, !mat.hidden);
-        notice(`${mat.name} ${mat.hidden ? "affichée" : "masquée"}`);
+        notice(t(mat.hidden ? "toast.matShown" : "toast.matHidden").replace("{name}", mat.name));
         viewer.invalidate?.();
         paint();
       })
@@ -760,7 +768,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     swap.type = "button";
     swap.className = "tree-swap";
     swap.textContent = "⇄";
-    swap.title = `Remplacer ${map.label}`;
+    swap.title = t("tree.swapTitle").replace("{label}", map.label);
     swap.addEventListener("click", (e) => {
       e.stopPropagation();
       swapTexture?.(mat.id, map.slot);
@@ -769,9 +777,9 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     row.append(
       size,
       swap,
-      eye(!map.hidden, map.hidden ? "Rebrancher cette carte" : "Débrancher cette carte", () => {
+      eye(!map.hidden, map.hidden ? t("tree.plugMap") : t("tree.unplugMap"), () => {
         const off = toggleMap(mat.material, map.slot);
-        notice(`${map.label} ${off ? "débranchée" : "rebranchée"}`);
+        notice(t(off ? "toast.mapUnplugged" : "toast.mapPlugged").replace("{label}", map.label));
         viewer.invalidate?.();
         paint();
       })
@@ -825,21 +833,21 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
      * and what is behind it.
      */
     const groups = [
-      { key: "model", label: "Modèle", rows: meshes.map(meshNode) },
+      { key: "model", label: t("tree.groupModel"), rows: meshes.map(meshNode) },
       {
         key: "stand",
-        label: "Socles",
+        label: t("pane.pedestals"),
         rows: pedestalRows(),
-        add: { title: "Choisir un socle", act: () => actions.pickPedestal?.() },
+        add: { title: t("pane.pedestal"), act: () => actions.pickPedestal?.() },
       },
-      { key: "fog", label: "Atmosphère", rows: fogRows() },
+      { key: "fog", label: t("tree.groupFog"), rows: fogRows() },
       {
         key: "light",
-        label: "Lumières",
+        label: t("pane.lights"),
         rows: lightRows(),
-        add: { title: "Ajouter une lumière", act: () => actions.addLight?.() },
+        add: { title: t("pane.lightAddTitle"), act: () => actions.addLight?.() },
       },
-      { key: "bg", label: "Fonds", rows: backgroundRows() },
+      { key: "bg", label: t("pane.backgrounds"), rows: backgroundRows() },
     ];
 
     for (const group of groups) {
@@ -851,7 +859,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     if (!meshes.length) {
       const hint = document.createElement("p");
       hint.className = "hint tree-empty";
-      hint.textContent = "Ouvre un modèle pour voir ce qu'il contient.";
+      hint.textContent = t("tree.emptyHint");
       body.appendChild(hint);
     }
   }
@@ -869,7 +877,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
         channels?.setMaterialHidden?.(mat.id, !(selection.has(mesh.id) || selection.has(mat.id)));
       }
     }
-    notice(`Isolé : ${hidden} maillage${hidden > 1 ? "s" : ""} masqué${hidden > 1 ? "s" : ""}`);
+    notice(hidden > 1 ? t("toast.isolatedMany").replace("{n}", hidden) : t("toast.isolatedOne"));
     viewer.invalidate?.();
     paint();
   }
@@ -883,7 +891,7 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
     selection.clear();
     viewer.invalidate?.();
     paint();
-    notice("Tout affiché");
+    notice(t("toast.allShown"));
   }
 
   paint();

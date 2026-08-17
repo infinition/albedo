@@ -23,5 +23,7 @@
   "lib.expand": "Déplier",
   "lib.allLibrary": "Toute la bibliothèque",
   "lib.tagHint": "Sélectionne un élément pour lui poser un tag.",
-  "lib.allFormats": "Tous formats"
+  "lib.allFormats": "Tous formats",
+  "lib.removeTagOne": "Retirer",
+  "lib.removeTagMany": "Retirer de {n} éléments"
 }

@@ -788,7 +788,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       chip.append(tag);
       const drop = document.createElement("button");
       drop.textContent = "✕";
-      drop.title = many ? `Retirer de ${chosen.length} éléments` : "Retirer";
+      drop.title = many ? t("lib.removeTagMany").replace("{n}", chosen.length) : t("lib.removeTagOne");
       drop.addEventListener("click", () => {
         for (const rel of chosen) removeTag(rel, tag);
         paintDetail();
