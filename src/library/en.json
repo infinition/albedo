@@ -25,5 +25,11 @@
   "lib.tagHint": "Select an item to tag it.",
   "lib.allFormats": "All formats",
   "lib.removeTagOne": "Remove",
-  "lib.removeTagMany": "Remove from {n} items"
+  "lib.removeTagMany": "Remove from {n} items",
+  "lib.countTruncated": "{n} shown, folder truncated",
+  "lib.countOne": "{n} item",
+  "lib.countMany": "{n} items",
+  "lib.chosenMany": "{n} items",
+  "lib.tagOne": "Add a tag, Enter",
+  "lib.tagMany": "Tag for {n} items, Enter"
 }

@@ -144,5 +144,7 @@
   "rt.nothingToRun": "No mesh to work on: everything is hidden.",
   "rt.settingsTitle": "Settings",
   "rt.settingsMoved": "The settings are in the bar's menu, over the model, so they are changed while looking at it.",
-  "rt.openSettings": "Open the settings"
+  "rt.openSettings": "Open the settings",
+  "rt.bake": "Bake",
+  "rt.cancel": "Cancel"
 }

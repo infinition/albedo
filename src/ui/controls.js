@@ -112,12 +112,12 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
 // Named for the movement of the hand rather than the letter of the axis, since
 // the letter is what nobody can map onto a cap they are pushing.
 const AXES = [
-  ["x", "Glisser", "Pousser le bouchon a gauche ou a droite"],
-  ["y", "Monter", "Soulever ou enfoncer le bouchon"],
-  ["z", "Avancer", "Pousser le bouchon en avant ou le tirer vers soi"],
-  ["pitch", "Basculer", "Incliner le bouchon en avant ou en arriere"],
-  ["yaw", "Pivoter", "Tourner le bouchon sur lui-meme"],
-  ["roll", "Rouler", "Incliner le bouchon a gauche ou a droite"],
+  ["x", "sm.slide", "sm.slideHint"],
+  ["y", "sm.lift", "sm.liftHint"],
+  ["z", "sm.push", "sm.pushHint"],
+  ["pitch", "sm.pitch", "sm.pitchHint"],
+  ["yaw", "sm.yaw", "sm.yawHint"],
+  ["roll", "sm.roll", "sm.rollHint"],
 ];
 
 /**
@@ -135,7 +135,9 @@ const AXES = [
 function wireDeviceSettings(nav, onChange = () => {}) {
   const holder = $("sm-invert");
   const cfg = nav.settings.space;
-  for (const [key, label, hint] of AXES) {
+  for (const [key, labelKey, hintKey] of AXES) {
+    const label = t(labelKey);
+    const hint = t(hintKey);
     const row = document.createElement("div");
     row.className = "axis-row";
 
@@ -225,20 +227,20 @@ export function showDevice(kind, name) {
   const existing = document.getElementById(id);
   if (!name) {
     existing?.remove();
-    if (kind === "pad") $("dev-pad").textContent = "Manette : aucune détectée";
-    if (kind === "space") $("btn-spacemouse").textContent = "Connecter une SpaceMouse";
+    if (kind === "pad") $("dev-pad").textContent = t("dev.padNone");
+    if (kind === "space") $("btn-spacemouse").textContent = t("dev.spaceConnect");
     return;
   }
   if (!existing) {
     const el = document.createElement("span");
     el.id = id;
     el.className = "dot";
-    el.textContent = kind === "pad" ? "manette" : "spacemouse";
+    el.textContent = kind === "pad" ? t("dev.padDot") : "spacemouse";
     el.title = name;
     strip.appendChild(el);
   }
-  if (kind === "pad") $("dev-pad").textContent = `Manette : ${name}`;
-  if (kind === "space") $("btn-spacemouse").textContent = `Déconnecter ${name}`;
+  if (kind === "pad") $("dev-pad").textContent = t("dev.padNamed").replace("{name}", name);
+  if (kind === "space") $("btn-spacemouse").textContent = t("dev.spaceDisconnect").replace("{name}", name);
 }
 
 /**

@@ -143,7 +143,7 @@ export function createTabs({ host, onActivate, onClose, onNew, onKeep }) {
        * without a legend: you are looking through this tab rather than working
        * in it.
        */
-      const label = doc.title || "Sans titre";
+      const label = doc.title || t("tabs.untitled");
       if (doc.preview) {
         const eye = document.createElement("span");
         eye.className = "tabs-eye";

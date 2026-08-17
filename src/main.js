@@ -464,7 +464,7 @@ async function closeDocument(id) {
    */
   if (doc.dirty || (doc === activeDoc && sceneDirty)) {
     if (doc !== activeDoc) switchTo(id);
-    if (!(await confirmDiscard(`« ${doc.title} » a été modifié.`))) return;
+    if (!(await confirmDiscard(t("dlg.docModified").replace("{name}", doc.title)))) return;
   }
 
   const index = documents.indexOf(doc);
@@ -549,9 +549,9 @@ function clearDirty() {
  * one, because a webview `confirm` in a Tauri window looks like a web page in a
  * way nothing else in this application does.
  */
-async function confirmDiscard(what = "Le modèle en cours a été modifié.") {
+async function confirmDiscard(what = null) {
   if (!sceneDirty) return true;
-  const question = `${what}\nContinuer sans enregistrer ni exporter ?`;
+  const question = `${what || t("dlg.sceneModified")}\n${t("dlg.discardAsk")}`;
   /*
    * `ask` with its own labels rather than `confirm` with Ok and Cancel.
    *
@@ -569,8 +569,8 @@ async function confirmDiscard(what = "Le modèle en cours a été modifié.") {
       .ask(question, {
         title: "Albedo",
         kind: "warning",
-        okLabel: "Abandonner les changements",
-        cancelLabel: "Revenir",
+        okLabel: t("dlg.discardOk"),
+        cancelLabel: t("dlg.discardCancel"),
       })
       .catch((e) => {
         // A dialog that cannot open must not become a silent yes.
@@ -854,11 +854,15 @@ window.addEventListener("pointermove", (e) => {
 });
 
 // The bar no longer hides on its own. It is one of three states, chosen by a
-// discreet corner button: horizontal (the default), vertical, or reduced to
-// that button alone, floating. Hovering it brings the bar back, since a control
-// that only shrinks is a control that traps.
+// discreet corner button: horizontal, vertical, or reduced to that button
+// alone, floating. Hovering it brings the bar back, since a control that only
+// shrinks is a control that traps.
+//
+// It opens reduced. The first thing anyone wants to see on launch is the model,
+// not a strip of buttons across it, and the button that brings the bar back
+// answers to a hover rather than to a click.
 const ORIENTS = ["horizontal", "vertical", "reduced"];
-let orientation = "horizontal";
+let orientation = "reduced";
 
 function setOrientation(next) {
   orientation = next;
@@ -875,7 +879,7 @@ $("viewbar-orient").addEventListener("pointerenter", () => {
   if (orientation === "reduced") setOrientation("horizontal");
 });
 
-setOrientation("horizontal");
+setOrientation(orientation);
 
 function paintViewbar() {
   /*
@@ -1187,7 +1191,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
     if (info?.warnings?.length) console.warn("[albedo]", info.warnings);
   } catch (e) {
     console.error(e);
-    setTitle(`Échec : ${e.message || e}`, true);
+    setTitle(t("toast.failed").replace("{e}", e.message || e), true);
   } finally {
     setBusy(false);
   }
@@ -1215,6 +1219,13 @@ function setTitle(label, idle = false) {
   paintTabs();
 }
 
+/** What a file that has just been written is called, and how big it came out. */
+function writtenNote(path, bytes) {
+  return t("note.writtenSized")
+    .replace("{file}", fileLabel(path))
+    .replace("{size}", (bytes / 1048576).toFixed(1));
+}
+
 /**
  * How big the thing actually is.
  *
@@ -1232,7 +1243,8 @@ function showDimensions() {
   const x = box.max.x - box.min.x;
   const y = box.max.y - box.min.y;
   const z = box.max.z - box.min.z;
-  $("dimensions").textContent = `${n(x)} × ${n(y)} × ${n(z)} unités`;
+  $("dimensions").textContent = t("pane.units")
+    .replace("{x}", n(x)).replace("{y}", n(y)).replace("{z}", n(z));
 }
 
 /**
@@ -1371,7 +1383,10 @@ async function rescueTextures(path, name) {
     if (!applied) return;
     ensureAoUv(viewer.current);
     viewer.invalidate();
-    showStats(viewer.stats(), `${applied} texture(s) retrouvée(s) : ${roles.join(", ")}`);
+    showStats(
+      viewer.stats(),
+      t("toast.texturesFound").replace("{n}", applied).replace("{roles}", roles.join(", "))
+    );
     if (currentChannel !== "shaded") applyChannel(currentChannel);
   } catch (e) {
     console.warn("[albedo] recherche de textures:", e);
@@ -1607,11 +1622,11 @@ async function pickImage() {
 }
 
 const textureLabel = (tex) => {
-  if (!tex) return "aucune";
+  if (!tex) return t("pane.textureNone");
   if (tex.name) return tex.name;
   const src = (tex.image && tex.image.src) || "";
   // Packaged formats hand over their images with no name and a blob URL
-  if (!src || src.startsWith("blob:") || src.startsWith("data:")) return "(intégrée)";
+  if (!src || src.startsWith("blob:") || src.startsWith("data:")) return t("pane.textureEmbedded");
   try {
     return decodeURIComponent(src.split(/[?#]/)[0].split("/").pop());
   } catch (_) {
@@ -1627,8 +1642,8 @@ const textureSource = (tex) => {
   const src = (tex?.image && tex.image.src) || tex?.userData?.src || "";
   // A packaged format hands over a decoded bitmap with no address of any kind,
   // which says something true: the picture came from inside the file.
-  if (!src) return tex?.image ? "intégrée au fichier" : "source inconnue";
-  if (src.startsWith("blob:") || src.startsWith("data:")) return "intégrée au fichier";
+  if (!src) return tex?.image ? t("pane.textureInFile") : t("pane.textureUnknownSource");
+  if (src.startsWith("blob:") || src.startsWith("data:")) return t("pane.textureInFile");
   try {
     return decodeURIComponent(src.replace(/^https?:\/\/asset\.localhost\//i, ""));
   } catch (_) {
@@ -1701,7 +1716,7 @@ function textureBlock(uuid) {
   const present = MAP_SLOTS.filter(([slot]) => material[slot] || parked[slot]);
   // With no map at all the albedo slot is still offered: trying one out is the
   // fastest way to tell a missing texture from a black one.
-  const slots = present.length ? present : [["map", "Albedo"]];
+  const slots = present.length ? present : [["map", "map.albedo"]];
 
   for (const [slot, label] of slots) {
     const hidden = !!parked[slot];
@@ -1723,7 +1738,7 @@ function textureBlock(uuid) {
     names.className = "map-names";
     const role = document.createElement("span");
     role.className = "map-role";
-    role.textContent = label;
+    role.textContent = t(label);
     const name = document.createElement("span");
     name.className = "map-name";
     name.textContent = textureLabel(tex);
@@ -1742,7 +1757,7 @@ function textureBlock(uuid) {
     const eye = document.createElement("button");
     eye.type = "button";
     eye.className = "seg eye" + (hidden ? "" : " active");
-    eye.title = hidden ? "Remettre dans le rendu" : "Retirer du rendu";
+    eye.title = hidden ? t("map.putBack") : t("map.takeOut");
     eye.innerHTML = hidden
       ? '<svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.4 5.3A9.8 9.8 0 0112 5c5 0 9 4.5 9 7a12 12 0 01-2.4 3.3M6.3 6.9A12.6 12.6 0 003 12c0 2.5 4 7 9 7 1.2 0 2.3-.2 3.3-.7"/></svg>'
       : '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="2.6"/></svg>';
@@ -1795,10 +1810,10 @@ function textureBlock(uuid) {
    * geometry, and that is the question that decides a triangle budget.
    */
   const NUMBERS = [
-    ["Métal", "metalness", 0, 1, 0.01],
-    ["Rugosité", "roughness", 0, 1, 0.01],
-    ["Normale", "normalScale", 0, 2, 0.05],
-    ["Émissif", "emissiveIntensity", 0, 4, 0.05],
+    [t("map.metalness"), "metalness", 0, 1, 0.01],
+    [t("map.roughness"), "roughness", 0, 1, 0.01],
+    [t("map.normal"), "normalScale", 0, 2, 0.05],
+    [t("map.emissive"), "emissiveIntensity", 0, 4, 0.05],
   ];
   for (const [label, key, min, max, step] of NUMBERS) {
     if (!(key in material) || material[key] === undefined || material[key] === null) continue;
@@ -1814,7 +1829,7 @@ function textureBlock(uuid) {
   // Only the settings this material actually has: an occlusion strength means
   // nothing without an occlusion map.
   if (material.aoMap) {
-    slider("Intensité AO", material.aoMapIntensity ?? 1, 0, 2, 0.05, (v) => {
+    slider(t("mat.aoIntensity"), material.aoMapIntensity ?? 1, 0, 2, 0.05, (v) => {
       material.aoMapIntensity = v;
     });
   }
@@ -1831,7 +1846,7 @@ function textureBlock(uuid) {
     slider("IOR", material.ior ?? 1.5, 1, 2.5, 0.01, (v) => {
       material.ior = v;
     });
-    slider("Épaisseur", material.thickness ?? 0, 0, span / 2, span / 200, (v) => {
+    slider(t("mat.thickness"), material.thickness ?? 0, 0, span / 2, span / 200, (v) => {
       material.thickness = v;
     });
   }
@@ -1842,20 +1857,21 @@ function textureBlock(uuid) {
   presets.className = "map-row";
   const label = document.createElement("span");
   label.className = "map-role";
-  label.textContent = "Préréglage";
+  label.textContent = t("mat.preset");
   const group = document.createElement("div");
   group.className = "segment";
   for (const [name, text] of [
-    ["verre", "Verre"],
-    ["liquide", "Liquide"],
-    ["metal", "Métal"],
-    ["irise", "Irisé"],
-    ["verni", "Verni"],
+    ["verre", "mat.presetGlass"],
+    ["liquide", "mat.presetLiquid"],
+    ["metal", "mat.presetMetal"],
+    ["irise", "mat.presetIridescent"],
+    ["verni", "mat.presetVarnish"],
   ]) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "seg";
-    b.textContent = text;
+    b.textContent = t(text);
+    b.dataset.i18n = text;
     b.addEventListener("click", () => {
       const bounds = viewer.boxHelper.box;
       const next = applyPreset(material, name, {
@@ -1878,7 +1894,8 @@ function textureBlock(uuid) {
     const revert = document.createElement("button");
     revert.type = "button";
     revert.className = "seg";
-    revert.textContent = "Rétablir le matériau du fichier";
+    revert.textContent = t("mat.revert");
+    revert.dataset.i18n = "mat.revert";
     revert.addEventListener("click", () => {
       const original = channels.restoreMaterial(uuid);
       markDirty();
@@ -1910,15 +1927,11 @@ function paintMaterialList() {
 
     // Defects the file declares but cannot deliver, named rather than hidden
     const defect = alphaLost
-      ? "transparence déclarée, aucune source d'alpha. La carte a été perdue à l'export ; " +
-        "le fichier ne contient plus de quoi la retrouver, donc elle s'affiche pleine. « Masqué » l'écarte."
+      ? t("mat.defectAlpha")
       : invisible
-        ? "opacité nulle : ce matériau ne peut rien dessiner. Volontaire sur une géométrie " +
-          "de service, sinon c'est un réglage tombé dans le mauvais champ, ce qui arrive au " +
-          "verre réfractif dont l'opacité n'est pas un taux de couverture."
+        ? t("mat.defectInvisible")
         : deadVertexColors
-          ? "couleurs par sommet entièrement nulles, elles auraient multiplié la texture par zéro " +
-            "et noirci le maillage. Elles sont ignorées ; le fichier, lui, reste défectueux."
+          ? t("mat.defectDeadColours")
           : null;
 
     // Clicking the name opens its textures and rings the meshes it covers: a
@@ -1929,7 +1942,11 @@ function paintMaterialList() {
     label.textContent = defect ? `${name} ⚠` : name;
     label.classList.toggle("warn", !!defect);
     label.classList.toggle("selected", selection.has(uuid));
-    label.title = defect ? `${name} : ${defect}` : textured ? `${name} (texturé)` : name;
+    label.title = defect
+      ? `${name} : ${defect}`
+      : textured
+        ? t("mat.texturedTitle").replace("{name}", name)
+        : name;
     label.addEventListener("click", (e) => selectMaterial(uuid, e.ctrlKey || e.metaKey));
 
     /*
@@ -1971,7 +1988,7 @@ function paintMaterialList() {
     } else {
       chip.style.background = color || "#3a3f48";
     }
-    chip.title = textured ? "Couleur de base" : "Couleur unie, sans texture";
+    chip.title = textured ? t("mat.baseColour") : t("mat.flatColour");
 
     // How many triangles this material is responsible for. In the inspector it
     // is a curiosity; in Retopo it is the number that says where a budget will
@@ -1999,8 +2016,8 @@ function paintMaterialList() {
     lit.textContent = mode === "unlit" ? "Unlit" : "PBR";
     lit.title =
       mode === "unlit"
-        ? "Texture telle quelle. Cliquer pour éclairer ce matériau."
-        : "Éclairé par la scène. Cliquer pour l'afficher tel quel.";
+        ? t("mat.unlitTitle")
+        : t("mat.pbrTitle");
     lit.addEventListener("click", () => {
       channels.setMaterialHidden(uuid, false);
       channels.setMaterialMode(uuid, mode === "unlit" ? "shaded" : "unlit");
@@ -2015,7 +2032,7 @@ function paintMaterialList() {
     hide.type = "button";
     hide.className = "tree-eye" + (hidden ? " off" : "");
     hide.textContent = hidden ? "◌" : "◉";
-    hide.title = hidden ? "Réafficher ce matériau" : "Retirer ce matériau de la vue";
+    hide.title = hidden ? t("mat.showAgain") : t("mat.hideFromView");
     hide.addEventListener("click", () => {
       channels.setMaterialHidden(uuid, !hidden);
       paintMaterialList();
@@ -2097,6 +2114,15 @@ window.addEventListener("i18n", () => {
   }
   paintViewbar();
   outliner?.paint();
+  // Lists and readouts built in code rather than written in the markup:
+  // `applyStatic` cannot reach a string that was set once with `textContent`.
+  paintOrientation();
+  showDimensions();
+  paintMaterialList();
+  paintParts();
+  updateDecorSelectedLabel();
+  paintSaveButtons();
+  void refreshShellState();
 });
 applyChannel("shaded");
 
@@ -2445,7 +2471,7 @@ async function exportModel(format = "glb", { overwrite = false } = {}) {
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(path, bytes);
       clearDirty();
-      note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
+      note.textContent = writtenNote(path, bytes.length);
     } else {
       const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
       const a = document.createElement("a");
@@ -2545,12 +2571,12 @@ async function saveSnapshot() {
     if (tauri) {
       const path = await tauri.dialog.save({
         defaultPath: name,
-        filters: [{ name: "Image PNG", extensions: ["png"] }],
+        filters: [{ name: t("dlg.pngImage"), extensions: ["png"] }],
       });
       if (!path) return;
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(path, bytes);
-      note.textContent = `Écrit : ${path.split(/[\\/]/).pop()}`;
+      note.textContent = t("note.written").replace("{file}", fileLabel(path));
     } else {
       const a = document.createElement("a");
       a.href = url;
@@ -2626,7 +2652,9 @@ function setShotSize(width, height, remember = true) {
   shot.height = Math.max(64, Math.min(8192, Math.round(height)));
   $("shot-width").value = String(shot.width);
   $("shot-height").value = String(shot.height);
-  $("shot-note").textContent = `${shot.width} × ${shot.height}, cadrage de la vue`;
+  $("shot-note").textContent = t("pane.shotNote")
+    .replace("{w}", shot.width)
+    .replace("{h}", shot.height);
   if (remember) {
     prefs.set("shotWidth", shot.width);
     prefs.set("shotHeight", shot.height);
@@ -2683,14 +2711,14 @@ $("shot-save").addEventListener("click", async () => {
     if (tauri) {
       const path = await tauri.dialog.save({
         defaultPath: name,
-        filters: [{ name: "Image PNG", extensions: ["png"] }],
+        filters: [{ name: t("dlg.pngImage"), extensions: ["png"] }],
       });
       if (!path) return;
       const { writeFile } = await import("@tauri-apps/plugin-fs");
       await writeFile(path, bytes);
       // The work is on disk, so leaving no longer throws it away.
       clearDirty();
-      note.textContent = `Écrit : ${path.split(/[\\/]/).pop()} (${(bytes.length / 1048576).toFixed(1)} Mo)`;
+      note.textContent = writtenNote(path, bytes.length);
     } else {
       const a = document.createElement("a");
       a.href = url;
@@ -3013,7 +3041,7 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
       if (!source) return;
       const link = tauri ? tauri.core.convertFileSrc(source) : source;
       if (!(await viewer.loadBackdrop(link))) {
-        $("backdrop-file").textContent = "Image illisible";
+        $("backdrop-file").textContent = t("pane.imageUnreadable");
         return;
       }
       if (remember && tauri) prefs.set("backdropPath", source);
@@ -3023,7 +3051,7 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
       viewer.applyLighting();
       source = prefs.get("backdropPath") || "";
     }
-    $("backdrop-file").textContent = source ? fileLabel(source) : "Image chargée";
+    $("backdrop-file").textContent = source ? fileLabel(source) : t("pane.imageLoaded");
     paintBackdropPanes(kind);
     if (remember) prefs.set("environment", kind);
     paintTree();
@@ -3037,7 +3065,7 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
       source = prefs.get("environmentPath") || "";
     } else {
       if (!source && !ask) source = prefs.get("environmentPath") || null;
-      if (!source) source = await pickFile("Panoramas", PANORAMA_KINDS);
+      if (!source) source = await pickFile(t("dlg.panoramas"), PANORAMA_KINDS);
       if (!source) return;
       url = tauri ? tauri.core.convertFileSrc(source) : source;
     }
@@ -3048,14 +3076,18 @@ async function useEnvironment(kind, path, remember = true, { ask = false } = {})
     // A remembered path that has moved or been deleted. Ask once, rather than
     // leaving the button dead with a message under it.
     if (kind === "image" && !ask) {
-      const picked = await pickFile("Panoramas", PANORAMA_KINDS);
+      const picked = await pickFile(t("dlg.panoramas"), PANORAMA_KINDS);
       if (picked) return useEnvironment("image", picked, remember);
     }
-    $("env-file").textContent = "Panorama illisible";
+    $("env-file").textContent = t("pane.panoUnreadable");
     return;
   }
   $("env-file").textContent =
-    kind === "image" ? fileLabel(source) : kind === "gradient" ? "Dégradé interne" : "Aucun panorama";
+    kind === "image"
+      ? fileLabel(source)
+      : kind === "gradient"
+        ? t("pane.gradientInternal")
+        : t("pane.noPanorama");
   paintBackdropPanes(kind);
   if (!remember) return;
   prefs.set("environment", kind);
@@ -3311,21 +3343,23 @@ async function usePedestal(path, remember = true) {
     viewer.setPedestalTransform(prefs.get("pedestalTransform"));
     setStandShading(prefs.get("pedestalShading") || "shaded", false);
     $("pedestal-file").textContent = fileLabel(path);
-    $("btn-pedestal").textContent = "Retirer le socle";
+    $("btn-pedestal").textContent = t("pane.standDrop");
+    $("btn-pedestal").dataset.i18n = "pane.standDrop";
     $("pedestal-tools").hidden = false;
     if (remember && tauri) prefs.set("pedestal", path);
     selectDecorItem({ type: "pedestal" });
     paintDecorTree();
   } catch (e) {
-    $("pedestal-file").textContent = "Socle illisible";
+    $("pedestal-file").textContent = t("pane.standUnreadable");
     console.warn("[albedo] socle:", e);
   }
 }
 
 function dropPedestal() {
   viewer.clearPedestal();
-  $("pedestal-file").textContent = "Aucun socle";
-  $("btn-pedestal").textContent = "Choisir un socle";
+  $("pedestal-file").textContent = t("pane.noStand");
+  $("btn-pedestal").textContent = t("pane.standPick");
+  $("btn-pedestal").dataset.i18n = "pane.standPick";
   $("pedestal-tools").hidden = true;
   setGizmoMode(null);
   prefs.set("pedestal", null);
@@ -3341,7 +3375,7 @@ $("btn-pedestal")?.addEventListener("click", async () => {
     dropPedestal();
     return;
   }
-  const picked = await pickFile("Modèles 3D", SUPPORTED);
+  const picked = await pickFile(t("dlg.models3d"), SUPPORTED);
   if (picked) usePedestal(picked);
 });
 
@@ -3504,7 +3538,7 @@ async function openFile() {
   if (tauri) {
     const picked = await tauri.dialog.open({
       multiple: false,
-      filters: [{ name: "Modèles 3D", extensions: SUPPORTED }],
+      filters: [{ name: t("dlg.models3d"), extensions: SUPPORTED }],
     });
     if (picked) openPath(picked);
     return;
@@ -4058,9 +4092,9 @@ let decorSelection = {
 let decorGizmoMode = null;
 
 const LIGHT_KIND_LABELS = {
-  directional: "Directionnelle",
-  point: "Ponctuelle",
-  spot: "Projecteur",
+  directional: "light.directional",
+  point: "light.point",
+  spot: "light.spot",
 };
 
 const LIGHT_KIND_ICONS = {
@@ -4085,27 +4119,28 @@ function updateDecorSelectedLabel() {
     const entry =
       viewer.lights.find((l) => l.id === decorSelection.id) || viewer.lights[0];
     if (entry) {
-      label.textContent = `${entry.name} (${LIGHT_KIND_LABELS[entry.kind] || entry.kind})`;
+      const kindLabel = LIGHT_KIND_LABELS[entry.kind];
+      label.textContent = `${entry.name} (${kindLabel ? t(kindLabel) : entry.kind})`;
     } else {
-      label.textContent = `Lumière`;
+      label.textContent = t("pane.lightGeneric");
     }
   } else if (decorSelection.type === "pedestal") {
     const pName = prefs?.get?.("pedestal")
       ? fileLabel(prefs.get("pedestal"))
       : viewer.pedestal
-      ? "Socle 3D"
-      : "Aucun socle";
-    label.textContent = `Socle (${pName})`;
+      ? t("pane.stand3d")
+      : t("pane.noStand");
+    label.textContent = t("pane.standNamed").replace("{name}", pName);
   } else if (decorSelection.type === "background") {
     const bName =
       viewer.envKind === "image"
         ? prefs?.get?.("environmentPath")
           ? fileLabel(prefs.get("environmentPath"))
-          : "Image HDRI"
+          : t("pane.hdriImage")
         : viewer.envKind === "gradient"
-        ? "Dégradé"
-        : "Studio";
-    label.textContent = `Fond (${bName})`;
+        ? t("pane.gradient")
+        : t("pane.studio");
+    label.textContent = t("pane.backdropNamed").replace("{name}", bName);
   }
 }
 
@@ -4395,24 +4430,28 @@ function paintOrientation() {
   const parts = [["X", o.x], ["Y", o.y], ["Z", o.z]].filter(([, v]) => v !== 0);
   $("orient-value").textContent = parts.length
     ? parts.map(([a, v]) => `${a} ${v > 180 ? v - 360 : v}°`).join(" · ")
-    : "Aucune rotation";
+    : t("pan.orientNone");
 }
 
 // Named for what they do to the model rather than for the axis they turn it
 // about. Nobody looking at a model on its side is thinking in axes; they are
 // thinking "tip it forward". The axis stays in the tooltip for anyone who is.
 for (const [axis, quarters, label, what] of [
-  ["x", 1, "Basculer avant", "Bascule le modèle vers l'avant, quart de tour sur X"],
-  ["x", -1, "Basculer arrière", "Bascule le modèle vers l'arrière, quart de tour sur X"],
-  ["y", 1, "Pivoter gauche", "Fait pivoter le modèle sur lui-même, quart de tour sur Y"],
-  ["y", -1, "Pivoter droite", "Fait pivoter le modèle sur lui-même, quart de tour sur Y"],
-  ["z", 1, "Coucher gauche", "Couche le modèle sur le côté, quart de tour sur Z"],
-  ["z", -1, "Coucher droite", "Couche le modèle sur le côté, quart de tour sur Z"],
+  ["x", 1, "pan.tipForward", "pan.tipForwardTitle"],
+  ["x", -1, "pan.tipBack", "pan.tipBackTitle"],
+  ["y", 1, "pan.turnLeft", "pan.turnLeftTitle"],
+  ["y", -1, "pan.turnRight", "pan.turnRightTitle"],
+  ["z", 1, "pan.rollLeft", "pan.rollLeftTitle"],
+  ["z", -1, "pan.rollRight", "pan.rollRightTitle"],
 ]) {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = label;
-  b.title = what;
+  // `data-i18n` rather than a repaint: `applyStatic` walks the document on
+  // every language change, and reaches nodes built long after startup.
+  b.dataset.i18n = label;
+  b.dataset.i18nTitle = what;
+  b.textContent = t(label);
+  b.title = t(what);
   b.addEventListener("click", () => {
     recordBefore(viewer.root);
     viewer.turnModel(axis, quarters);
@@ -4476,19 +4515,22 @@ $("orient-reset").addEventListener("click", () => {
 async function paintShellState(state) {
   const note = $("shell-state");
   if (!state) {
-    note.textContent = "état inconnu";
+    note.textContent = t("shell.unknown");
     return;
   }
   $("shell-section").hidden = false;
   $("shell-on").disabled = !state.available || state.current_is_registered;
   $("shell-off").disabled = !state.registered;
   if (!state.registered) {
-    note.textContent = state.available ? "inactive" : "indisponible dans cette version";
+    note.textContent = state.available ? t("shell.inactive") : t("shell.unavailable");
     return;
   }
   note.textContent = state.current_is_registered
-    ? "active, sur cette copie"
-    : `active, mais sur ${state.renderer || state.provider || "une autre copie"}`;
+    ? t("shell.activeHere")
+    : t("shell.activeElsewhere").replace(
+        "{copy}",
+        state.renderer || state.provider || t("shell.otherCopy")
+      );
 }
 
 async function refreshShellState() {
@@ -4793,10 +4835,10 @@ function meshByUuid(uuid) {
 
 function editTargetName() {
   const target = editTarget();
-  if (pivotEditing && target === viewer.pivotMarker) return "le centre de rotation";
-  if (!target || target === viewer.root) return "la scène entière";
-  if (selectedPart && target === selectedPart.object) return selectedPart.name || "l'objet choisi";
-  return target.name || "la surface choisie";
+  if (pivotEditing && target === viewer.pivotMarker) return t("edit.pivot");
+  if (!target || target === viewer.root) return t("edit.wholeScene");
+  if (selectedPart && target === selectedPart.object) return selectedPart.name || t("edit.pickedObject");
+  return target.name || t("edit.pickedSurface");
 }
 
 function paintEditTarget() {
@@ -4856,7 +4898,7 @@ function paintParts() {
     name.type = "button";
     name.className = "mat-name" + (selectedPart === entry ? " active" : "");
     name.style.textAlign = "left";
-    name.textContent = entry.name || "(sans nom)";
+    name.textContent = entry.name || t("pane.unnamed");
     name.title = t("pane.objectAimTitle");
     name.addEventListener("click", () => {
       const next = selectedPart === entry ? null : entry;
@@ -5028,10 +5070,10 @@ function paintSaveButtons() {
   $("part-import").disabled = !tauri;
   over.disabled = !canOverwrite;
   over.title = canOverwrite
-    ? `Remplacer ${openedPath.split(/[\\/]/).pop()}, sans retour possible`
+    ? t("pane.overwriteTitle").replace("{file}", fileLabel(openedPath))
     : openedPath
-      ? "Albedo écrit du glTF ; ce fichier est dans un autre format, passe par Enregistrer sous"
-      : "Aucun fichier sur le disque";
+      ? t("pane.overwriteWrongFormat")
+      : t("pane.overwriteNoFile");
 }
 
 /**
@@ -5111,7 +5153,7 @@ async function importFromDisk() {
   if (!viewer.current) return;
   const picked = await tauri?.dialog?.open({
     multiple: false,
-    filters: [{ name: "Modèles 3D", extensions: SUPPORTED }],
+    filters: [{ name: t("dlg.models3d"), extensions: SUPPORTED }],
   });
   if (picked) await importPart(picked);
 }
@@ -5171,11 +5213,11 @@ $("save-over").addEventListener("click", async () => {
   if (!openedPath) return;
   const name = openedPath.split(/[\\/]/).pop();
   const ok = await (tauri?.dialog?.confirm
-    ? tauri.dialog.confirm(`Remplacer ${name} ? L'original sera perdu.`, {
-        title: "Écraser le fichier",
+    ? tauri.dialog.confirm(t("dlg.overwriteAsk").replace("{file}", name), {
+        title: t("dlg.overwriteTitle"),
         kind: "warning",
       })
-    : Promise.resolve(window.confirm(`Remplacer ${name} ? L'original sera perdu.`)));
+    : Promise.resolve(window.confirm(t("dlg.overwriteAsk").replace("{file}", name))));
   if (!ok) return;
   await exportModel({ overwrite: true });
   $("save-note").textContent = $("export-note").textContent;

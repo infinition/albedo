@@ -1,3 +1,5 @@
+import { t } from "../../i18n/index.js";
+
 /**
  * Little-endian cursor over an ArrayBuffer.
  *
@@ -92,7 +94,7 @@ export class Reader {
   /** NiString: uint32 length then raw bytes. */
   string(limit = 16384) {
     const n = this.u32();
-    if (n > limit) throw new Error(`chaîne invalide (${n} octets)`);
+    if (n > limit) throw new Error(t("err.nifBadString").replace("{n}", n));
     this.need(n);
     let s = "";
     for (let i = 0; i < n; i++) {
@@ -112,7 +114,7 @@ export class Reader {
       if (c === 0x0a) return s;
       s += String.fromCharCode(c);
     }
-    throw new Error("en-tête NIF introuvable");
+    throw new Error(t("err.nifNoHeader"));
   }
 
   skip(n) {

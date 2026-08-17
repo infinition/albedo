@@ -1,3 +1,5 @@
+import { t } from "../../i18n/index.js";
+
 /**
  * LZ4 block decompression, plus the framing OpenUSD wraps around it.
  *
@@ -28,7 +30,7 @@ export function lz4Block(src, srcStart, srcEnd, dstSize) {
     if (ip >= srcEnd) break;
 
     const offset = src[ip++] | (src[ip++] << 8);
-    if (offset === 0) throw new Error("bloc LZ4 corrompu (décalage nul)");
+    if (offset === 0) throw new Error(t("err.lz4"));
 
     let matchLength = token & 15;
     if (matchLength === 15) {

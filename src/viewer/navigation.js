@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { t } from "../i18n/index.js";
 
 /**
  * Camera navigation: keyboard, mouse, gamepad and SpaceMouse.
@@ -450,7 +451,7 @@ export class Navigation {
    * wireless models. Buttons arrive on id 3.
    */
   async connectSpaceMouse() {
-    if (!navigator.hid) throw new Error("WebHID indisponible dans cette webview");
+    if (!navigator.hid) throw new Error(t("dev.noWebHid"));
     const devices = await navigator.hid.requestDevice({
       filters: [
         { vendorId: 0x256f }, // 3Dconnexion

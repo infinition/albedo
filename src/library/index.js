@@ -1,6 +1,6 @@
 import "./library.css";
 import { thumbnailFor, releaseThumbnails, cancelPending } from "./thumbs.js";
-import { applyStaticIn, register, t } from "../i18n/index.js";
+import { applyStaticIn, currentLang, register, t } from "../i18n/index.js";
 import libFr from "./fr.json";
 import libEn from "./en.json";
 
@@ -516,8 +516,8 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
     const count = document.createElement("span");
     count.className = "lib-count mono";
     count.textContent = state.truncated
-      ? `${visible.length} affichés, dossier tronqué`
-      : `${visible.length} élément${visible.length > 1 ? "s" : ""}`;
+      ? t("lib.countTruncated").replace("{n}", visible.length)
+      : t(visible.length > 1 ? "lib.countMany" : "lib.countOne").replace("{n}", visible.length);
     el.formats.appendChild(count);
   }
 
@@ -761,7 +761,9 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
     const many = chosen.length > 1;
     const name = document.createElement("span");
     name.className = "name";
-    name.textContent = many ? `${chosen.length} éléments` : entry?.name ?? chosen[0];
+    name.textContent = many
+      ? t("lib.chosenMany").replace("{n}", chosen.length)
+      : entry?.name ?? chosen[0];
     name.title = many ? chosen.slice(0, 20).join(String.fromCharCode(10)) : entry?.path ?? "";
 
     const meta = document.createElement("span");
@@ -771,7 +773,9 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       meta.textContent = bytes(total);
     } else if (entry) {
       const date = new Date(entry.modified * 1000);
-      meta.textContent = `${entry.ext.toUpperCase()} · ${bytes(entry.size)} · ${date.toLocaleDateString("fr-FR")}`;
+      meta.textContent =
+        `${entry.ext.toUpperCase()} · ${bytes(entry.size)} · ` +
+        date.toLocaleDateString(currentLang() === "fr" ? "fr-FR" : "en-GB");
     }
 
     // A tag shown here is one every chosen asset carries; removing it removes
@@ -801,7 +805,9 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
 
     const input = document.createElement("input");
     input.className = "tag-input";
-    input.placeholder = many ? `Tag pour ${chosen.length} éléments, Entrée` : "Ajouter un tag, Entrée";
+    input.placeholder = many
+      ? t("lib.tagMany").replace("{n}", chosen.length)
+      : t("lib.tagOne");
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key !== "Enter" || !input.value.trim()) return;

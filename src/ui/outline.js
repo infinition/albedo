@@ -1,4 +1,5 @@
 import { MAP_SLOTS } from "../viewer/materials.js";
+import { t } from "../i18n/index.js";
 
 /**
  * The outliner: meshes, their materials, and each material's maps.
@@ -66,13 +67,13 @@ export function readScene(viewer, channels) {
     meshes.push({
       id: node.uuid,
       node,
-      name: node.name || "(sans nom)",
+      name: node.name || t("pane.unnamed"),
       visible: node.visible,
       triangles: Math.round(total),
       materials: mats.filter(Boolean).map((m, i) => ({
         id: m.uuid,
         material: m,
-        name: m.name || "(sans nom)",
+        name: m.name || t("pane.unnamed"),
         hidden: !!channels?.hiddenMaterials?.has(m.uuid),
         // Per material triangles, from the groups when there are any. Without
         // groups the mesh belongs to its single material, and a mesh listing
@@ -88,7 +89,7 @@ export function readScene(viewer, channels) {
         maps: MAP_SLOTS.filter(([slot]) => m[slot] || m.userData?.hiddenMaps?.[slot]).map(
           ([slot, label]) => ({
             slot,
-            label,
+            label: t(label),
             hidden: !!m.userData?.hiddenMaps?.[slot],
             texture: m[slot] || m.userData?.hiddenMaps?.[slot],
           })

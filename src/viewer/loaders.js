@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { t } from "../i18n/index.js";
 
 export const SUPPORTED = [
   "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf",
@@ -8,10 +9,10 @@ export const SUPPORTED = [
 
 // Formats people ask for that no browser-side loader handles today.
 export const KNOWN_UNSUPPORTED = {
-  blend: "Fichier Blender : format interne, à exporter en glTF",
-  max: "3ds Max : format propriétaire fermé",
-  ma: "Maya ASCII : format propriétaire",
-  mb: "Maya binaire : format propriétaire",
+  blend: "fmt.blend",
+  max: "fmt.max",
+  ma: "fmt.ma",
+  mb: "fmt.mb",
 };
 
 const ext = (url) => {
@@ -233,7 +234,9 @@ export async function loadModel(
     }
     default: {
       const why = KNOWN_UNSUPPORTED[kind];
-      throw new Error(why || `Format non pris en charge : .${kind || "?"}`);
+      throw new Error(
+        why ? t(why) : t("fmt.unsupported").replace("{ext}", kind || "?")
+      );
     }
   }
 }

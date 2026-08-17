@@ -1,4 +1,5 @@
 import { decompress } from "./lz4.js";
+import { t } from "../../i18n/index.js";
 
 /**
  * PXR-USDC crate reader.
@@ -54,7 +55,7 @@ export class CrateFile {
     this.view = new DataView(this.bytes.buffer, this.bytes.byteOffset, this.bytes.byteLength);
 
     const ident = String.fromCharCode(...this.bytes.subarray(0, 8));
-    if (ident !== IDENT) throw new Error("ce fichier n'est pas un crate USD");
+    if (ident !== IDENT) throw new Error(t("err.notCrate"));
     this.version = [this.bytes[8], this.bytes[9], this.bytes[10]];
 
     const tocOffset = Number(this.view.getBigInt64(16, true));
@@ -92,7 +93,7 @@ export class CrateFile {
 
   section(name) {
     const s = this.sections[name];
-    if (!s) throw new Error(`section ${name} absente du crate`);
+    if (!s) throw new Error(t("err.crateSection").replace("{name}", name));
     return s;
   }
 

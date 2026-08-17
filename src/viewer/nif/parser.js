@@ -1,4 +1,5 @@
 import { Reader, VERSIONS as V, versionName } from "./reader.js";
+import { t } from "../../i18n/index.js";
 
 /**
  * NIF (NetImmerse / Gamebryo) reader, versions 3.x through 10.2.
@@ -27,7 +28,7 @@ export function parseNif(buffer) {
   const r = new Reader(buffer);
   const headerString = r.line();
   if (!/NetImmerse|Gamebryo/i.test(headerString)) {
-    throw new Error("ce fichier n'est pas un NIF (en-tête absent)");
+    throw new Error(t("err.notNif"));
   }
   const version = r.u32();
   const ctx = {
@@ -41,8 +42,7 @@ export function parseNif(buffer) {
 
   if (version > V.V10_1_0_106) {
     throw new Error(
-      `NIF ${ctx.versionName} : seules les versions jusqu'à 10.1.0.106 ` +
-        `(NetImmerse, Gamebryo, DAoC, Morrowind) sont lues ici`
+      t("err.nifVersion").replace("{version}", ctx.versionName)
     );
   }
 
@@ -72,7 +72,9 @@ export function parseNif(buffer) {
         const check = r.u32();
         const type = blockTypes[blockTypeIndex[bi]];
         if (check !== 0) {
-          ctx.warnings.push(`désalignement au bloc ${bi} (${type}), lecture arrêtée`);
+          ctx.warnings.push(
+            t("err.nifMisaligned").replace("{block}", bi).replace("{type}", type)
+          );
           break;
         }
         kind = type;
@@ -1040,7 +1042,7 @@ function readBlock(r, kind, version, ctx) {
     }
 
     default:
-      ctx.warnings.push(`type de bloc inconnu : ${kind}`);
+      ctx.warnings.push(t("err.nifUnknownBlock").replace("{type}", kind));
       throw new Error(`type inconnu ${kind}`);
   }
 }

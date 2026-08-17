@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { releaseSubtree, texturesOf } from "./release.js";
+import { t } from "../i18n/index.js";
 
 /** Where the gradient starts before anyone touches it. */
 export const DEFAULT_STOPS = [
@@ -2696,7 +2697,7 @@ export class Viewer {
    * @returns {string} a `data:image/png` URL
    */
   snapshot(size = 512, { transparent = true } = {}) {
-    if (!this.current) throw new Error("aucun modèle à rendre");
+    if (!this.current) throw new Error(t("err.nothingToRender"));
     const background = this.scene.background;
     const gridVisible = this.grid.visible;
     const boundsVisible = this.boxHelper.visible;
@@ -2936,7 +2937,7 @@ export class Viewer {
           : o.isBone
             ? "Bone"
             : o.type;
-      lines.push(`${"  ".repeat(depth)}${o.name || "(sans nom)"} · ${kind}`);
+      lines.push(`${"  ".repeat(depth)}${o.name || t("pane.unnamed")} · ${kind}`);
       for (const c of o.children) walk(c, depth + 1);
     };
     for (const c of this.root.children) walk(c, 0);

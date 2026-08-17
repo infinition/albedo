@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { releaseMaterials, texturesOf } from "./release.js";
+import { t } from "../i18n/index.js";
 
 /**
  * Inspection channels.
@@ -371,7 +372,7 @@ export class ChannelView {
         seen.add(m.uuid);
         out.push({
           uuid: m.uuid,
-          name: m.name || "(sans nom)",
+          name: m.name || t("pane.unnamed"),
           textured: !!m.map,
           /** The base colour map itself, for a thumbnail beside the name. */
           map: m.map || null,

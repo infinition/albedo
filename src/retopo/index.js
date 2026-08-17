@@ -90,7 +90,7 @@ const SHELL = `
   <button class="tb-i" type="button" data-el="redo" data-icon="redo" data-i18n-title="rt.redo" title="Refaire" disabled></button>
   <span class="rt-note" data-el="history"></span>
   <button class="wide" type="button" data-el="run">Décimer</button>
-  <button class="wide" type="button" data-el="rebake" disabled>Cuire</button>
+  <button class="wide" type="button" data-el="rebake" data-i18n="rt.bake" disabled>Bake</button>
   <span class="rt-note" data-el="note"></span>
   <button class="wide" type="button" data-el="close" data-i18n="rt.close">Fermer</button>
   <div class="rt-progress"><i data-el="fill"></i></div>
@@ -2043,7 +2043,7 @@ export function createRetopo({
       // Everything that touches state lives inside the try, so a throw on the
       // way in cannot leave `running` stuck true and the button disabled for the
       // rest of the session.
-      el.run.textContent = "Annuler";
+      el.run.textContent = t("rt.cancel");
       el.rebake.disabled = true;
       el.err.hidden = true;
       el.fill.style.width = "0%";
@@ -2196,7 +2196,7 @@ export function createRetopo({
 
     let stop = null;
     try {
-      el.run.textContent = "Annuler";
+      el.run.textContent = t("rt.cancel");
       el.rebake.disabled = true;
       el.err.hidden = true;
       el.fill.style.width = "0%";

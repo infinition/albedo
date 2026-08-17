@@ -247,17 +247,19 @@ export function applyPreset(material, name, { span = 1 } = {}) {
 }
 
 /** The map slots worth showing, in the order an artist thinks of them. */
+// The second half of each pair is a translation key, not a label: this list is
+// read by two panels, and both of them say it in whichever language is on.
 export const MAP_SLOTS = [
-  ["map", "Albedo"],
-  ["normalMap", "Normale"],
-  ["roughnessMap", "Rugosité"],
-  ["metalnessMap", "Métal"],
-  ["aoMap", "AO"],
-  ["emissiveMap", "Émissif"],
-  ["alphaMap", "Alpha"],
-  ["bumpMap", "Relief"],
-  ["displacementMap", "Déplacement"],
-  ["lightMap", "Lumière"],
+  ["map", "map.albedo"],
+  ["normalMap", "map.normal"],
+  ["roughnessMap", "map.roughness"],
+  ["metalnessMap", "map.metalness"],
+  ["aoMap", "map.ao"],
+  ["emissiveMap", "map.emissive"],
+  ["alphaMap", "map.alpha"],
+  ["bumpMap", "map.bump"],
+  ["displacementMap", "map.displacement"],
+  ["lightMap", "map.light"],
 ];
 
 const DATA_SLOTS = new Set([
