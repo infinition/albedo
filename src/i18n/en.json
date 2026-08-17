@@ -288,5 +288,9 @@
   "pan.accentCyan": "Cyan",
   "pan.accentOrange": "Orange",
   "pan.accentGreen": "Green",
-  "pan.accentWhite": "White"
+  "pan.accentWhite": "White",
+  "pan.accentCustom": "Other",
+  "pan.accentPick": "Chosen hue",
+  "pan.uiColour": "Interface",
+  "pan.gridColour": "Grid"
 }

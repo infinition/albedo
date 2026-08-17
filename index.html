@@ -1203,6 +1203,40 @@
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/></svg>
               <span data-i18n="pan.accentWhite">Blanc</span>
             </label>
+            <label class="chip" id="accent-custom-chip" style="--tint:#b08cff">
+              <input type="radio" name="accent" value="custom" />
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 5a7 7 0 0 1 0 14z" fill="currentColor" stroke="none"/></svg>
+              <span data-i18n="pan.accentCustom">Autre</span>
+            </label>
+          </div>
+          <div class="fx-row fx-row-plain" id="accent-custom-row" hidden>
+            <span data-i18n="pan.accentPick">Teinte choisie</span>
+            <input type="color" id="accent-colour" class="swatch" value="#b08cff" />
+          </div>
+
+          <!--
+            The chrome, the floor and the backdrop: three surfaces a person
+            judging colour has a right to set.
+
+            The backdrop is the same control as the one under Fonds, not a copy
+            of it — one state, two doors, kept in step. It belongs to the scene
+            rather than to the application, which is why its home is there; it is
+            reachable here because this is where somebody comes to change how
+            things look.
+          -->
+          <div class="fx-row fx-row-plain">
+            <span data-i18n="pan.uiColour">Interface</span>
+            <input type="color" id="ui-colour" class="swatch" value="#1c1c1c" />
+            <button id="ui-colour-reset" class="tree-mini" type="button" data-i18n="pane.recentre">Défaut</button>
+          </div>
+          <div class="fx-row fx-row-plain">
+            <span data-i18n="pan.gridColour">Quadrillage</span>
+            <input type="color" id="grid-colour" class="swatch" value="#3a4150" />
+            <button id="grid-colour-reset" class="tree-mini" type="button" data-i18n="pane.recentre">Défaut</button>
+          </div>
+          <div class="fx-row fx-row-plain">
+            <span data-i18n="pane.bgColour">Fond</span>
+            <input type="color" id="canvas-colour" class="swatch" value="#14161a" />
           </div>
         </details>
 

@@ -2293,11 +2293,17 @@ $("opt-lights-visible").addEventListener("change", (e) => {
  * detached div. One attribute, one custom property, and every highlight in the
  * stylesheet already reads it.
  */
-const ACCENTS = new Set(["cyan", "orange", "green", "white"]);
+const ACCENTS = new Set(["cyan", "orange", "green", "white", "custom"]);
 
 function setAccent(name, remember = true) {
   const accent = ACCENTS.has(name) ? name : "cyan";
-  document.documentElement.dataset.accent = accent;
+  const root = document.documentElement;
+  root.dataset.accent = accent;
+  // A custom hue is written as an inline property, which beats the attribute
+  // rules; the named ones clear it so the stylesheet is back in charge.
+  if (accent === "custom") root.style.setProperty("--accent", $("accent-colour").value);
+  else root.style.removeProperty("--accent");
+  $("accent-custom-row").hidden = accent !== "custom";
   const box = document.querySelector(`#accent-chips input[value="${accent}"]`);
   if (box) box.checked = true;
   if (remember) prefs.set("accent", accent);
@@ -2306,6 +2312,45 @@ function setAccent(name, remember = true) {
 for (const box of document.querySelectorAll("#accent-chips input")) {
   box.addEventListener("change", () => setAccent(box.value));
 }
+$("accent-colour").addEventListener("input", (e) => {
+  $("accent-custom-chip").style.setProperty("--tint", e.target.value);
+  prefs.set("accentColour", e.target.value);
+  setAccent("custom");
+});
+
+/**
+ * The three surfaces somebody judging colour is entitled to set.
+ *
+ * The interface, because a tinted chrome tints the judgement of what it frames.
+ * The floor, because its two greys were written into the grid twice and rebuilt
+ * from scratch on every reframe. And the backdrop — which is the *same state* as
+ * the picker under Fonds rather than a copy of it: it belongs to the scene, so
+ * that is where it lives, and it is reachable here because this is where a
+ * person comes to change how things look.
+ */
+function setUiColour(hex, remember = true) {
+  document.documentElement.style.setProperty("--ui", hex);
+  $("ui-colour").value = hex;
+  if (remember) prefs.set("uiColour", hex);
+}
+$("ui-colour").addEventListener("input", (e) => setUiColour(e.target.value));
+$("ui-colour-reset").addEventListener("click", () => setUiColour("#1c1c1c"));
+
+function setGridColour(hex, remember = true) {
+  viewer.setGridColour(hex);
+  $("grid-colour").value = hex;
+  if (remember) prefs.set("gridColour", hex);
+}
+$("grid-colour").addEventListener("input", (e) => setGridColour(e.target.value));
+$("grid-colour-reset").addEventListener("click", () => setGridColour("#3a4150"));
+
+// One state, two doors. Each writes the viewer and repaints the other, so the
+// two pickers cannot come to disagree about the colour they both name.
+$("canvas-colour").addEventListener("input", (e) => {
+  $("bg-colour").value = e.target.value;
+  viewer.setBackgroundColour(e.target.value);
+  prefs.set("backgroundColour", e.target.value);
+});
 $("opt-exposure").addEventListener("input", (e) => {
   viewer.setExposure(Number(e.target.value));
   prefs.set("exposure", Number(e.target.value));
@@ -3052,6 +3097,7 @@ for (const [id, key, unit] of [
 }
 
 $("bg-colour").addEventListener("input", (e) => {
+  $("canvas-colour").value = e.target.value;
   viewer.setBackgroundColour(e.target.value);
   prefs.set("backgroundColour", e.target.value);
 });
@@ -3347,7 +3393,12 @@ function applyPrefs() {
   wire?.setColour(!p.wireDark);
   $("opt-lights-visible").checked = p.lightsAlwaysVisible;
   viewer.setAlwaysShowLights(p.lightsAlwaysVisible);
+  $("accent-colour").value = p.accentColour;
+  $("accent-custom-chip").style.setProperty("--tint", p.accentColour);
   setAccent(p.accent, false);
+  setUiColour(p.uiColour, false);
+  setGridColour(p.gridColour, false);
+  $("canvas-colour").value = p.backgroundColour || "#14161a";
   if (p.pedestal) usePedestal(p.pedestal, false);
   if (p.lights) viewer.applyLights(p.lights);
   // Setting `value` fires no input event, so the readouts would still be

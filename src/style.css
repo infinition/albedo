@@ -19,12 +19,25 @@
  * it is the one that stays legible against both a bright render and a dark one.
  */
 :root {
-  --bg: #131313;
-  --panel: rgba(28, 28, 28, 0.86);
-  --panel-solid: #1c1c1c;
-  --line: rgba(255, 255, 255, 0.10);
-  --fg: #ececec;
-  --muted: #8e8e8e;
+  /*
+   * One picked colour, and the chrome derived from it.
+   *
+   * The panels, the window behind them, the rules between them and the two text
+   * weights were six independent values, so changing the interface meant
+   * changing six and keeping them in a relationship nobody had written down.
+   * They come out of `--ui` now: the window is that colour darkened, the panel
+   * is it with some transparency, and the rules and text are white and black
+   * mixed into it. Pick one colour, the set stays coherent — including at the
+   * light end, where deriving the text from the surface is what stops it
+   * disappearing.
+   */
+  --ui: #1c1c1c;
+  --bg: color-mix(in srgb, var(--ui) 72%, #000);
+  --panel: color-mix(in srgb, var(--ui) 88%, transparent);
+  --panel-solid: var(--ui);
+  --line: color-mix(in srgb, var(--ui) 82%, #fff);
+  --fg: color-mix(in srgb, var(--ui) 8%, #fff);
+  --muted: color-mix(in srgb, var(--ui) 44%, #fff);
   --accent: #4fd1e0;
   --radius: 9px;
   --gap: 14px;
@@ -1220,7 +1233,12 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
  * enough for anybody to see why. The action bar overflowed the honest way, by
  * refusing to wrap.
  */
-#panes input[type="range"] { box-sizing: border-box; width: 100%; margin: 0; }
+/* Ranges *and* colour wells: both carry a default margin on top of their own
+   box, and both were put at `width: 100%`. Two pixels over is enough for a
+   scrollbar to appear and the column to twitch, and not enough to see why. */
+#panes input[type="range"],
+#panes input[type="color"] { box-sizing: border-box; max-width: 100%; margin: 0; }
+#panes input[type="range"] { width: 100%; }
 #panes { overflow-x: hidden; }
 .decor-actions-bar { flex-wrap: wrap; }
 

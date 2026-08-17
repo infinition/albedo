@@ -114,7 +114,10 @@ export class Viewer {
     this.framing = { zoom: 1, rotation: 0, blur: 0 };
     this.solidBackground = new THREE.Color(0x14161a);
 
-    this.grid = new THREE.GridHelper(10, 20, 0x3a4150, 0x272c35);
+    /** The two greys of the floor: the main lines, and the ones between them. */
+    this.gridMain = 0x3a4150;
+    this.gridSub = 0x272c35;
+    this.grid = new THREE.GridHelper(10, 20, this.gridMain, this.gridSub);
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.7;
     this.scene.add(this.grid);
@@ -663,6 +666,24 @@ export class Viewer {
     this.backdropTexture = new THREE.CanvasTexture(canvas);
     this.backdropTexture.colorSpace = THREE.SRGBColorSpace;
     this.applyBackground();
+  }
+
+  /**
+   * The floor's colour, in one call rather than two.
+   *
+   * The secondary lines are derived from the main ones rather than picked
+   * separately: they are the same colour seen fainter, and offering two pickers
+   * for one decision is how a grid ends up with a green floor and blue
+   * subdivisions.
+   */
+  setGridColour(hex) {
+    const main = new THREE.Color(hex);
+    this.gridMain = main.getHex();
+    this.gridSub = main.clone().multiplyScalar(0.62).getHex();
+    // Rebuilt through the same path that sizes it, so there is one place that
+    // knows how a grid is made.
+    this.scaleGrid(this.sceneBox());
+    this.invalidate();
   }
 
   /** The colour behind everything, when no picture is showing. */
@@ -1964,7 +1985,10 @@ export class Viewer {
     const divisions = 20;
     this.scene.remove(this.grid);
     this.grid.geometry.dispose();
-    this.grid = new THREE.GridHelper(step * divisions, divisions, 0x3a4150, 0x272c35);
+    // The colours live on the viewer rather than in this expression, because the
+    // grid is rebuilt from scratch on every reframe: written here they would be
+    // restored to the built-in pair the first time a model changed size.
+    this.grid = new THREE.GridHelper(step * divisions, divisions, this.gridMain, this.gridSub);
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.7;
     this.grid.position.y = box.min.y;

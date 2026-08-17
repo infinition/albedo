@@ -48,6 +48,14 @@ export const DEFAULTS = {
    * which the blue it replaced did not on a dark model.
    */
   accent: "cyan",
+  /** The hue behind the "Autre" accent, kept even while a named one is chosen. */
+  accentColour: "#b08cff",
+  /** The one colour the whole chrome is derived from. */
+  uiColour: "#1c1c1c",
+  /** The floor's main lines; the fainter ones are derived from these. */
+  gridColour: "#3a4150",
+  /** The flat colour behind the model, when no picture is showing. */
+  backgroundColour: "#14161a",
   /** Flat faces rather than smooth ones, for reading the topology. */
   flat: false,
   exposure: 1,
