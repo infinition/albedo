@@ -879,6 +879,19 @@ $("viewbar-orient").addEventListener("pointerenter", () => {
   if (orientation === "reduced") setOrientation("horizontal");
 });
 
+/**
+ * Bring the bar back when something is picked in the viewport.
+ *
+ * It opens reduced, and picking a part of the model is the moment the tools
+ * start being relevant: whoever clicks a mesh is working on it, not looking at
+ * it. Turning and zooming are not that moment, and the pick handler has already
+ * ruled them out — a drag of more than four pixels is an orbit, never a click.
+ * Nor is clicking empty space, which puts a selection away.
+ */
+function revealBar() {
+  if (orientation === "reduced") setOrientation("horizontal");
+}
+
 setOrientation(orientation);
 
 function paintViewbar() {
@@ -5290,11 +5303,13 @@ window.addEventListener("keyup", (e) => {
     const light = viewer.pickLight(nx, ny);
     if (light?.fog) {
       selection.choose(decorId("fog", "main"), "fog", e.ctrlKey || e.metaKey);
+      revealBar();
       return;
     }
     if (light) {
       selection.choose(decorId("light", light.id), "light", e.ctrlKey || e.metaKey);
       setLightGizmoMode("translate");
+      revealBar();
       return;
     }
 
@@ -5312,6 +5327,7 @@ window.addEventListener("keyup", (e) => {
     }
     const material = materialOfHit(hit);
     selectMaterial(material ? material.uuid : null);
+    revealBar();
   });
 }
 
