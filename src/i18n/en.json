@@ -549,5 +549,7 @@
   "err.crateSection": "section {name} missing from the crate",
   "err.lz4": "corrupt LZ4 block (zero offset)",
   "dev.padNone": "Gamepad: none detected",
-  "dev.none": "No device chosen"
+  "dev.none": "No device chosen",
+  "pane.dimSelect": "Dim on selection",
+  "pane.dimSelectTitle": "Dim the backdrop while something is selected, to set it forward"
 }

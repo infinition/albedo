@@ -21,6 +21,16 @@ import { FogShader, makeDepthTarget } from "./fog.js";
  */
 
 /** Everything the panel can drive, with the values a fresh viewer starts at. */
+/**
+ * How far the backdrop drops behind a selection, when that is asked for.
+ *
+ * A third of the light: enough for a ringed shape to sit forward of its
+ * surroundings, not so much that the rest of the scene stops being readable.
+ * Off by default — a click that changes the exposure of the picture is a
+ * surprise, and judging a colour against a backdrop that moves is impossible.
+ */
+const DIM = 0.35;
+
 export const DEFAULTS = {
   ao: { on: false, radius: 0.25, intensity: 1, thickness: 1 },
   // The threshold is read in linear light, before tone mapping, where a lit
@@ -325,6 +335,9 @@ export class PostFx {
   outline(objects) {
     this.outlinePass.selectedObjects = objects || [];
     this.outlinePass.enabled = this.outlinePass.selectedObjects.length > 0;
+    // A selection is one of the two things that can start the chain, so the
+    // backdrop has to be told: see `syncBackdrop`.
+    this.syncBackdrop();
     this.viewer.invalidate();
   }
 
@@ -395,11 +408,20 @@ export class PostFx {
    * Only a flat colour can be compensated: a gradient or a panorama is a
    * texture, and three draws those through a material that is already tone
    * mapped, so they come out the same either way.
+   *
+   * Called from `outline` as well as from `set`, and that is the whole point:
+   * picking a mesh is the other thing that starts the chain, and until it said
+   * so here, selecting anything dropped the default grey from 20,22,26 to
+   * 5,6,8. The canvas went dark on a click that was only meant to ring a shape.
    */
   syncBackdrop() {
     const scene = this.viewer.scene;
     const wanted = this.viewer.solidBackground;
     if (!wanted || !scene.background?.isColor) return;
+    // Dimming, when it is asked for, is the selection's doing rather than the
+    // chain's: the outline is what it makes room for.
+    const dim =
+      this.viewer.dimOnSelect && this.outlinePass?.selectedObjects.length ? DIM : 1;
     if (!this.active) {
       // Hand the viewer's own colour back, untouched.
       scene.background = wanted;
@@ -411,7 +433,7 @@ export class PostFx {
     // drifted lighter with every toggle.
     this.backdrop ||= new THREE.Color();
     const [r, g, b] = undoToneMap(
-      [wanted.r, wanted.g, wanted.b],
+      [wanted.r * dim, wanted.g * dim, wanted.b * dim],
       this.viewer.renderer.toneMappingExposure
     );
     this.backdrop.setRGB(r, g, b);

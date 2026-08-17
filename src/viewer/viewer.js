@@ -114,6 +114,8 @@ export class Viewer {
     this.envLighting = true;
     this.framing = { zoom: 1, rotation: 0, blur: 0 };
     this.solidBackground = new THREE.Color(0x14161a);
+    /** Whether a selection drops the backdrop behind it. See `setDimOnSelect`. */
+    this.dimOnSelect = false;
 
     /** The two greys of the floor: the main lines, and the ones between them. */
     this.gridMain = 0x3a4150;
@@ -684,6 +686,18 @@ export class Viewer {
     // Rebuilt through the same path that sizes it, so there is one place that
     // knows how a grid is made.
     this.scaleGrid(this.sceneBox());
+    this.invalidate();
+  }
+
+  /**
+   * Whether picking something drops the backdrop behind it.
+   *
+   * Off unless asked for: a canvas that changes brightness on a click is a
+   * surprise, and judging a colour against a backdrop that moves cannot be done.
+   */
+  setDimOnSelect(on) {
+    this.dimOnSelect = !!on;
+    this.post?.syncBackdrop?.();
     this.invalidate();
   }
 

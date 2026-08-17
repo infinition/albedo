@@ -2382,6 +2382,12 @@ $("opt-exposure").addEventListener("input", (e) => {
   viewer.setExposure(Number(e.target.value));
   prefs.set("exposure", Number(e.target.value));
 });
+// A preference rather than a scene setting: it is about how you like to work,
+// so it follows you into the next model rather than being saved with this one.
+$("opt-dim-select").addEventListener("change", (e) => {
+  viewer.setDimOnSelect(e.target.checked);
+  prefs.set("dimOnSelect", e.target.checked);
+});
 
 // --- cross section --------------------------------------------------------
 
@@ -3433,6 +3439,8 @@ function applyPrefs() {
   setUiColour(p.uiColour, false);
   setGridColour(p.gridColour, false);
   $("canvas-colour").value = p.backgroundColour || "#14161a";
+  $("opt-dim-select").checked = !!p.dimOnSelect;
+  viewer.setDimOnSelect(!!p.dimOnSelect);
   if (p.pedestal) usePedestal(p.pedestal, false);
   if (p.lights) viewer.applyLights(p.lights);
   // Setting `value` fires no input event, so the readouts would still be

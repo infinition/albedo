@@ -549,5 +549,7 @@
   "err.crateSection": "section {name} absente du crate",
   "err.lz4": "bloc LZ4 corrompu (décalage nul)",
   "dev.padNone": "Manette : aucune détectée",
-  "dev.none": "Aucun périphérique choisi"
+  "dev.none": "Aucun périphérique choisi",
+  "pane.dimSelect": "Assombrir à la sélection",
+  "pane.dimSelectTitle": "Assombrir le fond tant qu’un élément est sélectionné, pour le détacher"
 }

@@ -42,6 +42,14 @@ export const DEFAULTS = {
    */
   lightsAlwaysVisible: false,
   /**
+   * Whether picking something drops the backdrop behind it.
+   *
+   * False: the outline already says what is selected, and a canvas that changes
+   * brightness on a click makes judging a colour impossible for as long as
+   * anything is picked.
+   */
+  dimOnSelect: false,
+  /**
    * The one colour the interface uses to say "this one".
    *
    * Cyan by default: it stays legible against a bright render and a dark one,
