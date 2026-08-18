@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "albedo"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "retopo-bake",
  "retopo-core",
@@ -2584,7 +2584,7 @@ dependencies = [
 
 [[package]]
 name = "retopo-bake"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "glam",
@@ -2596,7 +2596,7 @@ dependencies = [
 
 [[package]]
 name = "retopo-core"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "retopo-remesh"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "glam",
  "rayon",
