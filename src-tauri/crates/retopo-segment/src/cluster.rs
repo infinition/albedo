@@ -222,9 +222,12 @@ fn face_pair_cost(
 
 /// Stage one: collapse the edges nobody could argue about.
 ///
-/// Cheapest first, so that when the size ceiling does bite it bites on the
-/// weakest join available rather than on whichever edge the adjacency happened
-/// to list first.
+/// The test is a pair of *tolerances*, not a budget: below a just-noticeable
+/// colour difference and below a few degrees of fold, two triangles are the same
+/// surface, and no weighting anybody chooses later should change that. Ordered
+/// cheapest first anyway, so that when the size ceiling bites it bites on the
+/// weakest join available rather than on whichever edge the adjacency listed
+/// first.
 fn superfaces(
     nt: usize,
     adj: &Adjacency,
@@ -232,22 +235,33 @@ fn superfaces(
     ef: &EdgeFeatures,
     opts: &SegmentOptions,
 ) -> (Vec<u32>, usize) {
-    let mut order: Vec<(f32, usize, u32, u32)> = Vec::new();
+    let fold = opts.superface_angle_deg.to_radians();
+    let tint = opts.superface_colour;
+
+    let mut order: Vec<(f32, u32, u32)> = Vec::new();
     for (id, e) in adj.edges.iter().enumerate() {
         let (Some(a), Some(b)) = (e.tri[0], e.tri[1]) else {
             continue;
         };
+        if edge_terms(id, a as usize, b as usize, ff, ef, opts).barrier {
+            continue;
+        }
+        if ef.dihedral[id].abs() > fold {
+            continue;
+        }
+        if ff.colour[a as usize].distance(ff.colour[b as usize]) > tint {
+            continue;
+        }
+        // Only to order the ones that already qualify.
         let Some(cost) = face_pair_cost(id, a as usize, b as usize, ff, ef, opts) else {
             continue;
         };
-        if cost <= opts.superface_cost {
-            order.push((cost, id, a, b));
-        }
+        order.push((cost, a, b));
     }
     order.sort_by(|x, y| x.0.total_cmp(&y.0));
 
     let mut uf = UnionFind::new(nt);
-    for (_, _, a, b) in order {
+    for (_, a, b) in order {
         let (ra, rb) = (uf.find(a), uf.find(b));
         if ra == rb {
             continue;

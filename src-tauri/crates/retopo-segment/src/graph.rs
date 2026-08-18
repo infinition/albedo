@@ -101,13 +101,21 @@ pub struct SegmentOptions {
     pub weights: Weights,
     pub barriers: Barriers,
 
-    /// Edges cheaper than this are merged before the real clustering starts.
+    /// Colour difference, in OkLab, below which the pre-merge calls two
+    /// triangles the same colour.
     ///
-    /// This is a speed knob, not a quality one: it decides how much of a
-    /// half-million triangle mesh survives into a stage that costs a priority
-    /// queue per pair. Too high and it eats real boundaries before anything can
-    /// look at them.
-    pub superface_cost: f32,
+    /// **A tolerance and not a cost, and that distinction was paid for.** This
+    /// used to be a threshold on the same weighted cost the clustering uses,
+    /// which made it meaningless in two directions at once: raising the colour
+    /// weight silently tightened it, and on a real textured model the ordinary
+    /// grain of a photograph already exceeded it, so a 700,000 triangle mesh
+    /// produced 630,000 superfaces and the pre-merge did nothing at all.
+    ///
+    /// The default is a just-noticeable difference. Below it, two triangles are
+    /// not "similar enough to risk merging"; they are the same colour.
+    pub superface_colour: f32,
+    /// Dihedral angle, in degrees, below which the pre-merge sees no crease.
+    pub superface_angle_deg: f32,
     /// Ceiling on how many triangles one superface may swallow.
     ///
     /// A threshold merge is single linkage, and single linkage chains: a smooth
@@ -141,7 +149,14 @@ impl Default for SegmentOptions {
         Self {
             weights: Weights::default(),
             barriers: Barriers::default(),
-            superface_cost: 0.03,
+            // Measured rather than picked. At a just-noticeable 0.02 and three
+            // degrees, a 119k triangle model kept 69k superfaces, which is the
+            // pre-merge barely running; at 0.04 and twelve it kept 31k, which
+            // starts risking a real crease on a hard surface model. These sit
+            // between, at about one and a half JND and an angle below anything
+            // anybody models on purpose.
+            superface_colour: 0.03,
+            superface_angle_deg: 6.0,
             max_superface_faces: 2048,
             min_area_ratio: 0.0015,
             sdf: false,

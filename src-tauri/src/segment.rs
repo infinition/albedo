@@ -101,7 +101,10 @@ albedo segment <modèle.glb> [options]
   --keep-islands     couper aussi aux coutures UV
   --free-materials   ignorer les matériaux du fichier
   --free-shells      autoriser un groupe à couvrir deux coquilles disjointes
-  --superface <c>    seuil de pré-fusion (défaut 0.03)
+  --superface-colour <d>  écart OkLab sous lequel deux triangles sont de la
+                          même couleur pour la pré-fusion (défaut 0.02)
+  --superface-angle <a>   pli sous lequel la pré-fusion ne voit pas d'arête,
+                          en degrés (défaut 3)
 
   --machine          progression et rapport en lignes lisibles par la machine
 ";
@@ -151,8 +154,12 @@ pub fn cli_main() -> Option<i32> {
                 opts.weights.normal = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.5);
                 i += 2;
             }
-            "--superface" => {
-                opts.superface_cost = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.03);
+            "--superface-colour" | "--superface-color" => {
+                opts.superface_colour = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.02);
+                i += 2;
+            }
+            "--superface-angle" => {
+                opts.superface_angle_deg = take(i).and_then(|v| v.parse().ok()).unwrap_or(3.0);
                 i += 2;
             }
             "--keep-islands" => {

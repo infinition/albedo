@@ -145,9 +145,14 @@ fn suggest(d: &Dendrogram) -> usize {
         return d.super_count.max(1);
     }
 
-    // Group counts of `floor..=MOST` correspond to the last stretch of merges.
+    // Counted *from the floor*, not from one.
+    //
+    // A scene of twelve thousand separate objects has a floor of twelve
+    // thousand, and searching an absolute window of `2..=48` there examines an
+    // empty range and proposes the floor every time, which looks like a
+    // considered answer and is the absence of one.
     let lowest = d.floor.max(2);
-    let highest = MOST.min(d.super_count).max(lowest);
+    let highest = lowest.saturating_add(MOST).min(d.super_count).max(lowest);
 
     let mut best = (0.0f32, lowest);
     for k in lowest..=highest {

@@ -51,7 +51,7 @@ const ALL_EDGES = 7;
  * the whole file with "invalid semantic name" rather than skipping four
  * attributes it has no use for.
  */
-export const WIRE_ATTRIBUTES = ["aBary", "aEdges", "aChart", "aDev"];
+export const WIRE_ATTRIBUTES = ["aBary", "aEdges", "aChart", "aDev", "aGroup", "aNbr"];
 
 /**
  * Take the overlay's attributes off for the duration of something, and put them
@@ -141,6 +141,14 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
     // happens to be a lie.
     const chart = new Float32Array(count);
     const deviation = new Float32Array(count);
+    // The two group attributes exist from the start too, and they are filled
+    // with -1 rather than 0. Zero is a real superface id, so a mesh nobody has
+    // segmented would otherwise paint itself entirely in group zero's colour
+    // with no borders anywhere: the same plausible lie the line above is about,
+    // wearing a different hat. Minus one means "not segmented" and the shader
+    // leaves those surfaces alone.
+    const group = new Float32Array(count).fill(-1);
+    const nbr = new Float32Array(count * 3).fill(-1);
 
     for (let i = 0; i < count; i++) {
       bary[i * 3 + (i % 3)] = 1;
@@ -155,6 +163,10 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
     g.setAttribute("aEdges", new THREE.BufferAttribute(edges, 1));
     g.setAttribute("aChart", new THREE.BufferAttribute(chart, 1));
     g.setAttribute("aDev", new THREE.BufferAttribute(deviation, 1));
+    if (!g.attributes.aGroup) {
+      g.setAttribute("aGroup", new THREE.BufferAttribute(group, 1));
+      g.setAttribute("aNbr", new THREE.BufferAttribute(nbr, 3));
+    }
     tri += count / 3;
     // Vertices are counted in the *engine's* numbering, not the expanded one, so
     // a second mesh starts where the first one's own vertices ended.
@@ -206,7 +218,141 @@ export function makeWireUniforms() {
     // The curtain. `uSplit` is where it sits across the viewport, 0 to 1.
     uSplit: { value: 0.5 },
     uViewport: { value: new THREE.Vector2(1, 1) },
+
+    /**
+     * Which picture the *groups* draw, and it is deliberately not `uView`.
+     *
+     * 0 off, 1 flat colours, 2 a tint over whatever the surface already was,
+     * 3 outlines only with the material left untouched underneath.
+     *
+     * A separate switch because these compose rather than compete. `uView` is a
+     * single slot the Retopo mode owns and resets to zero on any click in the
+     * channel strip, so a group overlay riding on it would go dark the moment
+     * somebody looked at the roughness map. Group colours are meant to stay up
+     * while you work, which is the whole reason mode 3 exists.
+     */
+    uGroupView: { value: 0 },
+    /** A group to isolate, or -1 for none. Everything else goes grey. */
+    uGroupSolo: { value: -1 },
+    /**
+     * Superface id to group id, as a texture.
+     *
+     * The one decision that makes the slider live. Moving it re-partitions the
+     * mesh, and rewriting a per-vertex attribute to say so would push six
+     * megabytes at the GPU per frame on a half-million triangle model, for a
+     * change whose actual information content is a few thousand numbers. A
+     * lookup table is those few thousand numbers, and the shader does the
+     * indirection for free.
+     */
+    uGroupLut: { value: emptyLut() },
+    uGroupLutSize: { value: new THREE.Vector2(0, 0) },
   };
+}
+
+/**
+ * A one texel stand-in, so the sampler is never unbound.
+ *
+ * Sampling a null texture is undefined and looks, on some drivers, exactly like
+ * a working feature that has decided everything is group zero.
+ */
+function emptyLut() {
+  const tex = new THREE.DataTexture(
+    new Float32Array(1),
+    1,
+    1,
+    THREE.RedFormat,
+    THREE.FloatType
+  );
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Hand the shader a new partition.
+ *
+ * `labels` is one group id per superface, which is what replaying the first
+ * `n - k` merges of the dendrogram produces. Two thousand texels wide because
+ * that is comfortably inside every `MAX_TEXTURE_SIZE` worth worrying about and
+ * keeps the table one row tall for anything under two thousand superfaces.
+ *
+ * The texture is reused whenever its shape has not changed, which is every
+ * slider move: only the pixels are rewritten.
+ */
+export function setGroupLut(uniforms, labels) {
+  const n = labels?.length || 0;
+  if (!n) {
+    uniforms.uGroupLutSize.value.set(0, 0);
+    return;
+  }
+  const w = Math.min(2048, n);
+  const h = Math.ceil(n / w);
+
+  let tex = uniforms.uGroupLut.value;
+  if (!tex || tex.image.width !== w || tex.image.height !== h) {
+    tex?.dispose?.();
+    tex = new THREE.DataTexture(
+      new Float32Array(w * h),
+      w,
+      h,
+      THREE.RedFormat,
+      THREE.FloatType
+    );
+    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.NearestFilter;
+    uniforms.uGroupLut.value = tex;
+  }
+  tex.image.data.set(labels);
+  tex.needsUpdate = true;
+  uniforms.uGroupLutSize.value.set(w, h);
+}
+
+/**
+ * Write the two group attributes onto geometry `prepareWire` has already seen.
+ *
+ * Separate from `prepareWire` on purpose, and this is not a stylistic split.
+ * That function returns early on any geometry that already carries `aBary`
+ * unless the call brings new mask data, which is the right rule for what it
+ * does and the wrong one here: switching the plain wireframe on prepares every
+ * geometry in the scene, and a segmentation arriving afterwards would then be
+ * skipped and draw nothing.
+ *
+ * `superOfFace` is one id per triangle across the whole traversed object, in the
+ * same traversal order `prepareWire` counts in. `nbrOfFace` is three per
+ * triangle: the superface across the edge from corner `k` to `k + 1`, and
+ * `0xffffffff` where the mesh has an open border.
+ */
+export function ensureGroupAttributes(object, superOfFace, nbrOfFace) {
+  let tri = 0;
+  object.traverse((n) => {
+    if (!n.isMesh && !n.isSkinnedMesh) return;
+    const g = n.geometry;
+    if (!g?.attributes?.position) return;
+
+    const count = g.attributes.position.count;
+    const group = new Float32Array(count);
+    const nbr = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      const t = tri + ((i / 3) | 0);
+      // Past the end of the data is a mesh the run did not cover, which is the
+      // "not segmented" case rather than the "group zero" one.
+      group[i] = superOfFace?.[t] ?? -1;
+      for (let k = 0; k < 3; k++) {
+        const v = nbrOfFace?.[t * 3 + k];
+        // An open border comes across as the largest u32, which does not
+        // survive a float exactly. Negative says "nobody there" in a number the
+        // shader can compare without a second uniform to explain it.
+        nbr[i * 3 + k] = v === undefined || v === 0xffffffff ? -1 : v;
+      }
+    }
+
+    g.setAttribute("aGroup", new THREE.BufferAttribute(group, 1));
+    g.setAttribute("aNbr", new THREE.BufferAttribute(nbr, 3));
+    tri += count / 3;
+  });
+  return tri;
 }
 
 /**
@@ -230,10 +376,14 @@ attribute vec3 aBary;
 attribute float aEdges;
 attribute float aChart;
 attribute float aDev;
+attribute float aGroup;
+attribute vec3 aNbr;
 varying vec3 vBary;
 varying float vEdges;
 varying float vChart;
 varying float vDev;
+varying float vGroup;
+varying vec3 vNbr;
 /*
  * Our own view space normal, rather than three's vNormal.
  *
@@ -255,11 +405,37 @@ uniform vec2 uViewport;
 uniform float uView;
 uniform float uDevScale;
 uniform float uXray;
+uniform float uGroupView;
+uniform float uGroupSolo;
+uniform sampler2D uGroupLut;
+uniform vec2 uGroupLutSize;
 varying vec3 vBary;
 varying float vEdges;
 varying float vChart;
 varying float vDev;
+varying float vGroup;
+varying vec3 vNbr;
 varying vec3 vRtNormal;
+
+/*
+ * Which group a superface currently belongs to.
+ *
+ * `texelFetch` rather than a normalised sample: the table is data, not an
+ * image, and asking for texel 4097 of 20000 through UV coordinates means
+ * getting the arithmetic exactly right at every resize or reading a neighbour's
+ * value, which is a bug that looks like a segmentation flickering between two
+ * plausible answers.
+ *
+ * Negative in means negative out. `aNbr` uses -1 for "the mesh ends here", and
+ * that has to survive the lookup so the border test below can treat a
+ * silhouette as an outline rather than as a group called minus one.
+ */
+float groupOf(float superId) {
+  if (superId < 0.0 || uGroupLutSize.x < 1.0) return -1.0;
+  int w = int(uGroupLutSize.x);
+  int i = int(superId + 0.5);
+  return texelFetch(uGroupLut, ivec2(i - (i / w) * w, i / w), 0).r;
+}
 
 /*
  * A colour per chart, from the id alone.
@@ -342,6 +518,51 @@ if (uView > 0.5) {
 }
 
 /*
+ * The groups.
+ *
+ * Three pictures and one outline, and the outline is drawn in all of them. It
+ * is derived rather than stored: `vNbr` says which superface sits across each
+ * of the three edges, both sides go through the same lookup table, and an edge
+ * whose two sides land on different groups is a border. That is why moving the
+ * slider costs one small texture upload and no geometry work at all — the
+ * borders re-draw themselves because the answer they read changed.
+ *
+ * `vBary.x` vanishes on the edge between corners 1 and 2, `y` on 2 to 0 and `z`
+ * on 0 to 1, while `aNbr[k]` is the neighbour across corner `k` to `k + 1`. So
+ * the three cross over as 1, 2, 0 rather than staying in order, exactly as the
+ * quad mask below does and for exactly the same reason.
+ */
+if (uGroupView > 0.5 && uGroupLutSize.x >= 1.0 && vGroup >= 0.0) {
+  float g = groupOf(vGroup);
+
+  if (uGroupView < 1.5) {
+    // Flat colours, lit only by how square-on the surface is. A field of pure
+    // hues has no form in it and you cannot tell which group is behind a fold.
+    float lit = 0.42 + 0.58 * clamp(abs(dot(normalize(vRtNormal), vec3(0.0, 0.0, 1.0))), 0.0, 1.0);
+    gl_FragColor.rgb = chartColour(g) * lit;
+  } else if (uGroupView < 2.5) {
+    // A tint, so the texture underneath still reads. This is the one to work
+    // in when you are judging whether a border follows something real.
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, chartColour(g), 0.45);
+  }
+
+  vec3 near = vec3(groupOf(vNbr.y), groupOf(vNbr.z), groupOf(vNbr.x));
+  vec3 gd = fwidth(vBary);
+  vec3 ga = smoothstep(vec3(0.0), gd * 1.6, vBary);
+  if (near.x == g) ga.x = 1.0;
+  if (near.y == g) ga.y = 1.0;
+  if (near.z == g) ga.z = 1.0;
+  float gedge = 1.0 - min(min(ga.x, ga.y), ga.z);
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, uWireColor, gedge * 0.9);
+
+  // Isolating one group greys the rest rather than hiding them, so the part you
+  // are looking at keeps the silhouette that says where it sits on the model.
+  if (uGroupSolo >= 0.0 && abs(g - uGroupSolo) > 0.5) {
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42), 0.8) * 0.45;
+  }
+}
+
+/*
  * X-ray: fade the surface by how square-on it is, so silhouettes and folds stay
  * solid and flat faces go clear. Depth is already written by the time this runs,
  * so this is a look rather than true see-through, and it is the look that
@@ -400,6 +621,8 @@ const VERT_MAIN = /* glsl */ `
   vEdges = aEdges;
   vChart = aChart;
   vDev = aDev;
+  vGroup = aGroup;
+  vNbr = aNbr;
   vRtNormal = normalMatrix * normal;
 `;
 

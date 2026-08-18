@@ -95,10 +95,6 @@ fn relax_json(json: &[u8]) -> Result<Option<Vec<u8>>> {
         })
         .unwrap_or_default();
 
-    if required.is_empty() {
-        return Ok(None);
-    }
-
     let blocked: Vec<&String> = required.iter().filter(|e| BLOCKING.contains(&e.as_str())).collect();
     if !blocked.is_empty() {
         bail!(
@@ -112,11 +108,101 @@ fn relax_json(json: &[u8]) -> Result<Option<Vec<u8>>> {
         );
     }
 
-    tracing::debug!(?required, "ignoring required extensions");
-    if let Some(obj) = root.as_object_mut() {
-        obj.remove("extensionsRequired");
+    let mut changed = false;
+    if !required.is_empty() {
+        tracing::debug!(?required, "ignoring required extensions");
+        if let Some(obj) = root.as_object_mut() {
+            obj.remove("extensionsRequired");
+        }
+        changed = true;
+    }
+    changed |= promote_texture_sources(&mut root);
+    refuse_unreadable_images(&root)?;
+
+    if !changed {
+        return Ok(None);
     }
     Ok(Some(serde_json::to_vec(&root)?))
+}
+
+/// Image encodings the reader can decode. Anything else is named rather than
+/// met with "unsupported image encoding" and no hint as to which file, which
+/// image, or what to do about it.
+const READABLE: &[&str] = &["image/png", "image/jpeg", "image/jpg"];
+
+/// Say which encoding is in the way, before the reader says only that one is.
+///
+/// The underlying reader supports PNG and JPEG and stops there. AI generators
+/// overwhelmingly write WebP, so this is not an exotic case; it is most of the
+/// files a person will try. Until the reader grows a decoder, the least it can
+/// do is say the word "webp" out loud and name the way out, rather than fail
+/// with a sentence that could mean anything.
+fn refuse_unreadable_images(root: &serde_json::Value) -> Result<()> {
+    let Some(images) = root.get("images").and_then(|v| v.as_array()) else {
+        return Ok(());
+    };
+    let mut seen: Vec<&str> = Vec::new();
+    for img in images {
+        // No mime type means a `uri`, whose extension the reader sniffs itself.
+        let Some(mime) = img.get("mimeType").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if !READABLE.contains(&mime) && !seen.contains(&mime) {
+            seen.push(mime);
+        }
+    }
+    if seen.is_empty() {
+        return Ok(());
+    }
+    bail!(
+        "the textures in this file are {}, which this reader cannot decode: it \
+         reads PNG and JPEG. Open the model in Albedo and let it re-export, or \
+         run the file through gltfpack, which rewrites the atlas as PNG.",
+        seen.join(" and ")
+    );
+}
+
+/// Give every texture the core `source` it is missing, borrowing it from
+/// whichever extension declared one instead.
+///
+/// A texture is allowed to carry its image only under an extension —
+/// `EXT_texture_webp` and `KHR_texture_basisu` both do this — and a strict
+/// reader then rejects the whole document with "textures[0].source: Missing
+/// data". Clearing `extensionsRequired`, which is all this module used to do,
+/// makes that *worse* rather than better: the reader stops being told why the
+/// field is absent and refuses anyway.
+///
+/// This matters far beyond tidiness. Meshy writes exactly this shape, so the
+/// files the part segmenter exists for were the ones it could not open, and the
+/// one feature that reads an atlas was blind on precisely the meshes that have
+/// nothing but an atlas to go on.
+///
+/// Whichever extension is present, not a named list: they all spell it
+/// `source`, and a reader that has to be taught each new one by hand is a
+/// reader that breaks on the next format anybody invents.
+fn promote_texture_sources(root: &mut serde_json::Value) -> bool {
+    let Some(textures) = root.get_mut("textures").and_then(|v| v.as_array_mut()) else {
+        return false;
+    };
+    let mut changed = false;
+    for tex in textures {
+        let Some(obj) = tex.as_object_mut() else {
+            continue;
+        };
+        if obj.contains_key("source") {
+            continue;
+        }
+        let borrowed = obj
+            .get("extensions")
+            .and_then(|e| e.as_object())
+            .and_then(|e| e.values().find_map(|v| v.get("source")))
+            .cloned();
+        if let Some(source) = borrowed {
+            obj.insert("source".into(), source);
+            changed = true;
+        }
+    }
+    changed
 }
 
 #[cfg(test)]
