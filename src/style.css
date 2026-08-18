@@ -1613,7 +1613,18 @@ label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
   backdrop-filter: blur(8px);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  /*
+   * One line for the short ones, which is nearly all of them, and a wrap for
+   * the rest. It used to be `nowrap` outright: a loader error carrying a file
+   * path ran off both edges of the window, so the half of the message that said
+   * what went wrong was the half you could not see. `max-content` keeps a short
+   * message on its single line rather than breaking it at the container width.
+   */
+  width: max-content;
+  max-width: min(560px, calc(100cqw - var(--gap) * 4));
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.18s ease, transform 0.18s ease;
@@ -1917,6 +1928,18 @@ details[open] summary::before { content: "▾ "; }
   width: 28%;
   background: var(--accent);
   animation: slide 1.1s ease-in-out infinite;
+}
+/*
+ * Once the loader says how many bytes there are, the sweep gives way to a
+ * measure: the same two pixel strip, filled from the left. The transition is
+ * short on purpose — a progress event can arrive every few milliseconds, and a
+ * long ease turns a stream of them into a bar that lags behind its own number.
+ */
+#loading.determinate span {
+  animation: none;
+  transform: none;
+  width: var(--p, 0%);
+  transition: width 0.12s linear;
 }
 @keyframes slide {
   from { transform: translateX(-100%); }

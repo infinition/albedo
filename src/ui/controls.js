@@ -1,5 +1,6 @@
 import { ACTIONS } from "../viewer/navigation.js";
 import { t } from "../i18n/index.js";
+import { setPressed } from "./toggle.js";
 
 /**
  * Overlay wiring: navigation, framing, fullscreen, the inspector panel, device
@@ -23,8 +24,7 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
   // buttons follow the navigation rather than the other way round.
   const paintMode = (mode) => {
     const free = mode === "fly";
-    $("nav-free").classList.toggle("active", free);
-    $("nav-free").setAttribute("aria-pressed", String(free));
+    setPressed($("nav-free"), free);
     onNotice(mode === "fly" ? t("toast.flyHelp") : "");
   };
   nav.onMode = paintMode;
@@ -77,8 +77,7 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
     inspector.classList.toggle("open", open);
     inspector.setAttribute("aria-hidden", String(!open));
     document.body.classList.toggle("inspector", open);
-    $("btn-inspector").classList.toggle("active", open);
-    $("btn-inspector").setAttribute("aria-pressed", String(open));
+    setPressed($("btn-inspector"), open);
   };
   $("btn-inspector").addEventListener("click", () => toggleInspector());
 
@@ -337,8 +336,7 @@ export function wireTimeline({ viewer, onState }) {
   const loop = $("anim-loop");
   const setLoop = (on) => {
     state.loop = on;
-    loop.classList.toggle("active", on);
-    loop.setAttribute("aria-pressed", String(on));
+    setPressed(loop, on);
     if (state.action) {
       state.action.loop = on ? LOOP_REPEAT : LOOP_ONCE;
       state.action.clampWhenFinished = !on;

@@ -20,6 +20,7 @@ import {
   supersededBy,
 } from "../naming.js";
 import { applyStaticIn, num, register, t } from "../i18n/index.js";
+import { isPressed, setPressed } from "../ui/toggle.js";
 import rtFr from "./fr.json";
 import rtEn from "./en.json";
 import "./retopo.css";
@@ -920,18 +921,6 @@ export function createRetopo({
   plate.addEventListener("click", leaveDataView);
 
   /*
-   * Layers are toggles, and they look like toggles.
-   *
-   * The colour above is a choice; these are things you add on top of it, and any
-   * number of them can be on at once. Giving them a different shape in the bar
-   * is the only thing that says so without a manual.
-   */
-  const toggle = (node, on) => {
-    node.setAttribute("aria-pressed", String(on));
-    node.classList.toggle("active", on);
-  };
-
-  /*
    * There is no wire button here, and no light-or-dark flip beside it.
    *
    * This mode used to carry a pair that forwarded to the application's one
@@ -954,8 +943,8 @@ export function createRetopo({
    * the model and not an edit to it.
    */
   el.opaque.addEventListener("click", () => {
-    const on = el.opaque.getAttribute("aria-pressed") !== "true";
-    toggle(el.opaque, on);
+    const on = !isPressed(el.opaque);
+    setPressed(el.opaque, on);
     viewer.root.traverse((n) => {
       if (!n.isMesh && !n.isSkinnedMesh) return;
       for (const m of Array.isArray(n.material) ? n.material : [n.material]) {
@@ -985,8 +974,8 @@ export function createRetopo({
   });
 
   el.xray.addEventListener("click", () => {
-    const on = el.xray.getAttribute("aria-pressed") !== "true";
-    toggle(el.xray, on);
+    const on = !isPressed(el.xray);
+    setPressed(el.xray, on);
     wireU.uXray.value = on ? 1 : 0;
     // Transparency has to be turned on at the material for the alpha the shader
     // writes to mean anything at all.
@@ -1236,15 +1225,13 @@ export function createRetopo({
     if (peekPrev !== null || !comparePair()) return;
     peekPrev = compareMode;
     setAB("source");
-    el.peek.setAttribute("aria-pressed", "true");
-    el.peek.classList.add("active");
+    setPressed(el.peek, true);
   }
   function unpeekAb() {
     if (peekPrev === null) return;
     setAB(peekPrev);
     peekPrev = null;
-    el.peek.setAttribute("aria-pressed", "false");
-    el.peek.classList.remove("active");
+    setPressed(el.peek, false);
   }
   el.peek.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -1487,7 +1474,7 @@ export function createRetopo({
   function showMenu(on) {
     if (el.menu.hidden === !on) return;
     el.menu.hidden = !on;
-    el.menuToggle.setAttribute("aria-pressed", String(on));
+    setPressed(el.menuToggle, on, { active: false });
   }
   el.menuToggle.addEventListener("click", () => showMenu(el.menu.hidden));
 

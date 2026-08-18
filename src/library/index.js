@@ -1,6 +1,7 @@
 import "./library.css";
 import { thumbnailFor, releaseThumbnails, cancelPending } from "./thumbs.js";
 import { applyStaticIn, locale, register, t } from "../i18n/index.js";
+import { setPressed } from "../ui/toggle.js";
 import libFr from "./fr.json";
 import libEn from "./en.json";
 
@@ -914,8 +915,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
   function setPeek(on, remember = true) {
     state.peek = !!on;
     document.body.classList.toggle("peeking", state.peek);
-    el.peek.classList.toggle("active", state.peek);
-    el.peek.setAttribute("aria-pressed", String(state.peek));
+    setPressed(el.peek, state.peek);
     if (!state.peek) {
       const image = document.getElementById("peek-image");
       if (image) image.hidden = true;
@@ -1006,8 +1006,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
   );
   // On a narrow window the sidebar is a drawer rather than a column
   el.drawer.addEventListener("click", () => {
-    const open = host.classList.toggle("browsing");
-    el.drawer.setAttribute("aria-pressed", String(open));
+    setPressed(el.drawer, host.classList.toggle("browsing"), { active: false });
   });
   // Picking something is the end of browsing, so the drawer gets out of the way
   el.tree.addEventListener("click", () => host.classList.remove("browsing"));
@@ -1029,7 +1028,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       if (!host.classList.contains("browsing")) return;
       if (e.target.closest(".lib-side") || e.target.closest(".lib-drawer")) return;
       host.classList.remove("browsing");
-      el.drawer.setAttribute("aria-pressed", "false");
+      setPressed(el.drawer, false, { active: false });
     },
     true
   );
@@ -1090,8 +1089,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
   const savedWidth = prefs?.get?.("libPeekWidth");
   if (savedWidth) document.documentElement.style.setProperty("--peek", `${savedWidth}px`);
   state.peek = !!prefs?.get?.("libPeek");
-  el.peek.classList.toggle("active", state.peek);
-  el.peek.setAttribute("aria-pressed", String(state.peek));
+  setPressed(el.peek, state.peek);
 
   loadRoots();
   // Pictures nothing can reach any more, dropped once, off the critical path

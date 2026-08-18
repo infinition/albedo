@@ -20,6 +20,7 @@ import { selection, decorId, decorKey } from "./selection.js";
 import { adopt, nameFromFile, renameNode } from "./naming.js";
 import { createTabs } from "./ui/tabs.js";
 import { setLang, initLang, applyStatic, currentLang, num, t } from "./i18n/index.js";
+import { cycle, isPressed, setPressed } from "./ui/toggle.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -598,13 +599,22 @@ const XFORM = [
  * lens reads as one number counting rather than a queue of messages.
  */
 let toastTimer = null;
-function toast(text, ms = 1100) {
+function toast(text, ms) {
   const el = $("toast");
   if (!el) return;
   el.textContent = text;
+  /*
+   * Long enough to read, and no longer.
+   *
+   * Eleven hundred milliseconds is right for "Copié" and wrong for a loader
+   * error, which is the longest thing this ever says and the one message you
+   * actually have to read. Roughly forty milliseconds a character past the
+   * short ones, capped so a very long message still goes away on its own.
+   */
+  const hold = ms ?? Math.min(6000, Math.max(1100, 700 + text.length * 42));
   el.classList.add("on");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("on"), ms);
+  toastTimer = setTimeout(() => el.classList.remove("on"), hold);
 }
 
 /**
@@ -726,16 +736,16 @@ for (const b of document.querySelectorAll("[data-vb-ch]")) {
     // The unlit state is where the wireframe reads best, and that is the thing
     // the clay button is for, so it is one button, not two.
     let id = b.dataset.vbCh;
-    if (id === "clay") {
-      id = currentChannel === "clay" ? "clayUnlit" : currentChannel === "clayUnlit" ? "clay" : "clay";
-    }
+    // Clay is one button over two channels: lit grey and unlit grey. Clicking it
+    // from anywhere else arrives on the lit one, and clicking it again flips.
+    if (id === "clay") id = cycle(["clay", "clayUnlit"], currentChannel);
     applyChannel(id);
     paintViewbar();
   });
 }
 
 $("vb-wire").addEventListener("click", async () => {
-  const on = $("vb-wire").getAttribute("aria-pressed") !== "true";
+  const on = !isPressed($("vb-wire"));
   // Through the panel's own checkbox, so the two can never disagree about
   // whether the lines are on.
   $("opt-wireframe").checked = on;
@@ -755,14 +765,14 @@ $("vb-wire").addEventListener("click", async () => {
  */
 let wireOnlyOn = false;
 $("vb-wire-only").addEventListener("click", () => {
-  const on = $("vb-wire-only").getAttribute("aria-pressed") !== "true";
+  const on = !isPressed($("vb-wire-only"));
   setWireOnly(on);
   toast(t(on ? "toast.wireOnlyOn" : "toast.facesRendered"));
 });
 
 $("vb-wire-dark").addEventListener("click", async () => {
   // The button is now "light": dark is the default, and this switches to light.
-  const light = $("vb-wire-dark").getAttribute("aria-pressed") !== "true";
+  const light = !isPressed($("vb-wire-dark"));
   $("opt-wire-dark").checked = !light;
   (await wakeWire())?.setColour(light);
   viewer.invalidate();
@@ -780,8 +790,7 @@ $("vb-wire-dark").addEventListener("click", async () => {
  */
 async function setWireOnly(on, remember = true) {
   wireOnlyOn = on;
-  $("vb-wire-only").setAttribute("aria-pressed", String(on));
-  $("vb-wire-only").classList.toggle("active", on);
+  setPressed($("vb-wire-only"), on);
   if (on && !$("opt-wireframe").checked) await setWireframe(true, remember);
   // The uniform lives on the overlay, so the overlay has to exist before it can
   // be set: on a restore where the master is on but the overlay was never woken,
@@ -801,15 +810,14 @@ async function setWireOnly(on, remember = true) {
  * follows the switch.
  */
 function setFlat(on, remember = true) {
-  $("vb-flat").setAttribute("aria-pressed", String(on));
-  $("vb-flat").classList.toggle("active", on);
+  setPressed($("vb-flat"), on);
   channels.setFlat(on);
   if (remember) prefs.set("flat", on);
   paintViewbar();
 }
 
 $("vb-flat").addEventListener("click", () => {
-  const on = $("vb-flat").getAttribute("aria-pressed") !== "true";
+  const on = !isPressed($("vb-flat"));
   setFlat(on);
   toast(on ? t("toast.flatOn") : t("toast.flatOff"));
 });
@@ -913,26 +921,19 @@ function paintViewbar() {
     const isClay = b.dataset.vbCh === "clay" && (live === "clay" || live === "clayUnlit");
     b.classList.toggle("active", isClay || (b.dataset.vbCh || b.dataset.colour) === live);
   }
-  const on = $("opt-wireframe").checked;
-  $("vb-wire").setAttribute("aria-pressed", String(on));
-  $("vb-wire").classList.toggle("active", on);
+  const on = setPressed($("vb-wire"), $("opt-wireframe").checked);
   // The light or dark choice only exists while there are lines to colour, so it
   // appears with them rather than sitting inert two thirds of the time.
   $("vb-wire-dark").hidden = !on;
   // The bar button is the light toggle: active when the lines are light.
-  const light = !$("opt-wire-dark").checked;
-  $("vb-wire-dark").setAttribute("aria-pressed", String(light));
-  $("vb-wire-dark").classList.toggle("active", light);
+  setPressed($("vb-wire-dark"), !$("opt-wire-dark").checked);
   // The lines only mode is the overlay's other half, lit only while the master
   // is on: the button says what is actually drawing, and the armed style comes
   // back with the master (W) instead of being forgotten.
-  const only = wireOnlyOn && on;
-  $("vb-wire-only").setAttribute("aria-pressed", String(only));
-  $("vb-wire-only").classList.toggle("active", only);
+  setPressed($("vb-wire-only"), wireOnlyOn && on);
   // Flat shading is a look, read from the channel view rather than from a
   // button that would have to remember its own state.
-  $("vb-flat").setAttribute("aria-pressed", String(channels.flat));
-  $("vb-flat").classList.toggle("active", channels.flat);
+  setPressed($("vb-flat"), channels.flat);
 }
 
 viewer.alsoKeep = () => {
@@ -1065,7 +1066,36 @@ const shellReady = (async () => {
 let headless = false;
 
 const setBusy = (on) => {
-  $("loading").hidden = !on;
+  const el = $("loading");
+  el.hidden = !on;
+  if (!on) {
+    el.classList.remove("determinate");
+    el.style.removeProperty("--p");
+  }
+};
+
+/**
+ * How far the file has been read, when the loader can say.
+ *
+ * `loadModel` has always handed a fraction out and nobody took it, so the strip
+ * along the top ran the same looping sweep for a two megabyte GLB and for a
+ * three hundred megabyte FBX: motion, and no answer to the one question you ask
+ * while you wait.
+ *
+ * It goes back to the sweep at the end rather than sitting full: reading the
+ * bytes is the part that can be measured, and parsing them, building the
+ * materials and framing the result all happen after the last byte arrives. A
+ * bar stuck at 100% for four seconds reads as a hang.
+ */
+const setProgress = (fraction) => {
+  const el = $("loading");
+  if (el.hidden) return;
+  if (!(fraction > 0) || fraction >= 1) {
+    el.classList.remove("determinate");
+    return;
+  }
+  el.classList.add("determinate");
+  el.style.setProperty("--p", `${(fraction * 100).toFixed(1)}%`);
 };
 
 /**
@@ -1106,6 +1136,7 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
   try {
     const { object, animations, info } = await loadModel(url, {
       renderer: viewer.renderer,
+      onProgress: setProgress,
       findTextures,
       resolveSibling,
     });
@@ -3459,8 +3490,7 @@ const TURNTABLE_SPEED = 0.5; // radians per second, a full turn in about twelve
 function toggleTurntable(on) {
   const spinning = on ?? viewer.spin === 0;
   viewer.spin = spinning ? TURNTABLE_SPEED : 0;
-  $("btn-turntable").classList.toggle("active", spinning);
-  $("btn-turntable").setAttribute("aria-pressed", String(spinning));
+  setPressed($("btn-turntable"), spinning);
   viewer.invalidate();
 }
 $("btn-turntable").addEventListener("click", () => toggleTurntable());
@@ -3798,8 +3828,7 @@ async function toggleRetopo() {
        * and the mode's answer was the poorer one. Now the groups this mode adds
        * go into the slots of the one bar, and come back out on close.
        */
-      $("btn-retopo").classList.toggle("active", on);
-      $("btn-retopo").setAttribute("aria-pressed", String(on));
+      setPressed($("btn-retopo"), on);
       if (on) {
         // Opening the mode opens the panel on the mode's own tab. The panel is
         // shared, so this is a change of subject rather than a second surface.
@@ -4923,9 +4952,7 @@ function setEditMode(mode) {
   }
   // The bar shows the same state as the pane, because it is the same state.
   for (const b of document.querySelectorAll("[data-giz]")) {
-    const on = editMode === b.dataset.giz;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-pressed", String(on));
+    setPressed(b, editMode === b.dataset.giz);
   }
   paintEditTarget();
   paintTransform();
@@ -5056,6 +5083,7 @@ async function importPart(path, label) {
     };
     const { object } = await loadModel(url, {
       renderer: viewer.renderer,
+      onProgress: setProgress,
       findTextures,
       resolveSibling: siblingResolver(path),
     });
