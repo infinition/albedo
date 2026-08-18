@@ -17,8 +17,10 @@
 
 use std::collections::HashMap;
 
+use std::sync::Arc;
+
 use glam::Vec3;
-use retopo_core::{Bvh, Mesh};
+use retopo_core::{Bvh, Mesh, PaintField};
 
 use crate::relax::{self, RelaxOptions};
 
@@ -34,6 +36,19 @@ pub struct IsotropicOptions {
     pub sharp_angle_deg: f32,
     /// Relax passes between each remeshing iteration.
     pub relax_passes: u32,
+
+    /// What the artist painted, asked by position.
+    ///
+    /// This one has to be spatial and could not be anything else: an isotropic
+    /// remesh splits and collapses its way to a mesh that shares no vertex with
+    /// the one it started from, so by the second iteration a per-vertex table
+    /// describes points that no longer exist. Asking "what was painted *here*"
+    /// is the only question that still has an answer.
+    #[serde(skip)]
+    pub field: Option<Arc<PaintField>>,
+
+    /// How hard painted density pulls on the local edge length, `0..1`.
+    pub density_influence: f32,
 }
 
 impl Default for IsotropicOptions {
@@ -44,6 +59,8 @@ impl Default for IsotropicOptions {
             iterations: 5,
             sharp_angle_deg: 45.0,
             relax_passes: 3,
+            field: None,
+            density_influence: 0.75,
         }
     }
 }
@@ -89,8 +106,17 @@ pub fn isotropic(
 
     let source = Bvh::build(mesh);
     let mut d = Dyn::from_mesh(mesh);
+    /*
+     * The band the edge lengths converge into — and, when something was painted,
+     * only the *middle* of it. `local` below multiplies both ends by the same
+     * factor, so the ratio between the long and the short limit is preserved
+     * wherever you stand on the model: what the brush moves is the size of the
+     * triangles, not the tolerance that decides when they are the right size.
+     */
     let high = target * 4.0 / 3.0;
     let low = target * 4.0 / 5.0;
+    let field = opts.field.as_deref();
+    let influence = opts.density_influence.clamp(0.0, 1.0);
 
     for it in 0..opts.iterations.max(1) {
         // Each operation runs to a fixed point rather than once.
@@ -100,8 +126,8 @@ pub fn isotropic(
         // nearly everything, because collapsing would create an edge over the
         // limit. The mesh comes out *less* uniform than it went in. Driving each
         // stage to a fixed point is what makes the sequence converge.
-        stats.splits += d.run_to_fixpoint(8, |d| d.split_long(high, &source));
-        stats.collapses += d.run_to_fixpoint(6, |d| d.collapse_short(low, high));
+        stats.splits += d.run_to_fixpoint(8, |d| d.split_long(high, &source, field, influence));
+        stats.collapses += d.run_to_fixpoint(6, |d| d.collapse_short(low, high, field, influence));
         stats.flips += d.run_to_fixpoint(4, |d| d.flip_to_valence());
 
         let mut out = d.to_mesh(opts.sharp_angle_deg);
@@ -112,6 +138,7 @@ pub fn isotropic(
                 iterations: opts.relax_passes.max(1),
                 strength: 0.6,
                 sharp_angle_deg: opts.sharp_angle_deg.max(70.0),
+                field: opts.field.clone(),
                 ..RelaxOptions::default()
             },
             &mut |_| {},
@@ -251,7 +278,26 @@ impl Dyn {
                 }
             }
         }
-        map.into_iter().collect()
+        /*
+         * Sorted, and that is a correctness fix rather than tidiness.
+         *
+         * `HashMap` in std uses a hasher seeded per instance, so
+         * `into_iter().collect()` handed the passes below a *different* edge
+         * order every time this function was called. Split, collapse and flip
+         * are all greedy and order dependent — whichever edge is visited first
+         * changes what its neighbours are still allowed to do — so the same
+         * model at the same settings came out with a different triangle count
+         * on every run. Measured on a 48x32 sphere at a 3000 triangle target:
+         * 846 one run, 856 the next, from identical inputs.
+         *
+         * That makes the two things this application is built to do impossible:
+         * judging a setting by changing it and looking, and comparing a result
+         * against the one in the report beside it. The sort costs one pass over
+         * the edges and buys a run you can repeat.
+         */
+        let mut out: Vec<((u32, u32), [i32; 2])> = map.into_iter().collect();
+        out.sort_unstable_by_key(|(k, _)| *k);
+        out
     }
 
     fn opposite(&self, t: usize, a: u32, b: u32) -> Option<u32> {
@@ -287,7 +333,13 @@ impl Dyn {
 
     /// Split every edge longer than `high` at its midpoint, snapped back on to
     /// the source so a curved surface gains detail rather than facets.
-    fn split_long(&mut self, high: f32, source: &Bvh) -> usize {
+    fn split_long(
+        &mut self,
+        high: f32,
+        source: &Bvh,
+        field: Option<&PaintField>,
+        influence: f32,
+    ) -> usize {
         let mut done = 0;
         let high2 = high * high;
         for ((a, b), tris) in self.edges() {
@@ -298,6 +350,23 @@ impl Dyn {
                 continue;
             }
             let (pa, pb) = (self.pos[a as usize], self.pos[b as usize]);
+            let centre = (pa + pb) * 0.5;
+            // Outside the painted region, or on frozen paint: leave it alone.
+            // A split here is not destructive in itself, but the relax pass that
+            // follows would move the new point, and the region has to mean that
+            // nothing outside it changes at all.
+            if let Some(f) = field {
+                if !f.in_region(centre) || f.frozen_at(centre) {
+                    continue;
+                }
+            }
+            let high2 = match field {
+                Some(f) => {
+                    let s = high * f.edge_scale_at(centre, influence);
+                    s * s
+                }
+                None => high2,
+            };
             if pa.distance_squared(pb) <= high2 {
                 continue;
             }
@@ -341,7 +410,13 @@ impl Dyn {
 
     /// Collapse every edge shorter than `low`, refusing anything that would
     /// pinch the surface, flip a face, or create an edge longer than `high`.
-    fn collapse_short(&mut self, low: f32, high: f32) -> usize {
+    fn collapse_short(
+        &mut self,
+        low: f32,
+        high: f32,
+        field: Option<&PaintField>,
+        influence: f32,
+    ) -> usize {
         let mut done = 0;
         let low2 = low * low;
         let high2 = high * high;
@@ -351,10 +426,22 @@ impl Dyn {
                 continue;
             }
             let (pa, pb) = (self.pos[a as usize], self.pos[b as usize]);
+            let target = (pa + pb) * 0.5;
+            if let Some(f) = field {
+                if !f.in_region(target) || f.frozen_at(target) {
+                    continue;
+                }
+            }
+            let (low2, high2) = match field {
+                Some(f) => {
+                    let s = f.edge_scale_at(target, influence);
+                    ((low * s) * (low * s), (high * s) * (high * s))
+                }
+                None => (low2, high2),
+            };
             if pa.distance_squared(pb) > low2 {
                 continue;
             }
-            let target = (pa + pb) * 0.5;
 
             // The link condition, same reason as in the decimator: without it a
             // closed surface quietly becomes non manifold.
@@ -776,5 +863,91 @@ mod tests {
         let (out, stats) = isotropic(&Mesh::default(), &IsotropicOptions::default(), &mut |_| {});
         assert_eq!(out.triangle_count(), 0);
         assert_eq!(stats.input_triangles, 0);
+    }
+
+    /// Paint every welded point of `mesh`, deciding the value from its position.
+    fn painting_over(mesh: &Mesh, f: impl Fn(Vec3) -> f32) -> retopo_core::Painting {
+        let mut seen = std::collections::HashSet::new();
+        let mut samples = Vec::new();
+        for (r, &w) in mesh.weld.iter().enumerate() {
+            if !seen.insert(w) {
+                continue;
+            }
+            let p = mesh.positions[r];
+            samples.push(retopo_core::Sample {
+                p,
+                density: f(p),
+                freeze: false,
+                region: true,
+            });
+        }
+        retopo_core::Painting {
+            // Wide enough to answer for the new vertices this remesher creates,
+            // which is the whole reason the field is spatial: they are not the
+            // painted points and they are never exactly on one.
+            match_radius: 0.35,
+            has_region: false,
+            samples,
+            guides: vec![],
+        }
+    }
+
+    /// Mean edge length among the edges lying entirely in one half.
+    fn mean_edge_where(mesh: &Mesh, side: impl Fn(Vec3) -> bool) -> f32 {
+        let adj = Adjacency::build(mesh);
+        let mut pos = vec![Vec3::ZERO; mesh.weld_count];
+        for (r, &w) in mesh.weld.iter().enumerate() {
+            pos[w as usize] = mesh.positions[r];
+        }
+        let (mut total, mut n) = (0.0f32, 0usize);
+        for e in &adj.edges {
+            let (a, b) = (pos[e.v[0] as usize], pos[e.v[1] as usize]);
+            if side(a) && side(b) {
+                total += a.distance(b);
+                n += 1;
+            }
+        }
+        if n == 0 { 0.0 } else { total / n as f32 }
+    }
+
+    #[test]
+    fn painted_density_makes_the_triangles_smaller_where_it_was_painted() {
+        let mesh = sphere(48, 32);
+        let painting = painting_over(&mesh, |p| if p.y > 0.0 { 1.0 } else { -1.0 });
+        let field = Arc::new(retopo_core::PaintField::new(painting));
+
+        let (out, _) = isotropic(
+            &mesh,
+            &IsotropicOptions {
+                target_triangles: 3000,
+                field: Some(field),
+                density_influence: 1.0,
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+
+        let fine = mean_edge_where(&out, |p| p.y > 0.25);
+        let coarse = mean_edge_where(&out, |p| p.y < -0.25);
+        assert!(fine > 0.0 && coarse > 0.0, "one half came out empty");
+        assert!(
+            coarse > fine * 1.5,
+            "the painted half has edges of {fine} against {coarse} on the other:              the density did not reach the edge length"
+        );
+    }
+
+    #[test]
+    fn without_a_field_the_remesh_is_the_one_it_always_was() {
+        let mesh = sphere(24, 16);
+        let opts = IsotropicOptions { target_triangles: 900, ..Default::default() };
+        let (a, sa) = isotropic(&mesh, &opts, &mut |_| {});
+        let (b, sb) = isotropic(
+            &mesh,
+            &IsotropicOptions { density_influence: 1.0, ..opts.clone() },
+            &mut |_| {},
+        );
+        assert_eq!(a.triangle_count(), b.triangle_count());
+        assert_eq!(sa.splits, sb.splits);
+        assert_eq!(sa.collapses, sb.collapses);
     }
 }

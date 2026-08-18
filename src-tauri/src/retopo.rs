@@ -32,7 +32,7 @@ use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -123,6 +123,21 @@ pub struct RemeshRequest {
     /// How far occlusion looks, as a share of the bounding box diagonal. Short
     /// means creases only, long means the whole silhouette shades itself.
     pub ao_distance: f32,
+
+    // --- what was painted on the model ---
+    //
+    // The painting itself is not in here. It travels as a sidecar beside the
+    // input GLB, for the same reason the model does: it is tens of thousands of
+    // points, and Tauri's command encoding would turn that into a JSON array of
+    // numbers on the way across. What the request carries is how hard to listen
+    // to it.
+    /// How hard painted density pulls, `0..1`. Zero ignores it entirely.
+    pub density_influence: f32,
+    /// How hard a flow guide biases which edges are spent, `0..1`.
+    pub flow_strength: f32,
+    /// Read the painting at all. Off is the way to compare a run against the
+    /// same run without it, which is the only way to judge what the brush did.
+    pub use_painting: bool,
 }
 
 impl Default for RemeshRequest {
@@ -160,6 +175,9 @@ impl Default for RemeshRequest {
             bake_ao: false,
             ao_samples: 16,
             ao_distance: 0.15,
+            density_influence: 0.75,
+            flow_strength: 0.5,
+            use_painting: true,
         }
     }
 }
@@ -204,6 +222,24 @@ pub struct RemeshReport {
     /// Largest distance from the result back to the source, in model units.
     pub deviation_max: f32,
     pub millis: u128,
+
+    // --- what the painting did, if there was one ---
+    //
+    // Reported rather than left to be inferred from the picture. A brush whose
+    // effect you can only judge by eye is a brush you cannot tell from one that
+    // silently did nothing, and the failure mode that matters here — a sidecar
+    // whose points do not land on this mesh — produces exactly that: a run that
+    // looks ordinary and ignored everything you drew.
+    /// Painted points in the sidecar.
+    pub paint_samples: usize,
+    /// How many of the mesh's own welded points a painted sample landed on. Far
+    /// below `paint_samples` means the two do not describe the same model.
+    pub paint_matched: usize,
+    /// Guide curves read.
+    pub paint_guides: usize,
+    /// Welded points the painting held still: frozen, on a crease guide, or
+    /// outside the region the run was restricted to.
+    pub paint_locked: usize,
 }
 
 /// Run the whole pipeline on one GLB and write another. No Tauri in it.
@@ -267,12 +303,42 @@ pub fn remesh_file(
     // reduction so relaxation and the deviation both compare to what came in.
     let source_bvh = retopo_core::Bvh::build(&mesh);
 
+    /*
+     * What was painted on this mesh, if anything.
+     *
+     * Read from a sidecar beside the *input*, not the output: it describes the
+     * model going in. Absent is the ordinary case and not an error — most runs
+     * have no painting — but a sidecar that exists and cannot be read is, because
+     * a brush that silently does nothing is indistinguishable from a brush that
+     * is broken.
+     *
+     * Two shapes of the same data, and both are needed. The spatial field
+     * answers for any point, which is what the isotropic remesher and the relax
+     * pass need: both work on vertices that did not exist when the painting was
+     * made. The resolved table answers per welded vertex of *this* mesh, which is
+     * what the decimator needs: it asks about the same points a million times.
+     */
+    let painting = if req.use_painting {
+        retopo_core::Painting::load(&sidecar(input, "paint"))?
+    } else {
+        None
+    };
+    let field = painting.and_then(retopo_core::PaintField::from_painting).map(Arc::new);
+    let vertex_field = field.as_ref().map(|f| Arc::new(f.resolve(&mesh)));
+    if let (Some(f), Some(v)) = (field.as_ref(), vertex_field.as_ref()) {
+        report.paint_samples = f.sample_count();
+        report.paint_guides = f.guide_count();
+        report.paint_matched = v.matched;
+    }
+
     // Stage 2: reduce.
     let mut result = match req.method.as_str() {
         "isotropic" => {
             let opts = retopo_remesh::IsotropicOptions {
                 target_triangles: req.target_triangles,
                 sharp_angle_deg: req.sharp_angle_deg,
+                field: field.clone(),
+                density_influence: req.density_influence,
                 ..Default::default()
             };
             let (m, s) = retopo_remesh::isotropic(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
@@ -286,6 +352,9 @@ pub fn remesh_file(
                 preserve_boundary: req.preserve_boundary,
                 sharp_angle_deg: req.sharp_angle_deg,
                 seam_penalty: req.seam_penalty,
+                field: vertex_field.clone(),
+                density_influence: req.density_influence,
+                flow_strength: req.flow_strength,
                 ..Default::default()
             };
             let (m, s) = retopo_remesh::decimate(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
@@ -293,6 +362,7 @@ pub fn remesh_file(
             report.rejected_topology = s.rejected_topology;
             report.rejected_flip = s.rejected_flip;
             report.max_error = s.max_error;
+            report.paint_locked = s.locked_by_paint;
             m
         }
     };
@@ -306,6 +376,10 @@ pub fn remesh_file(
             strength: req.relax_strength,
             preserve_features: true,
             sharp_angle_deg: req.relax_angle_deg,
+            // Frozen paint and anything outside the region hold still here too.
+            // Without it a run restricted to one area still smoothed the whole
+            // model, which reads as the restriction having done nothing.
+            field: field.clone(),
             ..Default::default()
         };
         let s = retopo_remesh::relax(&mut result, Some(&source_bvh), &opts, &mut |f| {
@@ -527,6 +601,11 @@ albedo bake <source.glb> <résultat.glb> [options du bake]
                      différent de --angle
   --quads            apparier les triangles en quads
 
+ Ce qui a été peint sur le modèle, lu dans <modèle.glb>.paint s'il existe :
+  --no-paint         ignorer la peinture, pour comparer avec et sans
+  --density <0..1>   force de la densité peinte, défaut 0.75
+  --flow <0..1>      force des guides de flux, défaut 0.5
+
  Bake, la source reprojetée sur le résultat :
   --bake             produire les maps et les écrire dans le résultat
   --uv-size <N>      côté de l'atlas en texels, défaut 2048
@@ -602,6 +681,18 @@ pub fn cli_main() -> Option<i32> {
             "--quads" => {
                 req.pair_quads = true;
                 i += 1;
+            }
+            "--no-paint" => {
+                req.use_painting = false;
+                i += 1;
+            }
+            "--density" => {
+                req.density_influence = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.75);
+                i += 2;
+            }
+            "--flow" => {
+                req.flow_strength = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.5);
+                i += 2;
             }
             "--relax" => {
                 req.relax_iterations = take(i).and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -1068,6 +1159,22 @@ pub async fn retopo_decimate(
         }
         if request.pair_quads {
             cmd.arg("--quads");
+        }
+        /*
+         * The painting's own settings, forwarded like everything else.
+         *
+         * The painting itself is not passed: the child finds it beside the input
+         * file on its own. That is the point of the sidecar — a hundred thousand
+         * painted points would not fit on a command line, and this is the same
+         * arrangement `.quads`, `.dev` and `.charts` already use on the way back.
+         */
+        if request.use_painting {
+            cmd.arg("--density")
+                .arg(request.density_influence.to_string())
+                .arg("--flow")
+                .arg(request.flow_strength.to_string());
+        } else {
+            cmd.arg("--no-paint");
         }
         if request.bake {
             bake_args(&mut cmd, &request);

@@ -18,8 +18,10 @@
 //! Creases and open borders are pinned, which is the same reason Cozy Blanket
 //! pins corners: relaxing across a feature is how you lose it.
 
+use std::sync::Arc;
+
 use glam::Vec3;
-use retopo_core::{Adjacency, Bvh, Mesh};
+use retopo_core::{Adjacency, Bvh, Mesh, PaintField};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RelaxOptions {
@@ -40,6 +42,16 @@ pub struct RelaxOptions {
     /// Snap back onto the source surface after each pass. Turning this off is
     /// only useful when there is no source to snap to.
     pub reproject: bool,
+
+    /// What the artist painted, asked by position rather than by index.
+    ///
+    /// Relaxation runs on the *result*, whose vertices are not the source's, so
+    /// the per-vertex table the decimator uses would not fit: a smoothed point
+    /// has no id in common with anything that was painted. The spatial field
+    /// answers for wherever the point happens to be now, which is the question
+    /// this stage actually asks.
+    #[serde(skip)]
+    pub field: Option<Arc<PaintField>>,
 }
 
 impl Default for RelaxOptions {
@@ -50,6 +62,7 @@ impl Default for RelaxOptions {
             preserve_features: true,
             sharp_angle_deg: 75.0,
             reproject: true,
+            field: None,
         }
     }
 }
@@ -107,6 +120,22 @@ pub fn relax(
     let start = pos.clone();
 
     let mut pinned = vec![false; nw];
+    /*
+     * Frozen paint and everything outside the region hold still here too.
+     *
+     * Without this, a run restricted to the face still smoothed the rest of the
+     * model: the decimator refused to touch the topology outside the region and
+     * relaxation then moved every one of those points anyway, which reads as
+     * "the region did nothing" and is a worse failure than not offering the
+     * region at all.
+     */
+    if let Some(field) = opts.field.as_deref() {
+        for (w, p) in pos.iter().enumerate() {
+            if field.frozen_at(*p) || !field.in_region(*p) {
+                pinned[w] = true;
+            }
+        }
+    }
     if opts.preserve_features {
         for (ei, e) in adj.edges.iter().enumerate() {
             if sharp[ei] || e.is_boundary() {

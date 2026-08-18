@@ -17,9 +17,10 @@
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::sync::Arc;
 
 use glam::{Vec2, Vec3};
-use retopo_core::{Adjacency, Mesh};
+use retopo_core::{Adjacency, Mesh, VertexField};
 
 use crate::quadric::Quadric;
 
@@ -44,6 +45,30 @@ pub struct DecimateOptions {
     pub seam_penalty: f32,
     /// Minimum dot product between a face normal before and after a collapse.
     pub flip_threshold: f32,
+
+    /// What the artist painted, resolved onto this mesh's welded vertices.
+    ///
+    /// `None` is the identity: every number below is ignored and the decimator
+    /// behaves exactly as it did before there was a brush. That property is
+    /// worth stating, because it is what makes the painting an *addition* to
+    /// this algorithm rather than a second algorithm sharing its name.
+    ///
+    /// Skipped by serde: it is derived from a sidecar beside the input file, and
+    /// a copy of it inside the request would be the same data twice, able to
+    /// disagree with itself.
+    #[serde(skip)]
+    pub field: Option<Arc<VertexField>>,
+
+    /// How hard painted density pulls, `0..1`.
+    ///
+    /// It scales a *cost*, never an error. That separation is the whole reason
+    /// this is safe to expose: `max_error` still measures real displacement, so
+    /// painting "keep this" reorders which collapses happen first without ever
+    /// letting one through that the quality ceiling would have refused.
+    pub density_influence: f32,
+
+    /// How hard a flow guide biases which edges are spent, `0..1`.
+    pub flow_strength: f32,
 }
 
 impl Default for DecimateOptions {
@@ -55,6 +80,9 @@ impl Default for DecimateOptions {
             sharp_angle_deg: 40.0,
             seam_penalty: 4.0,
             flip_threshold: 0.2,
+            field: None,
+            density_influence: 0.75,
+            flow_strength: 0.5,
         }
     }
 }
@@ -68,6 +96,13 @@ pub struct DecimateStats {
     pub rejected_flip: usize,
     /// Largest approximate surface displacement accepted, in model units.
     pub max_error: f32,
+    /// Welded points held still by the painting: frozen, on a crease guide, or
+    /// outside the region the run was restricted to.
+    ///
+    /// Reported rather than inferred, because "the budget was not met" and "you
+    /// froze most of the model" are the same picture from the outside and very
+    /// different problems.
+    pub locked_by_paint: usize,
 }
 
 /// Simplify to roughly `options.target_triangles`.
@@ -231,6 +266,40 @@ impl<'a> Decimator<'a> {
             vweight[v as usize] += w;
         }
 
+        /*
+         * What the artist painted, folded into the same `vlocked` the boundary
+         * and crease rules already use.
+         *
+         * Three different intentions land on one mechanism, and they land there
+         * because in an edge-collapse decimator "do not move this point" is the
+         * only primitive strong enough to express any of them:
+         *
+         * - **Frozen** paint: the person said keep this exactly.
+         * - **Crease guides**: a line drawn along a fold, with the promise that
+         *   the result still has an edge there. Points that carry the line have
+         *   to stay put, or the line is what gets averaged away.
+         * - **Outside the region**: when a region was painted, everything else
+         *   is somebody else's work and this run must not touch it. Locking is
+         *   what makes "retopologise only the face" mean it.
+         *
+         * The one thing this deliberately does not lock is *density*. Density
+         * says where triangles are worth spending, which is a matter of order
+         * rather than permission, and it is applied to the cost in `evaluate`.
+         */
+        let mut locked_by_paint = 0usize;
+        if let Some(field) = opts.field.as_deref() {
+            let n = nw.min(field.frozen.len());
+            for w in 0..n {
+                let outside = field.has_region && !field.region[w];
+                if field.frozen[w] || field.creased[w] || outside {
+                    if !vlocked[w] {
+                        locked_by_paint += 1;
+                    }
+                    vlocked[w] = true;
+                }
+            }
+        }
+
         let diag = mesh.bounds().diagonal().max(1e-6);
         let error_limit = if opts.max_error.is_finite() {
             opts.max_error * diag
@@ -264,6 +333,7 @@ impl<'a> Decimator<'a> {
             error_limit,
             stats: DecimateStats {
                 input_triangles: nt,
+                locked_by_paint,
                 ..Default::default()
             },
         };
@@ -348,7 +418,69 @@ impl<'a> Decimator<'a> {
         if self.vseam[a as usize] || self.vseam[b as usize] {
             cost *= 1.0 + self.opts.seam_penalty;
         }
+        cost *= self.painted_cost(a, b, pa, pb);
         Some((cost, error, best_p))
+    }
+
+    /// The multiplier the painting puts on one collapse.
+    ///
+    /// One when nothing was painted, and one on unpainted ground even when the
+    /// rest of the model is covered, so the brush adds a bias where it was used
+    /// and changes nothing where it was not.
+    fn painted_cost(&self, a: u32, b: u32, pa: Vec3, pb: Vec3) -> f32 {
+        let Some(field) = self.opts.field.as_deref() else {
+            return 1.0;
+        };
+        let (a, b) = (a as usize, b as usize);
+        if a >= field.density.len() || b >= field.density.len() {
+            return 1.0;
+        }
+
+        let mut k = 1.0f32;
+
+        /*
+         * Density, as a reciprocal pair around neutral.
+         *
+         * `4^(d * influence)`: paint +1 and this edge costs four times what it
+         * did, so it is collapsed four times later; paint -1 and it costs a
+         * quarter and goes first. Exponential rather than linear because the two
+         * halves have to be symmetric — a brush that makes things twice as dear
+         * and only half as cheap is a brush whose eraser does not undo it — and
+         * because a multiplier of zero, which a linear map reaches, would mean
+         * "free" rather than "cheap" and pull the whole heap out of order.
+         */
+        let d = 0.5 * (field.density[a] + field.density[b]);
+        let influence = self.opts.density_influence.clamp(0.0, 1.0);
+        if d != 0.0 && influence > 0.0 {
+            k *= 4.0f32.powf(d.clamp(-1.0, 1.0) * influence);
+        }
+
+        /*
+         * Flow: keep the edges that run along the drawn direction, spend the
+         * ones that cross it.
+         *
+         * This is the cheap half of what a field-aligned remesher does properly,
+         * and it is worth having on its own: an edge parallel to the stroke is
+         * part of the loop the person is asking for, and an edge perpendicular to
+         * it is the one to remove to get there. The weight lives in the length of
+         * the flow vector, which is how far into the guide's band the point sits.
+         */
+        let flow = field.flow[a] + field.flow[b];
+        let strength = self.opts.flow_strength.clamp(0.0, 1.0);
+        let w = flow.length() * 0.5;
+        if w > 1e-4 && strength > 0.0 {
+            let edge = (pb - pa).normalize_or_zero();
+            let dir = flow.normalize_or_zero();
+            if edge != Vec3::ZERO && dir != Vec3::ZERO {
+                let along = edge.dot(dir).abs().clamp(0.0, 1.0);
+                // Along the flow: dearer. Across it: cheaper. Same reciprocal
+                // shape as density, so a guide neither adds nor removes cost on
+                // average over the edges it touches.
+                k *= 3.0f32.powf((along * 2.0 - 1.0) * w * strength);
+            }
+        }
+
+        k
     }
 
     fn neighbours(&self, v: u32) -> Vec<u32> {
@@ -648,6 +780,46 @@ impl<'a> Decimator<'a> {
 mod tests {
     use super::*;
     use retopo_core::mesh::Material;
+    use retopo_core::paint::{Painting, Sample};
+
+    /// A painting over the welded points of `mesh`, decided per position.
+    ///
+    /// Built from the mesh itself rather than from hand written coordinates,
+    /// which is also how the interface builds one: it paints the vertices it can
+    /// see, and the sidecar is those vertices with a value attached.
+    fn painting_of(mesh: &Mesh, f: impl Fn(Vec3) -> (f32, bool, bool)) -> Painting {
+        let mut seen = std::collections::HashSet::new();
+        let mut samples = Vec::new();
+        let mut region_used = false;
+        for (r, &w) in mesh.weld.iter().enumerate() {
+            if !seen.insert(w) {
+                continue;
+            }
+            let p = mesh.positions[r];
+            let (density, freeze, region) = f(p);
+            if region {
+                region_used = true;
+            }
+            samples.push(Sample { p, density, freeze, region });
+        }
+        Painting {
+            // A tenth of a cell of the grids below: close enough that a vertex
+            // only ever matches its own sample.
+            match_radius: 1e-3,
+            has_region: region_used,
+            samples,
+            guides: vec![],
+        }
+    }
+
+    fn field_of(mesh: &Mesh, painting: Painting) -> Arc<VertexField> {
+        Arc::new(retopo_core::PaintField::new(painting).resolve(mesh))
+    }
+
+    /// Does a point of the input survive into the output, to within a hair?
+    fn survives(out: &Mesh, p: Vec3) -> bool {
+        out.positions.iter().any(|q| q.distance_squared(p) < 1e-8)
+    }
 
     /// Flat grid in the XY plane, `n` cells a side, with UVs.
     fn grid(n: usize) -> Mesh {
@@ -939,5 +1111,137 @@ mod tests {
         assert_eq!(out.normals.len(), out.positions.len());
         assert_eq!(out.uvs.len(), out.positions.len());
         assert_eq!(out.tri_material.len(), out.triangles.len());
+    }
+
+    #[test]
+    fn frozen_paint_is_still_there_afterwards() {
+        let mesh = bumpy_grid(24);
+        // Freeze the left half, and give the decimator a budget it can only
+        // meet by eating something.
+        let painting = painting_of(&mesh, |p| (0.0, p.x < 0.5, false));
+        let frozen: Vec<Vec3> = mesh
+            .positions
+            .iter()
+            .copied()
+            .filter(|p| p.x < 0.5)
+            .collect();
+
+        let (out, stats) = decimate(
+            &mesh,
+            &DecimateOptions {
+                target_triangles: 120,
+                field: Some(field_of(&mesh, painting)),
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+
+        assert!(stats.locked_by_paint > 0, "the painting locked nothing");
+        for p in &frozen {
+            assert!(survives(&out, *p), "a frozen point at {p} was collapsed away");
+        }
+        // And the run still did its job on the half it was allowed to touch —
+        // while stopping short of the budget, which is the honest outcome when
+        // half the model has been declared off limits.
+        let free = decimate(
+            &mesh,
+            &DecimateOptions { target_triangles: 120, ..Default::default() },
+            &mut |_| {},
+        )
+        .0;
+        assert!(out.triangle_count() < mesh.triangle_count());
+        assert!(
+            out.triangle_count() > free.triangle_count(),
+            "freezing half the model left {} triangles, no more than the {} an              unrestricted run leaves: the paint did nothing",
+            out.triangle_count(),
+            free.triangle_count()
+        );
+    }
+
+    #[test]
+    fn a_region_confines_the_run_to_what_was_painted() {
+        let mesh = bumpy_grid(24);
+        let painting = painting_of(&mesh, |p| (0.0, false, p.x > 0.5));
+        let outside: Vec<Vec3> = mesh
+            .positions
+            .iter()
+            .copied()
+            .filter(|p| p.x < 0.45)
+            .collect();
+
+        let (out, _) = decimate(
+            &mesh,
+            &DecimateOptions {
+                target_triangles: 200,
+                field: Some(field_of(&mesh, painting)),
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+
+        for p in &outside {
+            assert!(survives(&out, *p), "a point outside the region moved: {p}");
+        }
+    }
+
+    #[test]
+    fn density_spends_the_budget_where_it_was_not_painted() {
+        let mesh = bumpy_grid(28);
+        let target = 400;
+
+        let plain = decimate(
+            &mesh,
+            &DecimateOptions { target_triangles: target, ..Default::default() },
+            &mut |_| {},
+        )
+        .0;
+
+        // "Keep this half" on the left, and nothing said about the right.
+        let painting = painting_of(&mesh, |p| (if p.x < 0.5 { 1.0 } else { 0.0 }, false, false));
+        let painted = decimate(
+            &mesh,
+            &DecimateOptions {
+                target_triangles: target,
+                density_influence: 1.0,
+                field: Some(field_of(&mesh, painting)),
+                ..Default::default()
+            },
+            &mut |_| {},
+        )
+        .0;
+
+        // Same budget on both sides of the comparison, so the only thing that
+        // can differ is where it went.
+        assert!((painted.triangle_count() as i64 - plain.triangle_count() as i64).abs() < 40);
+
+        let left = |m: &Mesh| {
+            m.triangles
+                .iter()
+                .filter(|f| f.iter().all(|&v| m.positions[v as usize].x < 0.5))
+                .count()
+        };
+        assert!(
+            left(&painted) > left(&plain),
+            "painted {} triangles on the kept half against {} unpainted",
+            left(&painted),
+            left(&plain)
+        );
+    }
+
+    #[test]
+    fn an_absent_painting_changes_nothing_at_all() {
+        // The identity claimed in `DecimateOptions::field`, checked rather than
+        // asserted in a comment: with no field, every number the brush adds is
+        // inert and the result is the one this engine always gave.
+        let mesh = bumpy_grid(20);
+        let opts = DecimateOptions { target_triangles: 300, ..Default::default() };
+        let (a, _) = decimate(&mesh, &opts, &mut |_| {});
+        let (b, _) = decimate(
+            &mesh,
+            &DecimateOptions { density_influence: 0.0, flow_strength: 0.0, ..opts.clone() },
+            &mut |_| {},
+        );
+        assert_eq!(a.triangle_count(), b.triangle_count());
+        assert_eq!(a.positions.len(), b.positions.len());
     }
 }
