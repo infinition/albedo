@@ -137,25 +137,60 @@ function topologyOf(geometry) {
   const eps = Math.max(scale * 1e-5, 1e-9);
 
   const weldOf = new Uint32Array(renderCount);
-  const seen = new Map();
+  const px = position.array;
+  const stride = position.itemSize;
+
+  /*
+   * Welding by a hashed integer key, not by a string one.
+   *
+   * `\`${qx},${qy},${qz}\`` is the obvious way to write this and it builds a
+   * string per vertex, hashes it, and leaves it for the collector: on a million
+   * vertex mesh that is a million short-lived strings before a single stroke has
+   * been drawn, and the pause before the brush answers is what people feel. The
+   * quantised coordinates are integers, so they can be mixed into one number and
+   * the buckets compared exactly — the hash only has to find the candidates, the
+   * comparison decides.
+   */
+  const buckets = new Map();
+  const qx = new Int32Array(renderCount);
+  const qy = new Int32Array(renderCount);
+  const qz = new Int32Array(renderCount);
   const wx = [];
   const wy = [];
   const wz = [];
-  const px = position.array;
-  const stride = position.itemSize;
   for (let i = 0; i < renderCount; i++) {
     const x = px[i * stride];
     const y = px[i * stride + 1];
     const z = px[i * stride + 2];
-    const key = `${Math.round(x / eps)},${Math.round(y / eps)},${Math.round(z / eps)}`;
-    let w = seen.get(key);
-    if (w === undefined) {
+    const a = Math.round(x / eps);
+    const b = Math.round(y / eps);
+    const c = Math.round(z / eps);
+    // Three odd multipliers, the ones every spatial hash uses: they scatter
+    // neighbouring cells into different buckets, which is exactly the case a
+    // mesh presents.
+    const key = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791);
+    let bucket = buckets.get(key);
+    let w = -1;
+    if (bucket === undefined) {
+      buckets.set(key, (bucket = []));
+    } else {
+      for (const candidate of bucket) {
+        if (qx[candidate] === a && qy[candidate] === b && qz[candidate] === c) {
+          w = weldOf[candidate];
+          break;
+        }
+      }
+    }
+    if (w < 0) {
       w = wx.length;
-      seen.set(key, w);
       wx.push(x);
       wy.push(y);
       wz.push(z);
     }
+    bucket.push(i);
+    qx[i] = a;
+    qy[i] = b;
+    qz[i] = c;
     weldOf[i] = w;
   }
   const count = wx.length;
@@ -226,6 +261,13 @@ function topologyOf(geometry) {
     // The attribute the overlay reads. One vec3 per *render* vertex, refreshed
     // from the welded layers after every stamp.
     attribute: null,
+    /** Built on the first pick rather than here: see `buildBvh`. */
+    bvh: null,
+    /** The pose the hierarchy was built over; see `bvhOf`. */
+    bvhPose: -1,
+    /** A welded point back to the render vertices that share it, as CSR. */
+    renderStart: null,
+    renderList: null,
     /** Median edge length, for deciding how close a sample has to be. */
     edge: 0,
   };
@@ -293,6 +335,305 @@ function walkSurface(topo, seeds, radius) {
   return out;
 }
 
+/**
+ * A bounding volume hierarchy over one geometry's triangles.
+ *
+ * **This exists because three's own raycast is linear, and a brush asks the
+ * question forty times a second.** Measured here, on a thirty one thousand
+ * triangle model — a small one — `Raycaster.intersectObject` cost eighteen
+ * milliseconds a call. The brush asks it for every pointer move, for every
+ * coalesced sample behind that move, and again for each step of the fill-in
+ * between two samples, so one flick of the pen asked it a hundred times: the
+ * paint arrived a second after the hand. The stamp itself — the geodesic walk
+ * and the attribute write — measured about one millisecond, so everything else
+ * was already fast enough and none of it was the problem.
+ *
+ * Median split over centroids, eight triangles a leaf, flat typed arrays. Not
+ * the surface area heuristic: this build happens while somebody is waiting to
+ * paint, and what SAH buys a query is worth much less here than what it costs
+ * the pause before the first stroke.
+ */
+const LEAF_SIZE = 8;
+
+function buildBvh(topo, geometry, posed = null) {
+  const attribute = geometry.attributes.position;
+  // `posed` is the deformed copy a skinned mesh hands in: same layout, three
+  // floats a vertex, so everything below is indifferent to where it came from.
+  const position = posed || attribute.array;
+  const stride = posed ? 3 : attribute.itemSize;
+  const index = geometry.index;
+  const triCount = topo.triCount;
+
+  // Render-vertex ids per triangle, beside the welded ones the rest of this
+  // file uses: a hit has to name the corners the *geometry* holds, because that
+  // is what the caller reads a normal and a position out of.
+  const corners = new Uint32Array(triCount * 3);
+  for (let t = 0; t < triCount; t++) {
+    for (let k = 0; k < 3; k++) {
+      corners[t * 3 + k] = index ? index.getX(t * 3 + k) : t * 3 + k;
+    }
+  }
+
+  const centroid = new Float32Array(triCount * 3);
+  const bounds = new Float32Array(triCount * 6);
+  for (let t = 0; t < triCount; t++) {
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let k = 0; k < 3; k++) {
+      const o = corners[t * 3 + k] * stride;
+      const x = position[o];
+      const y = position[o + 1];
+      const z = position[o + 2];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (z < minZ) minZ = z;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      if (z > maxZ) maxZ = z;
+    }
+    bounds[t * 6] = minX;
+    bounds[t * 6 + 1] = minY;
+    bounds[t * 6 + 2] = minZ;
+    bounds[t * 6 + 3] = maxX;
+    bounds[t * 6 + 4] = maxY;
+    bounds[t * 6 + 5] = maxZ;
+    centroid[t * 3] = (minX + maxX) * 0.5;
+    centroid[t * 3 + 1] = (minY + maxY) * 0.5;
+    centroid[t * 3 + 2] = (minZ + maxZ) * 0.5;
+  }
+
+  const order = new Uint32Array(triCount);
+  for (let t = 0; t < triCount; t++) order[t] = t;
+
+  // A binary tree over N leaves of eight holds fewer than 2N/8 nodes. The slack
+  // is so a degenerate split cannot run off the end of the arrays.
+  const maxNodes = Math.max(4, 4 * Math.ceil(triCount / LEAF_SIZE) + 4);
+  const nodeBounds = new Float32Array(maxNodes * 6);
+  const nodeLeft = new Int32Array(maxNodes).fill(-1);
+  const nodeStart = new Uint32Array(maxNodes);
+  const nodeCount = new Uint32Array(maxNodes);
+  let used = 1;
+
+  const stack = [[0, 0, triCount]];
+  while (stack.length) {
+    const [node, from, to] = stack.pop();
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let i = from; i < to; i++) {
+      const t = order[i] * 6;
+      if (bounds[t] < minX) minX = bounds[t];
+      if (bounds[t + 1] < minY) minY = bounds[t + 1];
+      if (bounds[t + 2] < minZ) minZ = bounds[t + 2];
+      if (bounds[t + 3] > maxX) maxX = bounds[t + 3];
+      if (bounds[t + 4] > maxY) maxY = bounds[t + 4];
+      if (bounds[t + 5] > maxZ) maxZ = bounds[t + 5];
+    }
+    const b = node * 6;
+    nodeBounds[b] = minX;
+    nodeBounds[b + 1] = minY;
+    nodeBounds[b + 2] = minZ;
+    nodeBounds[b + 3] = maxX;
+    nodeBounds[b + 4] = maxY;
+    nodeBounds[b + 5] = maxZ;
+
+    const n = to - from;
+    if (n <= LEAF_SIZE || used + 2 > maxNodes) {
+      nodeStart[node] = from;
+      nodeCount[node] = n;
+      continue;
+    }
+
+    /*
+     * Longest axis, split at the middle of the box, partitioned in place.
+     *
+     * This was a sort per node — `Array.from(subarray).sort(comparator)` — which
+     * is a fresh JavaScript array and a comparator call per pair at every level
+     * of the tree. It is also more than the question needs: a split does not
+     * care about the order within each half, only which half each triangle is
+     * in, and that is one linear pass.
+     *
+     * The spatial midpoint rather than the median count, because it is what
+     * makes the boxes tight; when it degenerates — every centroid on one side,
+     * which a flat cap or a lathe of coplanar triangles really does produce —
+     * the halfway index is the fallback, and the tree stays balanced instead of
+     * turning into a list.
+     */
+    const ex = maxX - minX;
+    const ey = maxY - minY;
+    const ez = maxZ - minZ;
+    const axis = ex > ey ? (ex > ez ? 0 : 2) : ey > ez ? 1 : 2;
+    const at = axis === 0 ? (minX + maxX) * 0.5 : axis === 1 ? (minY + maxY) * 0.5 : (minZ + maxZ) * 0.5;
+    let lo = from;
+    let hi = to - 1;
+    while (lo <= hi) {
+      if (centroid[order[lo] * 3 + axis] < at) {
+        lo++;
+      } else {
+        const swap = order[lo];
+        order[lo] = order[hi];
+        order[hi] = swap;
+        hi--;
+      }
+    }
+    const mid = lo === from || lo === to ? from + (n >> 1) : lo;
+
+    const left = used++;
+    const right = used++;
+    nodeLeft[node] = left;
+    nodeCount[node] = 0;
+    stack.push([left, from, mid], [right, mid, to]);
+  }
+
+  return { order, corners, nodeBounds, nodeLeft, nodeStart, nodeCount, position, stride };
+}
+
+/**
+ * Where a skinned mesh's vertices actually are.
+ *
+ * A `SkinnedMesh` keeps its bind pose in the buffer and lets the GPU move it, so
+ * a hierarchy built over `position` describes a shape that is not on screen. The
+ * brush would then land somewhere the surface used to be — worse than slow,
+ * because it looks like it worked.
+ *
+ * This was the whole of the performance complaint, and it was hiding: skinned
+ * meshes were sent down `Raycaster.intersectObject` instead, which is the linear
+ * path the hierarchy exists to avoid. A test model that happened to be rigged
+ * therefore got none of the speed-up and the brush stayed at twenty two
+ * milliseconds a move.
+ *
+ * The pose is a key rather than a subscription: rebuilt when the animation has
+ * moved since the last look, and on a model that is not playing — which is every
+ * model anyone paints on — computed exactly once.
+ */
+function poseKey(mesh, viewer) {
+  if (!mesh.isSkinnedMesh) return 0;
+  return viewer?.mixer ? viewer.mixer.time : 0;
+}
+
+function skinnedPositions(mesh) {
+  const attribute = mesh.geometry.attributes.position;
+  const n = attribute.count;
+  const out = new Float32Array(n * 3);
+  const v = new THREE.Vector3();
+  mesh.skeleton?.update?.();
+  for (let i = 0; i < n; i++) {
+    v.fromBufferAttribute(attribute, i);
+    // `applyBoneTransform` is three's own skinning, so what this indexes is what
+    // the shader draws rather than a second implementation that can drift.
+    mesh.applyBoneTransform(i, v);
+    out[i * 3] = v.x;
+    out[i * 3 + 1] = v.y;
+    out[i * 3 + 2] = v.z;
+  }
+  return out;
+}
+
+function bvhOf(topo, mesh, viewer) {
+  const key = poseKey(mesh, viewer);
+  if (topo.bvh && topo.bvhPose === key) return topo.bvh;
+  const posed = mesh.isSkinnedMesh ? skinnedPositions(mesh) : null;
+  topo.bvh = buildBvh(topo, mesh.geometry, posed);
+  topo.bvhPose = key;
+  return topo.bvh;
+}
+
+/** Scratch for the traversal, so a pick allocates nothing. */
+const BVH_STACK = new Int32Array(64);
+
+/**
+ * The nearest triangle a ray meets, in the geometry's own space.
+ *
+ * Möller–Trumbore, culling nothing: a model being retopologised is as likely to
+ * be an open shell seen from behind as a closed one, and a brush that refuses to
+ * paint a back face is a brush that stops working halfway round.
+ *
+ * @returns {{t:number, tri:number, u:number, v:number}|null}
+ */
+function bvhRaycast(bvh, ox, oy, oz, dx, dy, dz) {
+  const { order, corners, nodeBounds, nodeLeft, nodeStart, nodeCount, position, stride } = bvh;
+  const ix = 1 / dx;
+  const iy = 1 / dy;
+  const iz = 1 / dz;
+  let best = Infinity;
+  let bestTri = -1;
+  let bestU = 0;
+  let bestV = 0;
+
+  let top = 0;
+  BVH_STACK[top++] = 0;
+  while (top > 0) {
+    const node = BVH_STACK[--top];
+    const b = node * 6;
+    /*
+     * Slab test. The min/max dance handles a negative direction component
+     * without branching on its sign, and a NaN out of a zero component falls
+     * through as a miss rather than as a hit, which is the safe way to fail.
+     */
+    const t1 = (nodeBounds[b] - ox) * ix;
+    const t2 = (nodeBounds[b + 3] - ox) * ix;
+    const t3 = (nodeBounds[b + 1] - oy) * iy;
+    const t4 = (nodeBounds[b + 4] - oy) * iy;
+    const t5 = (nodeBounds[b + 2] - oz) * iz;
+    const t6 = (nodeBounds[b + 5] - oz) * iz;
+    const near = Math.max(Math.min(t1, t2), Math.min(t3, t4), Math.min(t5, t6));
+    const far = Math.min(Math.max(t1, t2), Math.max(t3, t4), Math.max(t5, t6));
+    if (!(far >= 0 && near <= far && near < best)) continue;
+
+    const left = nodeLeft[node];
+    if (left >= 0) {
+      // The stack is fixed: a tree deeper than this cannot happen from a median
+      // split, and dropping a node would silently lose part of the model.
+      if (top + 2 <= BVH_STACK.length) {
+        BVH_STACK[top++] = left;
+        BVH_STACK[top++] = left + 1;
+      }
+      continue;
+    }
+
+    const from = nodeStart[node];
+    const to = from + nodeCount[node];
+    for (let i = from; i < to; i++) {
+      const tri = order[i];
+      const a = corners[tri * 3] * stride;
+      const bi = corners[tri * 3 + 1] * stride;
+      const c = corners[tri * 3 + 2] * stride;
+      const ax = position[a];
+      const ay = position[a + 1];
+      const az = position[a + 2];
+      const e1x = position[bi] - ax;
+      const e1y = position[bi + 1] - ay;
+      const e1z = position[bi + 2] - az;
+      const e2x = position[c] - ax;
+      const e2y = position[c + 1] - ay;
+      const e2z = position[c + 2] - az;
+      const px = dy * e2z - dz * e2y;
+      const py = dz * e2x - dx * e2z;
+      const pz = dx * e2y - dy * e2x;
+      const det = e1x * px + e1y * py + e1z * pz;
+      if (det > -1e-12 && det < 1e-12) continue;
+      const inv = 1 / det;
+      const tx = ox - ax;
+      const ty = oy - ay;
+      const tz = oz - az;
+      const u = (tx * px + ty * py + tz * pz) * inv;
+      if (u < 0 || u > 1) continue;
+      const qx = ty * e1z - tz * e1y;
+      const qy = tz * e1x - tx * e1z;
+      const qz = tx * e1y - ty * e1x;
+      const v = (dx * qx + dy * qy + dz * qz) * inv;
+      if (v < 0 || u + v > 1) continue;
+      const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+      if (t > 1e-6 && t < best) {
+        best = t;
+        bestTri = tri;
+        bestU = u;
+        bestV = v;
+      }
+    }
+  }
+  return bestTri < 0 ? null : { t: best, tri: bestTri, u: bestU, v: bestV };
+}
+
 /** Smooth at the centre, zero at the rim, and no corner in between. */
 function falloffAt(t, hardness) {
   const x = Math.min(1, Math.max(0, 1 - t));
@@ -347,21 +688,97 @@ export function createPainting({ viewer, wireUniforms }) {
   // ---------------------------------------------------------------------------
 
   /**
-   * Refresh the shader attribute from the welded layers.
+   * A welded point back to the render vertices that carry it.
    *
-   * Whole-buffer rather than by range. The range would have to be the union of
-   * every render vertex mapping onto every welded point a stamp touched, and on
-   * a seam those are scattered across the buffer: the union is nearly the whole
-   * thing on any model where it would have mattered.
+   * The reverse of `weldOf`, as CSR, built once. Without it the only way to push
+   * a changed value into the shader attribute is to walk the whole vertex buffer
+   * looking for the ones that mention it, which is what `syncAttribute` used to
+   * do on every single dab.
    */
-  function syncAttribute(mesh) {
-    const topo = topologyOf(mesh.geometry);
+  function renderMapOf(topo) {
+    if (topo.renderStart) return topo;
+    const degree = new Uint32Array(topo.count + 1);
+    for (let r = 0; r < topo.renderCount; r++) degree[topo.weldOf[r]]++;
+    const start = new Uint32Array(topo.count + 1);
+    let running = 0;
+    for (let i = 0; i < topo.count; i++) {
+      start[i] = running;
+      running += degree[i];
+    }
+    start[topo.count] = running;
+    const list = new Uint32Array(running);
+    const fill = start.slice(0, topo.count);
+    for (let r = 0; r < topo.renderCount; r++) list[fill[topo.weldOf[r]]++] = r;
+    topo.renderStart = start;
+    topo.renderList = list;
+    return topo;
+  }
+
+  function attributeOf(mesh, topo) {
     let attr = mesh.geometry.attributes.aPaint;
     if (!attr || attr.count !== topo.renderCount) {
       attr = new THREE.BufferAttribute(new Float32Array(topo.renderCount * 3), 3);
       mesh.geometry.setAttribute("aPaint", attr);
       topo.attribute = attr;
     }
+    return attr;
+  }
+
+  /**
+   * Welded points whose value has moved since the last frame, per mesh.
+   *
+   * Painting used to rewrite the whole vertex buffer after every dab — three
+   * floats per render vertex, then a full upload to the GPU — and a stroke is
+   * hundreds of dabs. Now a dab only records which points it touched, and one
+   * pass a frame writes those and nothing else.
+   */
+  const dirty = new Map();
+  let flushQueued = false;
+
+  function touch(mesh, welded) {
+    let set = dirty.get(mesh);
+    if (!set) dirty.set(mesh, (set = new Set()));
+    set.add(welded);
+    if (flushQueued) return;
+    flushQueued = true;
+    requestAnimationFrame(flushPaint);
+  }
+
+  /** Push everything painted since the last frame into the shader attribute. */
+  function flushPaint() {
+    flushQueued = false;
+    if (!dirty.size) return;
+    for (const [mesh, points] of dirty) {
+      const topo = CACHE.get(mesh.geometry);
+      if (!topo) continue;
+      renderMapOf(topo);
+      const attr = attributeOf(mesh, topo);
+      const a = attr.array;
+      const { density, freeze, region } = topo.layers;
+      for (const w of points) {
+        for (let i = topo.renderStart[w]; i < topo.renderStart[w + 1]; i++) {
+          const r = topo.renderList[i];
+          a[r * 3] = density[w];
+          a[r * 3 + 1] = freeze[w];
+          a[r * 3 + 2] = region[w];
+        }
+      }
+      attr.needsUpdate = true;
+    }
+    dirty.clear();
+    viewer.invalidate?.();
+  }
+
+  /**
+   * Rewrite one mesh's whole attribute.
+   *
+   * Only for the wholesale changes — an undo, a wipe, a document coming back —
+   * where "which points moved" is "all of them" and tracking them individually
+   * would cost more than the pass it saves.
+   */
+  function syncAttribute(mesh) {
+    const topo = topologyOf(mesh.geometry);
+    const attr = attributeOf(mesh, topo);
     const { density, freeze, region } = topo.layers;
     const a = attr.array;
     for (let r = 0; r < topo.renderCount; r++) {
@@ -371,6 +788,7 @@ export function createPainting({ viewer, wireUniforms }) {
       a[r * 3 + 2] = region[w];
     }
     attr.needsUpdate = true;
+    dirty.delete(mesh);
   }
 
   /** Does any mesh carry a region, anywhere? The shader greys out the rest. */
@@ -433,13 +851,12 @@ export function createPainting({ viewer, wireUniforms }) {
     if (!geometry?.attributes?.position || !hit.face) return;
     const topo = topologyOf(geometry);
 
-    // The brush is a size on the model, and the model has a scale. Working in
-    // the geometry's own units means a mesh scaled to a tenth does not get a
-    // brush ten times too big — which is what happens whenever a model arrives
-    // in centimetres and the importer normalises it.
-    const worldScale = new THREE.Vector3();
-    mesh.getWorldScale(worldScale);
-    const unit = Math.max(1e-6, (worldScale.x + worldScale.y + worldScale.z) / 3);
+    // The brush is a size on the model, and the model has a scale. The walk
+    // below runs in the geometry's own units, so a mesh scaled to a tenth must
+    // not get a brush ten times too big — which is what happens whenever a model
+    // arrives in centimetres and the importer normalises it.
+    mesh.getWorldScale(_scale);
+    const unit = Math.max(1e-6, (_scale.x + _scale.y + _scale.z) / 3);
     const size = brush.size * (brush.pressureSize ? 0.35 + 0.65 * pressure : 1);
     const radius = Math.max(topo.edge * 1.5, topo.radius * size);
 
@@ -473,6 +890,7 @@ export function createPainting({ viewer, wireUniforms }) {
 
       remember(mesh, layer, v, values[v]);
       const before = strokeEdits.get(mesh).get(layer).get(v);
+      touch(mesh, v);
 
       if (layer === "density") {
         // Toward the pole the brush is on, never past it, and the eraser is
@@ -489,10 +907,18 @@ export function createPainting({ viewer, wireUniforms }) {
     }
 
     painted.add(mesh);
-    syncAttribute(mesh);
   }
 
   function endStroke() {
+    /*
+     * The last dabs reach the shader here, rather than waiting for a frame.
+     *
+     * Painting batches its attribute writes into one pass per animation frame,
+     * which is what makes a stroke cheap. A frame that never comes — a window
+     * put behind another one, a tab in the background — would then leave the end
+     * of a stroke painted in the data and missing from the picture.
+     */
+    flushPaint();
     if (!strokeEdits || !strokeEdits.size) {
       strokeEdits = strokeReach = null;
       return;
@@ -679,32 +1105,145 @@ export function createPainting({ viewer, wireUniforms }) {
     guide: 0xffb020,
   };
 
-  function ndc(e) {
+  /** Scratch for picking, so a pointer move at pen rate allocates nothing. */
+  const _ndc = new THREE.Vector2();
+  const _inv = new THREE.Matrix4();
+  const _o = new THREE.Vector3();
+  const _d = new THREE.Vector3();
+  const _p = new THREE.Vector3();
+  const _ab = new THREE.Vector3();
+  const _ac = new THREE.Vector3();
+  const _n = new THREE.Vector3();
+  const _va = new THREE.Vector3();
+  const _vb = new THREE.Vector3();
+  const _vc = new THREE.Vector3();
+
+  /**
+   * Is this something the brush may land on?
+   *
+   * Hidden meshes and anything hidden above them are out, and so are this
+   * module's own guide tubes: they are drawn on the model, so without this the
+   * first stroke along a guide would paint the guide.
+   */
+  function paintable(o) {
+    if (!o.visible || (!o.isMesh && !o.isSkinnedMesh)) return false;
+    if (o.userData.albedoGuide || !o.geometry?.attributes?.position) return false;
+    let up = o.parent;
+    while (up) {
+      if (!up.visible) return false;
+      up = up.parent;
+    }
+    return true;
+  }
+
+  /**
+   * What the pointer is over, restricted to what the mode may paint on.
+   *
+   * Through this module's own hierarchy rather than `Raycaster.intersectObject`,
+   * which walks every triangle of every mesh: see `buildBvh` for the measurement
+   * that made this necessary. Skinned meshes go through it too, over their posed
+   * vertices — see `bvhOf`.
+   */
+  function pickSurface(e) {
     const r = canvas.getBoundingClientRect();
-    return new THREE.Vector2(
+    _ndc.set(
       ((e.clientX - r.left) / r.width) * 2 - 1,
       -((e.clientY - r.top) / r.height) * 2 + 1
     );
+    ray.setFromCamera(_ndc, viewer.camera);
+
+    let best = null;
+    let bestDistance = Infinity;
+
+    viewer.root.traverse((o) => {
+      if (!paintable(o)) return;
+      const topo = topologyOf(o.geometry);
+      const bvh = bvhOf(topo, o, viewer);
+
+      // The ray goes into the mesh's space rather than the mesh's triangles
+      // coming out into the world: one matrix against a hundred thousand.
+      _inv.copy(o.matrixWorld).invert();
+      _o.copy(ray.ray.origin).applyMatrix4(_inv);
+      _d.copy(ray.ray.direction).transformDirection(_inv);
+
+      const hit = bvhRaycast(bvh, _o.x, _o.y, _o.z, _d.x, _d.y, _d.z);
+      if (!hit) return;
+
+      _p.copy(_d).multiplyScalar(hit.t).add(_o).applyMatrix4(o.matrixWorld);
+      // Compared in world units, because `hit.t` is in each mesh's own scale and
+      // two meshes at different scales cannot be ranked by it.
+      const distance = ray.ray.origin.distanceTo(_p);
+      if (distance >= bestDistance) return;
+
+      const a = bvh.corners[hit.tri * 3];
+      const b = bvh.corners[hit.tri * 3 + 1];
+      const c = bvh.corners[hit.tri * 3 + 2];
+      // Out of the hierarchy's own positions, not the geometry's: on a skinned
+      // mesh those are the posed ones, and a normal taken from the bind pose
+      // would tilt the brush ring off the surface it is drawn on.
+      const pos = bvh.position;
+      const st = bvh.stride;
+      _va.set(pos[a * st], pos[a * st + 1], pos[a * st + 2]);
+      _vb.set(pos[b * st], pos[b * st + 1], pos[b * st + 2]);
+      _vc.set(pos[c * st], pos[c * st + 1], pos[c * st + 2]);
+      _ab.subVectors(_vb, _va);
+      _ac.subVectors(_vc, _va);
+      _n.crossVectors(_ab, _ac).normalize();
+
+      bestDistance = distance;
+      best = {
+        object: o,
+        distance,
+        point: _p.clone(),
+        face: { a, b, c, normal: _n.clone() },
+      };
+    });
+
+    return best;
   }
 
-  /** What the pointer is over, restricted to what the mode may paint on. */
-  function pickSurface(e) {
-    const p = ndc(e);
-    ray.setFromCamera(p, viewer.camera);
-    const hits = ray.intersectObject(viewer.root, true);
-    for (const hit of hits) {
-      const o = hit.object;
-      if (!o.visible || (!o.isMesh && !o.isSkinnedMesh)) continue;
-      if (o.userData.albedoGuide) continue;
-      let up = o.parent;
-      let shown = true;
-      while (up && shown) {
-        if (!up.visible) shown = false;
-        up = up.parent;
-      }
-      if (shown) return hit;
-    }
-    return null;
+  const _scale = new THREE.Vector3();
+  const _normal = new THREE.Vector3();
+  const _up = new THREE.Vector3(0, 0, 1);
+
+  /** The brush's radius on this mesh, in world units. */
+  function brushRadius(object, pressure = 1) {
+    const topo = topologyOf(object.geometry);
+    object.getWorldScale(_scale);
+    const unit = (_scale.x + _scale.y + _scale.z) / 3 || 1;
+    const size = brush.size * (brush.pressureSize && drawing ? 0.35 + 0.65 * pressure : 1);
+    return Math.max(topo.edge * 1.5, topo.radius * size) * unit;
+  }
+
+  /**
+   * Build the welded topology and the hierarchy before they are needed.
+   *
+   * Both are built on demand, and on demand means "during the first stroke":
+   * measured on a thirty one thousand triangle model that is a hundred and fifty
+   * milliseconds, and it scales with the mesh, so a real asset spends seconds
+   * there. What that looks like from the outside is a pen that does nothing for
+   * a moment and then dumps a blob of paint where the hand has already moved on
+   * from — the worst possible moment to make somebody wait, because it is the
+   * moment they are judging whether the tool works.
+   *
+   * The same work done when the *brush is chosen* costs exactly as much and is
+   * read completely differently: a button that takes a beat is a tool getting
+   * ready. Handed to a task of its own rather than run in the click, so the
+   * button shows itself pressed instead of appearing to have missed the click.
+   *
+   * A timeout and not `requestAnimationFrame`: frames stop being delivered to a
+   * window that is not on screen, and a warm-up that only happens when somebody
+   * is already looking is a warm-up that skips exactly the case it exists for —
+   * the brush picked up on one monitor while the model is on the other.
+   */
+  function warm() {
+    setTimeout(() => {
+      if (!tool) return;
+      viewer.root.traverse((o) => {
+        if (!paintable(o)) return;
+        bvhOf(topologyOf(o.geometry), o, viewer);
+      });
+    }, 0);
   }
 
   function moveCursor(hit, pressure) {
@@ -715,20 +1254,14 @@ export function createPainting({ viewer, wireUniforms }) {
       }
       return;
     }
-    const topo = topologyOf(hit.object.geometry);
-    const worldScale = new THREE.Vector3();
-    hit.object.getWorldScale(worldScale);
-    const unit = (worldScale.x + worldScale.y + worldScale.z) / 3 || 1;
-    const size = brush.size * (brush.pressureSize && drawing ? 0.35 + 0.65 * pressure : 1);
-    const radius = Math.max(topo.edge * 1.5, topo.radius * size) * unit;
-
+    const radius = brushRadius(hit.object, pressure);
     cursor.position.copy(hit.point);
-    const normal = hit.face
-      ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld)
-      : viewer.camera.getWorldDirection(new THREE.Vector3()).negate();
-    cursor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.normalize());
+    if (hit.face) _normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+    else viewer.camera.getWorldDirection(_normal).negate();
+    _normal.normalize();
+    cursor.quaternion.setFromUnitVectors(_up, _normal);
     // Off the surface by a hair, or the ring z-fights with what it is drawn on.
-    cursor.position.addScaledVector(normal, radius * 0.02);
+    cursor.position.addScaledVector(_normal, radius * 0.02);
     cursor.scale.setScalar(radius);
     cursor.material.color.setHex(CURSOR_COLOUR[tool] || 0xffffff);
     cursor.visible = true;
@@ -742,10 +1275,12 @@ export function createPainting({ viewer, wireUniforms }) {
    * fast stroke on a hundred and twenty hertz digitiser paints the curve the
    * hand drew rather than the six points a sixty hertz frame loop saw of it.
    */
-  function sample(e) {
+  function sample(e, withCursor = true) {
     const pressure = e.pointerType === "mouse" ? 1 : e.pressure > 0 ? e.pressure : 0.5;
     const hit = pickSurface(e);
-    moveCursor(hit, pressure);
+    // The ring is moved once per *event*, not once per coalesced sample behind
+    // it: ten of them land in the same frame and only the last would be seen.
+    if (withCursor) moveCursor(hit, pressure);
     if (!drawing || !hit) return;
 
     if (tool === "guide") {
@@ -789,33 +1324,39 @@ export function createPainting({ viewer, wireUniforms }) {
      * interpolating on the surface would need a geodesic between two points that
      * may be on opposite sides of a fold.
      */
-    const here = new THREE.Vector2(e.clientX, e.clientY);
     if (lastScreen) {
-      const gap = here.distanceTo(lastScreen);
-      const stepPx = Math.max(4, cursorRadiusPx(hit) * 0.4);
-      const steps = Math.min(24, Math.floor(gap / stepPx));
+      const gap = Math.hypot(e.clientX - lastScreen.x, e.clientY - lastScreen.y);
+      /*
+       * A step of two thirds of the brush, and never more than eight of them.
+       *
+       * The spacing has to come from the brush rather than from a fixed number
+       * of pixels — the whole point is that consecutive dabs overlap — and the
+       * cap has to be low. It was twenty four, which meant one flick of the pen
+       * asked for two dozen extra picks *per coalesced sample*, hundreds in a
+       * frame. Eight covers any gap a hand can leave between two samples at pen
+       * rate; beyond that the pointer jumped, which is a teleport rather than a
+       * stroke and joining it up would paint a line nobody drew.
+       */
+      const stepPx = Math.max(3, cursorRadiusPx(hit) * 0.66);
+      const steps = Math.min(8, Math.floor(gap / stepPx));
       for (let i = 1; i < steps; i++) {
         const t = i / steps;
-        const fake = {
-          clientX: lastScreen.x + (here.x - lastScreen.x) * t,
-          clientY: lastScreen.y + (here.y - lastScreen.y) * t,
+        const midHit = pickSurface({
+          clientX: lastScreen.x + (e.clientX - lastScreen.x) * t,
+          clientY: lastScreen.y + (e.clientY - lastScreen.y) * t,
           pointerType: e.pointerType,
-        };
-        const midHit = pickSurface(fake);
+        });
         if (midHit) stamp(midHit, pressure);
       }
     }
-    lastScreen = here;
-    viewer.invalidate?.();
+    if (!lastScreen) lastScreen = { x: 0, y: 0 };
+    lastScreen.x = e.clientX;
+    lastScreen.y = e.clientY;
   }
 
   /** The brush's radius as it appears on screen, for spacing the fill-in. */
   function cursorRadiusPx(hit) {
-    const topo = topologyOf(hit.object.geometry);
-    const worldScale = new THREE.Vector3();
-    hit.object.getWorldScale(worldScale);
-    const unit = (worldScale.x + worldScale.y + worldScale.z) / 3 || 1;
-    const radius = Math.max(topo.edge * 1.5, topo.radius * brush.size) * unit;
+    const radius = brushRadius(hit.object);
     const distance = viewer.camera.position.distanceTo(hit.point);
     const fov = (viewer.camera.fov * Math.PI) / 180;
     const height = 2 * Math.tan(fov / 2) * Math.max(distance, 1e-6);
@@ -892,7 +1433,9 @@ export function createPainting({ viewer, wireUniforms }) {
     e.stopPropagation();
     const queue = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
     if (queue.length) {
-      for (const c of queue) sample(c);
+      for (const c of queue) sample(c, false);
+      // Once, at the end, where the pen actually is.
+      moveCursor(pickSurface(e), e.pressure > 0 ? e.pressure : 0.5);
     } else {
       sample(e);
     }
@@ -1122,6 +1665,7 @@ export function createPainting({ viewer, wireUniforms }) {
       return guideKind;
     },
     setTool(next) {
+      const had = tool;
       tool = next || null;
       // Nothing to drag the camera by while a brush is live, and the ring is
       // gone the moment there is no brush.
@@ -1131,6 +1675,9 @@ export function createPainting({ viewer, wireUniforms }) {
         cursor.visible = false;
         if (viewer.controls) viewer.controls.enabled = true;
       }
+      // Picking up a brush is the moment to pay for the indexes, not the moment
+      // the pen first touches the model. See `warm`.
+      if (tool && !had) warm();
       refreshUniforms();
       changed();
     },
