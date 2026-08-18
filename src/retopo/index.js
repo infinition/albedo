@@ -253,6 +253,18 @@ const SHELL = `
         <span><span data-i18n="rt.islandAngle">Angle de rupture d'îlot</span> <span class="rt-num" data-el="mIslandValue">—</span></span>
         <input type="range" data-el="mIsland" min="10" max="120" step="1" value="50" />
       </label>
+
+      <p class="rt-sub" data-i18n="rt.retouch">Retoucher</p>
+      <label class="rt-check"><input type="checkbox" data-el="mKeepUv" /><span data-i18n="rt.keepUv">Garder les UV du résultat</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="mPatch" /><span data-i18n="rt.patchBake">Ne recuire que la zone peinte</span></label>
+      <label class="rt-field">
+        <span><span data-i18n="rt.feather">Fondu au bord</span> <span class="rt-num" data-el="mFeatherValue">—</span></span>
+        <input type="range" data-el="mFeather" min="0" max="64" step="1" value="8" />
+      </label>
+      <p class="rt-hint" data-i18n="rt.patchHint">Peins la zone à refaire, change ce qu'il faut — la cage
+        d'abord — et relance le bake : le reste de la texture ne bouge pas d'un
+        octet. Ça n'a de sens que sur un résultat déjà cuit, et ça se lit dans le
+        bilan : « Texels retouchés ».</p>
     </div>
   </div>
 </div>
@@ -567,6 +579,14 @@ const PANEL = `
       <span><span data-i18n="rt.islandAngle">Angle de rupture d'îlot</span> <span class="rt-num" data-el="islandValue">50°</span></span>
       <input type="range" data-el="island" min="10" max="120" step="1" value="50" />
     </label>
+    <p class="rt-sub" data-i18n="rt.retouch">Retoucher</p>
+    <label class="rt-check"><input type="checkbox" data-el="keepUv" /><span data-i18n="rt.keepUv">Garder les UV du résultat</span></label>
+    <label class="rt-check"><input type="checkbox" data-el="patch" /><span data-i18n="rt.patchBake">Ne recuire que la zone peinte</span></label>
+    <label class="rt-field">
+      <span><span data-i18n="rt.feather">Fondu au bord</span> <span class="rt-num" data-el="featherValue">8</span></span>
+      <input type="range" data-el="feather" min="0" max="64" step="1" value="8" />
+    </label>
+
     <p class="rt-hint" data-i18n="rt.atlasHint">Ce sont deux choses différentes et les deux comptent :
       l'écart est du vide entre les îlots pour qu'aucun niveau de mip ne les
       mélange, la bavure est de la couleur peinte au-delà de chaque bord pour
@@ -1496,6 +1516,7 @@ export function createRetopo({
     el.mGutter.value = el.gutter.value;
     el.mBleed.value = el.bleed.value;
     el.mIsland.value = el.island.value;
+    el.mFeather.value = el.feather.value;
 
     el.mTargetValue.textContent = `${el.target.value} %`;
     el.mMaxErrorValue.textContent =
@@ -1513,6 +1534,8 @@ export function createRetopo({
     el.mGutterValue.textContent = el.gutter.value;
     el.mBleedValue.textContent = el.bleed.value;
     el.mIslandValue.textContent = `${el.island.value}°`;
+    el.mFeatherValue.textContent = el.feather.value;
+    el.featherValue.textContent = el.feather.value;
 
     el.mQuads.checked = el.quads.checked;
     el.mHoles.checked = el.holes.checked;
@@ -1522,6 +1545,18 @@ export function createRetopo({
     el.mmEmissive.checked = el.mEmissive.checked;
     el.mmAo.checked = el.mAo.checked;
     el.mShowCage.checked = el.showCage.checked;
+    el.mKeepUv.checked = el.keepUv.checked;
+    el.mPatch.checked = el.patch.checked;
+    /*
+     * Keeping the layout is what a patch *is*, so the box says so rather than
+     * leaving two switches that can disagree. Disabled rather than hidden: a
+     * control that vanishes when you tick its neighbour is a control you go
+     * looking for.
+     */
+    for (const box of [el.keepUv, el.mKeepUv]) {
+      box.disabled = el.patch.checked;
+      if (el.patch.checked) box.checked = true;
+    }
   }
 
   function refresh() {
@@ -1569,10 +1604,10 @@ export function createRetopo({
     "target", "angle", "seam", "relax", "relaxAngle",
     "maxError", "relaxStrength",
     "mapSize", "cageOut", "cageIn", "gutter", "bleed", "island",
-    "aoSamples", "aoDistance",
+    "aoSamples", "aoDistance", "feather",
   ];
   for (const k of LIVE) el[k].addEventListener("input", paint);
-  for (const k of ["bake", "mAo", "holes", "boundary", "quads", "mMR", "mNormal", "mEmissive"]) {
+  for (const k of ["bake", "mAo", "holes", "boundary", "quads", "mMR", "mNormal", "mEmissive", "keepUv", "patch"]) {
     el[k].addEventListener("change", paint);
   }
   el.mDecimate.addEventListener("click", () => setMethod("decimate"));
@@ -1626,6 +1661,7 @@ export function createRetopo({
     ["mRelaxAngle", "relaxAngle"], ["mMapSize", "mapSize"], ["mAoSamples", "aoSamples"],
     ["mAoDistance", "aoDistance"], ["mCageOut", "cageOut"], ["mCageIn", "cageIn"],
     ["mGutter", "gutter"], ["mBleed", "bleed"], ["mIsland", "island"],
+    ["mFeather", "feather"],
   ]) {
     el[m].addEventListener("input", () => { el[p].value = el[m].value; paint(); });
   }
@@ -1633,7 +1669,7 @@ export function createRetopo({
   for (const [m, p] of [
     ["mQuads", "quads"], ["mHoles", "holes"], ["mBoundary", "boundary"],
     ["mmMR", "mMR"], ["mmNormal", "mNormal"], ["mmEmissive", "mEmissive"], ["mmAo", "mAo"],
-    ["mShowCage", "showCage"],
+    ["mShowCage", "showCage"], ["mKeepUv", "keepUv"], ["mPatch", "patch"],
   ]) {
     el[m].addEventListener("change", () => { el[p].checked = el[m].checked; paint(); });
   }
@@ -1922,6 +1958,21 @@ export function createRetopo({
   });
 
   /**
+   * What turns a bake into a retouch, and why it is not in `bakeRequest`.
+   *
+   * These two only mean something to a *second* bake. A first one has no layout
+   * worth keeping — the coordinates the low poly arrives with are the source's,
+   * not an atlas — and no picture to patch into, so carrying them into the run
+   * button would offer a correction of something that does not exist yet.
+   */
+  const patchRequest = () => ({
+    reuseUvs: el.keepUv.checked || el.patch.checked,
+    patchBake: el.patch.checked && usePaint(),
+    patchFeather: Number(el.feather.value),
+    usePainting: usePaint(),
+  });
+
+  /**
    * Write up what a run did, on the Résultat tab.
    *
    * The refusals are shown rather than swallowed. A run with a large refusal
@@ -1992,6 +2043,19 @@ export function createRetopo({
     } else {
       add(t("rt.bakeTime"), `${(r.millis / 1000).toFixed(2)} s`);
       add(t("rt.geometry"), t("rt.unchanged"));
+      /*
+       * A retouch that reached nothing looks exactly like a bake that worked.
+       *
+       * The share matters more than the count: a region painted where this mesh
+       * is not covers a handful of texels out of millions, and the run comes back
+       * cheerful. Flagged when it is implausibly small rather than left to be
+       * spotted by eye on a texture that looks unchanged because it is.
+       */
+      if (r.texelsPatched != null) {
+        const share = r.texelsCovered ? (r.texelsPatched / r.texelsCovered) * 100 : 0;
+        add(t("rt.texelsPatched"), `${fr(r.texelsPatched)} · ${share.toFixed(1)} %`,
+            share < 0.05 ? "bad" : share < 1 ? "warn" : "good");
+      }
     }
 
     let atlas = [];
@@ -2460,7 +2524,16 @@ export function createRetopo({
         }
         await dressResult(part?.object, output);
         reports.push(r);
-        done.push({ path: output, high: input, identity: snapshotIdentity(part?.object) });
+        // The source mesh travels with the pair, so a later retouch can ask it
+        // for a *fresh* painting: the whole point of patching is that you look at
+        // a bad bake and then paint the part that is wrong, so the region is
+        // always newer than the geometry it applies to.
+        done.push({
+          path: output,
+          high: input,
+          identity: snapshotIdentity(part?.object),
+          source: mesh,
+        });
       }
 
       // Cancelled before the first mesh finished: nothing was made, and that is
@@ -2475,7 +2548,12 @@ export function createRetopo({
       last = r;
       // Every pair stays named, so each bake can be redone on its own without
       // touching the geometry again.
-      lastRun = done.map((d) => ({ high: d.high, low: d.path, identity: d.identity }));
+      lastRun = done.map((d) => ({
+        high: d.high,
+        low: d.path,
+        identity: d.identity,
+        source: d.source,
+      }));
       // Anything ahead of the cursor is a branch nobody took; a new run replaces
       // it rather than leaving a redo that would jump to an unrelated result.
       history = history.slice(0, cursor + 1);
@@ -2552,15 +2630,33 @@ export function createRetopo({
        * fresh imports would rename them after their sources and drop their links
        * on the way.
        */
+      const patch = patchRequest();
       for (const [i, pair] of pairs.entries()) {
         const output = numbered(dirs.rebake, i);
+        /*
+         * The painting is written again, next to the source, before every bake.
+         *
+         * Not reused from the run that made this pair: it would be the region as
+         * it was *before* anyone had seen the result, which is the one moment
+         * nobody has an opinion about where the bake went wrong. Cheap enough to
+         * redo — a few thousand points — and it is the difference between
+         * retouching what you just painted and retouching what you painted ten
+         * minutes ago.
+         */
+        if (patch.usePainting && pair.source) {
+          const bytes = painting.sidecarFor(pair.source);
+          if (bytes) {
+            const { writeFile } = await import("@tauri-apps/plugin-fs");
+            await writeFile(`${pair.high}.paint`, bytes);
+          }
+        }
         try {
           reports.push(
             await tauri.core.invoke("retopo_bake", {
               high: pair.high,
               low: pair.low,
               output,
-              request: bakeRequest(),
+              request: { ...bakeRequest(), ...patch },
             })
           );
         } catch (e) {
