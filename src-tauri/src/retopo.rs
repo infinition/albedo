@@ -877,17 +877,20 @@ fn bake_args(cmd: &mut Command, request: &RemeshRequest) {
     }
 }
 
-/// Drive a child, forward its progress, and hand back what it reported.
 /// The child currently running, so it can be killed from another command.
 ///
 /// One run at a time is a deliberate limit, not an oversight: two decimations of
 /// the same model racing to write the same file is not a feature anyone asked
 /// for, and the front end disables the buttons anyway.
-static RUNNING: Mutex<Option<std::process::Child>> = Mutex::new(None);
+///
+/// One *per engine*, though. Segmentation keeps its own pair next door, so that
+/// cancelling a decimation cannot reach across and kill a segmentation that
+/// happens to be running beside it.
+pub(crate) static RUNNING: Mutex<Option<std::process::Child>> = Mutex::new(None);
 /// Set by a cancel so the failure that follows can be named as one. Without it a
 /// killed child is indistinguishable from a crashed one, and reporting "the
 /// engine failed" to someone who just pressed Annuler is a small lie.
-static CANCELLED: AtomicBool = AtomicBool::new(false);
+pub(crate) static CANCELLED: AtomicBool = AtomicBool::new(false);
 
 /// Read one of the files that travel beside a result.
 ///
@@ -944,7 +947,20 @@ pub fn retopo_cancel() -> bool {
     }
 }
 
-fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, String> {
+/// Drive a child, forward its progress, and hand back what it reported.
+///
+/// Generic over the report and told which slot to occupy, because segmentation
+/// runs a child the same way and for the same reasons. Every ordering in here
+/// was arrived at once and is commented once; a second copy next door would be
+/// a second place for those orderings to drift out of step, silently, in the
+/// half of the pair nobody was looking at.
+pub(crate) fn drive<R: serde::de::DeserializeOwned>(
+    app: &tauri::AppHandle,
+    mut cmd: Command,
+    channel: &str,
+    running: &'static Mutex<Option<std::process::Child>>,
+    cancelled: &'static AtomicBool,
+) -> Result<R, String> {
     use tauri::Emitter;
 
     cmd.arg("--machine").stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -955,17 +971,17 @@ fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, Strin
     // them never holds the lock a cancel needs.
     let stdout = child.stdout.take();
     let mut stderr_pipe = child.stderr.take();
-    CANCELLED.store(false, Ordering::SeqCst);
-    *RUNNING.lock().unwrap() = Some(child);
+    cancelled.store(false, Ordering::SeqCst);
+    *running.lock().unwrap() = Some(child);
 
     // The report arrives on the same pipe as the progress, tagged, so there is
     // one stream to read and no second channel to keep in step.
-    let mut report: Option<RemeshReport> = None;
+    let mut report: Option<R> = None;
     if let Some(out) = stdout {
         for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
             if let Some(rest) = line.strip_prefix("progress ") {
                 if let Ok(f) = rest.trim().parse::<f32>() {
-                    let _ = app.emit("retopo://progress", f);
+                    let _ = app.emit(channel, f);
                 }
             } else if let Some(rest) = line.strip_prefix("report ") {
                 report = serde_json::from_str(rest).ok();
@@ -981,12 +997,12 @@ fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, Strin
 
     // Take it back out and reap it, so a killed child does not linger and the
     // slot is empty before the next run fills it.
-    let status = match RUNNING.lock().unwrap().take() {
+    let status = match running.lock().unwrap().take() {
         Some(mut c) => c.wait().map_err(|e| format!("attente échouée: {e}"))?,
         None => return Err("le processus a disparu".into()),
     };
 
-    if CANCELLED.swap(false, Ordering::SeqCst) {
+    if cancelled.swap(false, Ordering::SeqCst) {
         return Err("annulé".into());
     }
     match report {
@@ -1018,7 +1034,7 @@ pub async fn retopo_bake(
         let mut cmd = Command::new(exe);
         cmd.arg("bake").arg(&high).arg(&low).arg("--out").arg(&output);
         bake_args(&mut cmd, &request);
-        drive(&app, cmd)
+        drive(&app, cmd, "retopo://progress", &RUNNING, &CANCELLED)
     })
     .await
     .map_err(|e| format!("tâche interrompue: {e}"))?
@@ -1072,7 +1088,7 @@ pub async fn retopo_decimate(
         if request.bake {
             bake_args(&mut cmd, &request);
         }
-        drive(&app, cmd)
+        drive(&app, cmd, "retopo://progress", &RUNNING, &CANCELLED)
     })
     .await
     .map_err(|e| format!("tâche interrompue: {e}"))?
@@ -1080,11 +1096,11 @@ pub async fn retopo_decimate(
 
 /// No console flash behind the window when the child starts.
 #[cfg(windows)]
-fn no_window(cmd: &mut Command) {
+pub(crate) fn no_window(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn no_window(_cmd: &mut Command) {}
+pub(crate) fn no_window(_cmd: &mut Command) {}

@@ -23,9 +23,20 @@
 //! into a `Uint32Array`, which uses the platform's own order.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 use retopo_core::glb;
 use retopo_segment::{SegmentOptions, SegmentReport};
+
+/// This engine's own slot and its own cancel flag.
+///
+/// Not shared with retopology's, so that pressing Annuler on a decimation
+/// cannot reach across and kill a segmentation running beside it. They are
+/// separate operations on the same model and a person may well want both.
+static RUNNING: Mutex<Option<std::process::Child>> = Mutex::new(None);
+static CANCELLED: AtomicBool = AtomicBool::new(false);
 
 /// Where a sidecar for `base` lives. Same convention as the retopology engine's.
 fn sidecar(base: &Path, ext: &str) -> PathBuf {
@@ -78,6 +89,123 @@ pub fn segment_file(
     write_f32(&sidecar(base, "costs"), &d.costs)?;
 
     Ok(result.report)
+}
+
+// --- the tab ---------------------------------------------------------------
+
+/// Where a run's files live.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct SegmentWorkdir {
+    /// Where the front end writes the GLB it exported.
+    pub input: String,
+    /// The prefix the four sidecars hang off.
+    pub base: String,
+}
+
+/// Pick the paths, in Rust, so the front end never builds one.
+///
+/// Stamped with the clock for the same reason the retopology workdir is: the
+/// viewer caches by URL, and a second run writing over the first would be served
+/// the first one's bytes.
+#[tauri::command]
+pub fn segment_workdir() -> Result<SegmentWorkdir, String> {
+    let dir = std::env::temp_dir().join(format!("albedo-segment-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("dossier de travail impossible: {e}"))?;
+    let n = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    Ok(SegmentWorkdir {
+        input: dir.join("source.glb").to_string_lossy().into_owned(),
+        base: dir.join(format!("groups-{n}")).to_string_lossy().into_owned(),
+    })
+}
+
+/// Run the engine in a child copy of this executable.
+#[tauri::command]
+pub async fn segment_run(
+    app: tauri::AppHandle,
+    input: String,
+    base: String,
+    request: SegmentOptions,
+) -> Result<SegmentReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
+        let mut cmd = Command::new(exe);
+        cmd.arg("segment")
+            .arg(&input)
+            .arg("--out")
+            .arg(&base)
+            .arg("--colour")
+            .arg(request.weights.colour.to_string())
+            .arg("--concave")
+            .arg(request.weights.concavity.to_string())
+            .arg("--convex")
+            .arg(request.weights.convexity.to_string())
+            .arg("--normal")
+            .arg(request.weights.normal.to_string())
+            .arg("--superface-colour")
+            .arg(request.superface_colour.to_string())
+            .arg("--superface-angle")
+            .arg(request.superface_angle_deg.to_string());
+        if request.barriers.uv_island {
+            cmd.arg("--keep-islands");
+        }
+        if !request.barriers.material {
+            cmd.arg("--free-materials");
+        }
+        if !request.barriers.shell {
+            cmd.arg("--free-shells");
+        }
+        crate::retopo::drive(&app, cmd, "segment://progress", &RUNNING, &CANCELLED)
+    })
+    .await
+    .map_err(|e| format!("tâche interrompue: {e}"))?
+}
+
+/// Stop the run in progress.
+#[tauri::command]
+pub fn segment_cancel() -> bool {
+    let mut slot = RUNNING.lock().unwrap();
+    match slot.as_mut() {
+        Some(child) => {
+            CANCELLED.store(true, Ordering::SeqCst);
+            child.kill().is_ok()
+        }
+        None => false,
+    }
+}
+
+/// Hand one sidecar to the front end as bytes.
+///
+/// Four kinds, one reader:
+///
+/// | kind | one per | meaning |
+/// |---|---|---|
+/// | `super` | triangle | which superface it landed in |
+/// | `nbr` | triangle × 3 | the superface across the edge from corner `k` to `k+1`, `0xffffffff` at an open border |
+/// | `merges` | merge × 2 | the two superfaces each step joined, in order |
+/// | `costs` | merge | what that step cost, made non decreasing |
+///
+/// **Bytes rather than numbers, which is the whole reason this exists beside
+/// `retopo_sidecar` instead of inside it.** That one returns a `Vec<f32>`, which
+/// Tauri encodes as a JSON number array. It is the right shape for what it does:
+/// it reads channels off a *decimated* result, five thousand triangles or so.
+/// This reads them off the **source**, two orders of magnitude bigger, where the
+/// neighbour table alone is six megabytes and would cross as twelve megabytes of
+/// text to parse. A `Response` crosses as an `ArrayBuffer` the browser wraps in
+/// a `Uint32Array` with no parsing and no copy.
+#[tauri::command]
+pub fn segment_blob(base: String, kind: String) -> Result<tauri::ipc::Response, String> {
+    const KINDS: &[&str] = &["super", "nbr", "merges", "costs"];
+    if !KINDS.contains(&kind.as_str()) {
+        // The path is built from this, so it is checked against a list rather
+        // than trusted to be a file name.
+        return Err(format!("type de fichier inconnu: {kind}"));
+    }
+    let path = sidecar(Path::new(&base), &kind);
+    let raw = std::fs::read(&path).map_err(|e| format!("lecture de {}: {e}", path.display()))?;
+    Ok(tauri::ipc::Response::new(raw))
 }
 
 // --- the command line ------------------------------------------------------
