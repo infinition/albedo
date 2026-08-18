@@ -4,28 +4,23 @@
   "gr.close": "Fermer",
   "gr.groups": "Groupes",
   "gr.menuTitle": "Réglages de la segmentation",
-
   "gr.view": "Affichage",
   "gr.viewOff": "Aucun",
   "gr.viewFlat": "Aplats",
   "gr.viewTint": "Teinte",
   "gr.viewEdges": "Contours",
-
   "gr.weights": "Ce qui sépare deux parts",
   "gr.wColour": "Couleur",
   "gr.wConcave": "Creux",
   "gr.wConvex": "Arêtes",
   "gr.wNormal": "Orientation",
-
   "gr.barriers": "Ce qu'un groupe ne franchit jamais",
   "gr.bMaterial": "Le matériau",
   "gr.bIslands": "Les coutures UV",
   "gr.islandsHint": "Sur un atlas généré, les îlots sont découpés pour le rangement et pas pour le sens.",
-
   "gr.premerge": "Pré-fusion",
   "gr.sColour": "Écart de couleur",
   "gr.sAngle": "Angle",
-
   "gr.paneTitle": "Groupes",
   "gr.paneEmpty": "Rien n'a encore été segmenté.",
   "gr.statGroups": "Groupes",
@@ -34,15 +29,17 @@
   "gr.statSuperfaces": "Superfaces",
   "gr.statShells": "Coquilles",
   "gr.statTime": "Durée",
-
   "gr.warnColour": "Aucun matériau ne porte de texture de couleur : la couleur ne peut rien dire de plus que le matériau.",
   "gr.warnManifold": "{n} arêtes non manifold : les plis y sont approximatifs.",
-
   "gr.exporting": "Export…",
   "gr.working": "Analyse…",
   "gr.cancelled": "Annulé",
   "gr.failed": "La segmentation a échoué",
   "gr.nothing": "Rien de visible à segmenter",
   "gr.needsApp": "La segmentation demande l'application, pas le navigateur",
-  "gr.mismatch": "Le maillage envoyé compte {a} triangles et le moteur en a lu {b} : le résultat serait décalé."
+  "gr.mismatch": "Le maillage envoyé compte {a} triangles et le moteur en a lu {b} : le résultat serait décalé.",
+  "gr.families": "Familles",
+  "gr.famOff": "off",
+  "gr.tooMany": "trop de parts",
+  "gr.statFamilies": "Familles"
 }

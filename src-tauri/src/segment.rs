@@ -88,6 +88,16 @@ pub fn segment_file(
     write_u32(&sidecar(base, "merges"), &pairs)?;
     write_f32(&sidecar(base, "costs"), &d.costs)?;
 
+    // Four per superface: the mean colour in OkLab, then the area. What the
+    // interface groups disconnected parts by, since the hierarchy above can
+    // only ever join things that touch.
+    let mut feat = Vec::with_capacity(d.super_colour.len() * 4);
+    for (c, a) in d.super_colour.iter().zip(d.super_area.iter()) {
+        feat.extend_from_slice(c);
+        feat.push(*a);
+    }
+    write_f32(&sidecar(base, "feat"), &feat)?;
+
     Ok(result.report)
 }
 
@@ -186,6 +196,7 @@ pub fn segment_cancel() -> bool {
 /// | `nbr` | triangle × 3 | the superface across the edge from corner `k` to `k+1`, `0xffffffff` at an open border |
 /// | `merges` | merge × 2 | the two superfaces each step joined, in order |
 /// | `costs` | merge | what that step cost, made non decreasing |
+/// | `feat` | superface × 4 | mean colour in OkLab, then area |
 ///
 /// **Bytes rather than numbers, which is the whole reason this exists beside
 /// `retopo_sidecar` instead of inside it.** That one returns a `Vec<f32>`, which
@@ -197,7 +208,7 @@ pub fn segment_cancel() -> bool {
 /// a `Uint32Array` with no parsing and no copy.
 #[tauri::command]
 pub fn segment_blob(base: String, kind: String) -> Result<tauri::ipc::Response, String> {
-    const KINDS: &[&str] = &["super", "nbr", "merges", "costs"];
+    const KINDS: &[&str] = &["super", "nbr", "merges", "costs", "feat"];
     if !KINDS.contains(&kind.as_str()) {
         // The path is built from this, so it is checked against a list rather
         // than trusted to be a file name.

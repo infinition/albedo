@@ -57,6 +57,18 @@ pub struct Dendrogram {
     pub costs: Vec<f32>,
     /// The fewest groups reachable. `super_count - merges.len()`.
     pub floor: usize,
+
+    /// Area-weighted mean OkLab colour of each superface, and its area.
+    ///
+    /// Not needed to cut the hierarchy, and carried anyway, because the
+    /// hierarchy only ever produces *connected* groups. Two rocks lying apart on
+    /// the same ground share no edge, so no amount of merging can ever put them
+    /// in one group — the floor of the slider is the number of connected pieces
+    /// and that is topology, not a setting. Grouping them by what they look like
+    /// is a second question, asked of these means, and answered above this
+    /// engine rather than inside it.
+    pub super_colour: Vec<[f32; 3]>,
+    pub super_area: Vec<f32>,
 }
 
 impl Dendrogram {
@@ -179,7 +191,19 @@ pub fn build(
     let (super_of_face, super_count) = superfaces(nt, adj, ff, ef, opts);
     let nbr_of_face = neighbours(nt, adj, &super_of_face);
     let wpos = welded_positions(mesh);
-    let (merges, costs) = agglomerate(adj, ff, ef, opts, &super_of_face, super_count, &wpos);
+
+    let seeds = seed_regions(ff, &super_of_face, super_count);
+    let super_area: Vec<f32> = seeds.iter().map(|r| r.area).collect();
+    let super_colour: Vec<[f32; 3]> = seeds
+        .iter()
+        .map(|r| {
+            let inv = if r.area > 0.0 { 1.0 / r.area } else { 0.0 };
+            (r.colour * inv).to_array()
+        })
+        .collect();
+
+    let (merges, costs) =
+        agglomerate(adj, ff, ef, opts, &super_of_face, super_count, &wpos, seeds);
 
     Dendrogram {
         floor: super_count - merges.len(),
@@ -188,6 +212,8 @@ pub fn build(
         nbr_of_face,
         merges,
         costs,
+        super_colour,
+        super_area,
     }
 }
 
@@ -307,19 +333,14 @@ fn neighbours(nt: usize, adj: &Adjacency, super_of_face: &[u32]) -> Vec<[u32; 3]
         .collect()
 }
 
-/// Stage two: merge regions cheapest pair first, recording everything.
-fn agglomerate(
-    adj: &Adjacency,
-    ff: &FaceFeatures,
-    ef: &EdgeFeatures,
-    opts: &SegmentOptions,
-    super_of_face: &[u32],
-    super_count: usize,
-    wpos: &[Vec3],
-) -> (Vec<[u32; 2]>, Vec<f32>) {
+/// One region per superface, holding the sum of what its faces are.
+///
+/// Split out of the merging loop because the *means* it produces are worth
+/// having on their own: they are what the interface groups by appearance with,
+/// and computing them a second time somewhere else is how two answers to one
+/// question start disagreeing.
+fn seed_regions(ff: &FaceFeatures, super_of_face: &[u32], super_count: usize) -> Vec<Region> {
     let sdf = ff.sdf.as_deref();
-
-    // Region state, seeded from the faces each superface swallowed.
     let mut regions: Vec<Region> = vec![
         Region {
             alive: true,
@@ -340,6 +361,21 @@ fn agglomerate(
         r.normal += ff.normal[t] * a;
         r.sdf += sdf.map_or(0.0, |v| v[t]) * a;
     }
+    regions
+}
+
+/// Stage two: merge regions cheapest pair first, recording everything.
+fn agglomerate(
+    adj: &Adjacency,
+    ff: &FaceFeatures,
+    ef: &EdgeFeatures,
+    opts: &SegmentOptions,
+    super_of_face: &[u32],
+    super_count: usize,
+    wpos: &[Vec3],
+    mut regions: Vec<Region>,
+) -> (Vec<[u32; 2]>, Vec<f32>) {
+    let _ = super_count;
     let total_area: f32 = regions.iter().map(|r| r.area).sum();
     // Below this, a region is absorbed before anybody looks at what it is.
     let small = (total_area * opts.min_area_ratio).max(f32::MIN_POSITIVE);

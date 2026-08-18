@@ -67,6 +67,25 @@ export function createGroups({
     <span class="gr-num" data-el="countValue">—</span>
   </label>
 
+  <!--
+    The second question, and it really is a second one.
+    ------------------------------------------------------------------
+    The slider above cuts the hierarchy, and the hierarchy only ever produces
+    *connected* parts: two rocks lying apart on the same ground share no edge,
+    so no amount of merging will ever put them together. That is topology, not
+    a setting, which is why the first slider has a floor it cannot go below.
+
+    Grouping things that look alike is the other question — the one somebody
+    asks when they want one rock material rather than two hundred rock objects
+    — and it is asked here, in the same colour units as the pre-merge tolerance
+    so the two numbers mean the same thing.
+  -->
+  <label class="gr-slider" data-el="famWrap" hidden>
+    <span data-i18n="gr.families">Familles</span>
+    <input type="range" data-el="fam" min="0" max="0.30" step="0.005" value="0" />
+    <span class="gr-num" data-el="famValue">—</span>
+  </label>
+
   <div class="segment gr-views" role="group" data-i18n-aria="gr.view" aria-label="Affichage" data-el="views" hidden>
     <button class="seg" type="button" data-view="0" data-i18n="gr.viewOff">Aucun</button>
     <button class="seg active" type="button" data-view="1" data-i18n="gr.viewFlat">Aplats</button>
@@ -121,6 +140,7 @@ export function createGroups({
   <p class="hint" data-i18n="gr.paneEmpty" data-el="paneEmpty">Rien n'a encore été segmenté.</p>
   <dl class="gr-stats" data-el="stats" hidden>
     <div><dt data-i18n="gr.statGroups">Groupes</dt><dd data-el="sGroups">—</dd></div>
+    <div><dt data-i18n="gr.statFamilies">Familles</dt><dd data-el="sFamilies">—</dd></div>
     <div><dt data-i18n="gr.statRange">Étendue</dt><dd data-el="sRange">—</dd></div>
     <div><dt data-i18n="gr.statTriangles">Triangles</dt><dd data-el="sTriangles">—</dd></div>
     <div><dt data-i18n="gr.statSuperfaces">Superfaces</dt><dd data-el="sSuper">—</dd></div>
@@ -294,22 +314,139 @@ export function createGroups({
     return { label, count: next };
   }
 
+  /**
+   * How many parts may be compared by appearance before the control gives up.
+   *
+   * The pairing is quadratic, so this is where "instant" stops. It is not a
+   * limitation worth engineering around: past a couple of thousand parts the
+   * question "which of these look alike" has stopped being one anybody can act
+   * on, and the answer is to ask for fewer parts first.
+   */
+  const MOST_COMPARABLE = 2500;
+
+  /**
+   * Merge parts that look alike, whether or not they touch.
+   *
+   * Cheapest pair first, and each merge is re-checked against the two clusters'
+   * *current* mean colours rather than against the original pair. Without that
+   * re-check this is single linkage, which chains: a smooth run of two hundred
+   * slightly different greys has no single pair above the tolerance anywhere
+   * along it, so the whole run collapses into one family and the tolerance
+   * stops meaning anything.
+   */
+  function familiesOf(label, parts, tol) {
+    const { feat, superCount } = data;
+    const col = new Float64Array(parts * 3);
+    const area = new Float64Array(parts);
+    for (let s = 0; s < superCount; s++) {
+      const p = label[s];
+      const a = feat[s * 4 + 3];
+      area[p] += a;
+      col[p * 3] += feat[s * 4] * a;
+      col[p * 3 + 1] += feat[s * 4 + 1] * a;
+      col[p * 3 + 2] += feat[s * 4 + 2] * a;
+    }
+    // Sums become means, and the area is kept: merging two families has to
+    // weight them by how much surface each one actually is.
+    for (let p = 0; p < parts; p++) {
+      const inv = area[p] > 0 ? 1 / area[p] : 0;
+      col[p * 3] *= inv;
+      col[p * 3 + 1] *= inv;
+      col[p * 3 + 2] *= inv;
+    }
+
+    const pairs = [];
+    for (let i = 0; i < parts; i++) {
+      for (let j = i + 1; j < parts; j++) {
+        const dx = col[i * 3] - col[j * 3];
+        const dy = col[i * 3 + 1] - col[j * 3 + 1];
+        const dz = col[i * 3 + 2] - col[j * 3 + 2];
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (d <= tol) pairs.push([d, i, j]);
+      }
+    }
+    pairs.sort((a, b) => a[0] - b[0]);
+
+    const parent = new Uint32Array(parts);
+    for (let i = 0; i < parts; i++) parent[i] = i;
+    const find = (x) => {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+      }
+      return x;
+    };
+    for (const [, i, j] of pairs) {
+      const a = find(i);
+      const b = find(j);
+      if (a === b) continue;
+      const dx = col[a * 3] - col[b * 3];
+      const dy = col[a * 3 + 1] - col[b * 3 + 1];
+      const dz = col[a * 3 + 2] - col[b * 3 + 2];
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) > tol) continue;
+      const wa = area[a];
+      const wb = area[b];
+      const total = wa + wb || 1;
+      for (let c = 0; c < 3; c++) {
+        col[a * 3 + c] = (col[a * 3 + c] * wa + col[b * 3 + c] * wb) / total;
+      }
+      area[a] = total;
+      parent[b] = a;
+    }
+
+    const dense = new Int32Array(parts).fill(-1);
+    const of = new Uint32Array(parts);
+    let next = 0;
+    for (let p = 0; p < parts; p++) {
+      const r = find(p);
+      if (dense[r] < 0) dense[r] = next++;
+      of[p] = dense[r];
+    }
+    return { of, count: next };
+  }
+
   function applyCut(k) {
     if (!data) return;
     const { label, count } = cutTo(k);
-    wire.setGroupLut(label);
+
+    const tol = number("fam", 0);
+    const comparable = count <= MOST_COMPARABLE;
+    let shown = label;
+    let families = count;
+    if (tol > 0 && comparable) {
+      const fam = familiesOf(label, count, tol);
+      families = fam.count;
+      // The lookup table is fed whichever partition is being *shown*, so the
+      // outlines follow it too and no third mechanism is needed for them.
+      shown = new Float32Array(label.length);
+      for (let s = 0; s < label.length; s++) shown[s] = fam.of[label[s]];
+    }
+    wire.setGroupLut(shown);
+
     data.groups = count;
+    data.families = families;
     if (el.countValue) el.countValue.textContent = num(count);
     if (el.sGroups) el.sGroups.textContent = num(count);
+    if (el.sFamilies) {
+      el.sFamilies.textContent = tol > 0 && comparable ? num(families) : "—";
+    }
+    if (el.famValue) {
+      el.famValue.textContent = !comparable
+        ? t("gr.tooMany")
+        : tol > 0
+          ? num(families)
+          : t("gr.famOff");
+    }
+    if (el.fam) el.fam.disabled = !comparable;
     viewer.invalidate?.();
   }
 
-  el.count?.addEventListener("input", () => {
-    // The slider counts groups, so it reads left to right as "fewer, more". The
-    // merge order runs the other way, which is the cut's problem and not the
-    // reader's.
-    applyCut(parseInt(el.count.value, 10));
-  });
+  const recut = () => applyCut(parseInt(el.count.value, 10));
+  // The slider counts groups, so it reads left to right as "fewer, more". The
+  // merge order runs the other way, which is the cut's problem and not the
+  // reader's.
+  el.count?.addEventListener("input", recut);
+  el.fam?.addEventListener("input", recut);
 
   function setView(next) {
     view = next;
@@ -355,6 +492,52 @@ export function createGroups({
     const aligned =
       bytes.byteOffset % 4 === 0 ? bytes : new Uint8Array(bytes);
     return new Kind(aligned.buffer, aligned.byteOffset, aligned.byteLength / 4);
+  }
+
+  /**
+   * Take a segmentation, wherever it came from, and put it on screen.
+   *
+   * Separate from `run` because a run is only one of the ways one arrives. A
+   * per-face label array produced by PartField or P3-SAM outside this
+   * application is the same thing in a different envelope, and it should get the
+   * same display, the same sliders and the same split rather than a parallel
+   * path that drifts from this one.
+   *
+   * `meshes` is the list the ids are indexed against, and it has to be the same
+   * list, in the same order, that produced them.
+   */
+  async function adopt(payload, meshes) {
+    const { report, superOfFace, nbrOfFace, merges, costs, feat } = payload;
+    data = {
+      report,
+      superCount: report.superfaces,
+      merges,
+      costs,
+      // Four per superface: mean colour in OkLab, then area.
+      feat,
+      groups: 0,
+      families: 0,
+    };
+
+    const { ensureGroupAttributes } = await import("../viewer/wire.js");
+    // `prepareWire` first, because it is what un-indexes the geometry, and the
+    // group attributes are one value per *corner* of a non-indexed triangle.
+    wire.prepare(viewer.root);
+    ensureGroupAttributes(meshes, superOfFace, nbrOfFace);
+    // Re-hand the materials, so the ones already on the meshes go through the
+    // patch and learn the new uniforms.
+    if (channels) channels.apply(channels.mode);
+
+    paintReport(report);
+    const k = Math.max(report.floor, Math.min(report.suggested, report.superfaces));
+    el.count.min = String(Math.max(1, report.floor));
+    el.count.max = String(Math.max(1, report.superfaces));
+    el.count.value = String(k);
+    el.countWrap.hidden = false;
+    el.famWrap.hidden = false;
+    el.views.hidden = false;
+    applyCut(k);
+    setView(view || 1);
   }
 
   async function run() {
@@ -417,39 +600,15 @@ export function createGroups({
         );
       }
 
-      const [superOfFace, nbrOfFace, merges, costs] = await Promise.all([
+      const [superOfFace, nbrOfFace, merges, costs, feat] = await Promise.all([
         blob(dirs.base, "super", Uint32Array),
         blob(dirs.base, "nbr", Uint32Array),
         blob(dirs.base, "merges", Uint32Array),
         blob(dirs.base, "costs", Float32Array),
+        blob(dirs.base, "feat", Float32Array),
       ]);
 
-      data = {
-        report,
-        superCount: report.superfaces,
-        merges,
-        costs,
-        groups: 0,
-      };
-
-      const { ensureGroupAttributes } = await import("../viewer/wire.js");
-      // `prepareWire` first, because it is what un-indexes the geometry, and the
-      // group attributes are one value per *corner* of a non-indexed triangle.
-      wire.prepare(viewer.root);
-      ensureGroupAttributes(meshes, superOfFace, nbrOfFace);
-      // Re-hand the materials, so the ones already on the meshes go through the
-      // patch and learn the new uniforms.
-      if (channels) channels.apply(channels.mode);
-
-      paintReport(report);
-      const k = Math.max(report.floor, Math.min(report.suggested, report.superfaces));
-      el.count.min = String(Math.max(1, report.floor));
-      el.count.max = String(Math.max(1, report.superfaces));
-      el.count.value = String(k);
-      el.countWrap.hidden = false;
-      el.views.hidden = false;
-      applyCut(k);
-      setView(view || 1);
+      await adopt({ report, superOfFace, nbrOfFace, merges, costs, feat }, meshes);
       say("", 0);
     } catch (e) {
       const message = String(e?.message || e).trim();
@@ -536,6 +695,9 @@ export function createGroups({
     toggle() {
       open ? api.hide() : api.show();
     },
+    /** Display a segmentation this mode did not compute. See `adopt`. */
+    adopt,
+    sourceMeshes,
     /**
      * The result belongs to a document, not to the mode.
      *
@@ -553,12 +715,14 @@ export function createGroups({
         el.count.min = String(Math.max(1, data.report.floor));
         el.count.max = String(Math.max(1, data.report.superfaces));
         el.countWrap.hidden = false;
+        el.famWrap.hidden = false;
         el.views.hidden = false;
         applyCut(parseInt(el.count.value, 10));
       } else {
         if (el.stats) el.stats.hidden = true;
         if (el.paneEmpty) el.paneEmpty.hidden = false;
         el.countWrap.hidden = true;
+        el.famWrap.hidden = true;
         el.views.hidden = true;
         wireU.uGroupLutSize.value.set(0, 0);
       }
@@ -573,6 +737,7 @@ export function createGroups({
       if (el.stats) el.stats.hidden = true;
       if (el.paneEmpty) el.paneEmpty.hidden = false;
       el.countWrap.hidden = true;
+      el.famWrap.hidden = true;
       el.views.hidden = true;
     },
   };
