@@ -417,7 +417,9 @@ export class PostFx {
   syncBackdrop() {
     const scene = this.viewer.scene;
     const wanted = this.viewer.solidBackground;
-    if (!wanted || !scene.background?.isColor) return;
+    // A gradient or a panorama is a texture and is not compensated at all, so
+    // the grid has nothing to be kept in step with either.
+    if (!wanted || !scene.background?.isColor) return void this.syncGrid();
     // Dimming, when it is asked for, is the selection's doing rather than the
     // chain's: the outline is what it makes room for.
     const dim =
@@ -425,6 +427,7 @@ export class PostFx {
     if (!this.active) {
       // Hand the viewer's own colour back, untouched.
       scene.background = wanted;
+      this.syncGrid();
       return;
     }
     // A separate instance on purpose: the scene's background and the viewer's
@@ -432,12 +435,61 @@ export class PostFx {
     // it would compensate the compensation on the next pass, and the backdrop
     // drifted lighter with every toggle.
     this.backdrop ||= new THREE.Color();
-    const [r, g, b] = undoToneMap(
-      [wanted.r * dim, wanted.g * dim, wanted.b * dim],
-      this.viewer.renderer.toneMappingExposure
-    );
-    this.backdrop.setRGB(r, g, b);
+    const flat = [wanted.r * dim, wanted.g * dim, wanted.b * dim];
+    const lifted = undoToneMap(flat, this.viewer.renderer.toneMappingExposure);
+    this.backdrop.setRGB(...lifted);
     scene.background = this.backdrop;
+    this.syncGrid(flat, lifted);
+  }
+
+  /**
+   * Lift the floor grid with the backdrop it stands on.
+   *
+   * `syncBackdrop` above compensates the backdrop so a flat colour looks the
+   * same whether the chain is running or not, and that fix left the grid
+   * behind. Which is what made selecting anything appear to dim the floor —
+   * selection is only the most common way to start the chain, and turning on
+   * any effect with nothing selected did exactly the same thing.
+   *
+   * The two paths blend the line in different places. Drawn straight to the
+   * canvas the backdrop is a clear colour, which three does not tone map, and
+   * the line is a material, which it does. Through the chain nothing is tone
+   * mapped until the last pass, so the line is blended in linear light against
+   * the *pre-brightened* backdrop and the sum is tone mapped whole — landing
+   * further up a curve whose slope is shallower there, which squeezes the
+   * line's share of it. Measured on the default backdrop, the same pixels stay
+   * lit and keep half their strength: 15.98 above the backdrop drawn directly,
+   * 7.84 through the chain.
+   *
+   * So the line is pre-brightened by the rule the backdrop already uses, from
+   * its own colour. The material's `color` multiplies the vertex colours the
+   * helper bakes in, which is the only lever over both greys at once; they are
+   * near enough the same that the ratio taken from the main one serves for the
+   * pair. That brings 7.84 back to 12.90 against a reference of 15.98 — a fifth
+   * short rather than a half, and the floor stops visibly changing on a click.
+   *
+   * It is a correction and not an identity, and the honest reason is that the
+   * exact form was tried and came out worse: solving the blend for the value
+   * that would land on the canvas result gave 7.27, so one of the assumptions
+   * behind it about which space each term is in does not hold. Whoever picks
+   * this up next should start there rather than trusting the algebra.
+   *
+   * Making the lines opaque was tried too and is not the answer: it fixes
+   * nothing through the chain and costs more than half the lit pixels there.
+   */
+  syncGrid(flat, lifted) {
+    const material = this.viewer.grid?.material;
+    if (!material) return;
+    if (!this.active || !flat || !lifted) {
+      material.color.setScalar(1);
+      return;
+    }
+    const base = new THREE.Color(this.viewer.gridMain);
+    const rgb = [base.r, base.g, base.b];
+    const target = undoToneMap(rgb, this.viewer.renderer.toneMappingExposure);
+    material.color.setRGB(
+      ...target.map((v, i) => (rgb[i] > 1e-4 ? Math.min(8, v / rgb[i]) : 1))
+    );
   }
 
   /** Apply a whole saved set at once, on load. */

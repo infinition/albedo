@@ -2042,20 +2042,19 @@ export class Viewer {
    *
    * The two lines below were written out twice, here and in `scaleGrid`, which
    * rebuilds the grid from scratch on every reframe. Said once so a change to
-   * one cannot miss the other.
+   * one cannot miss the other — and a rebuild drops the compensation the effect
+   * chain puts on the material, so the chain is asked to put it back. That also
+   * covers a change of grid colour, which goes through `scaleGrid` too.
    *
-   * The grid is also the only thing in the scene that visibly changes when the
-   * effect chain starts, and it is not this material's doing: measured on the
-   * default backdrop, its lines keep 37% of the floor lit at an average 15.65
-   * above the backdrop drawn directly, and 17% at 5.20 through the chain. Both
-   * the count of lit pixels and their strength halve, which is the signature of
-   * lost coverage rather than of lost brightness — one pixel wide geometry that
-   * the canvas multisamples and the chain does not. Making the lines opaque was
-   * tried and made it worse, not better.
+   * An earlier note here blamed lost antialiasing, from a measurement taken
+   * while a stray error had half the module dead. Re-measured cleanly, the same
+   * pixels are lit in both paths and only their strength changes, which is a
+   * blending question and not a coverage one: see `PostFx.syncGrid`.
    */
   dressGrid() {
     this.grid.material.transparent = true;
     this.grid.material.opacity = 0.7;
+    this.post?.syncGrid();
   }
 
   /** Keep the floor grid readable whatever the model scale is. */
