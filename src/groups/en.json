@@ -52,5 +52,18 @@
   "gr.invert": "Invert the selection",
   "gr.clearPick": "Deselect everything",
   "gr.splitPicked": "Split the selection",
-  "gr.restName": "Rest"
+  "gr.restName": "Rest",
+  "gr.map": "Map",
+  "gr.mapTitle": "Group map",
+  "gr.mapSize": "Size",
+  "gr.mapBleed": "Bleed",
+  "gr.mapSmooth": "Soften",
+  "gr.hard": "hard",
+  "gr.mapHint": "Hard edges to select a part by its colour, softened to use it as a blend mask.",
+  "gr.mapping": "Drawing the map…",
+  "gr.mapFile": "groups",
+  "gr.mapDone": "{n} groups written",
+  "gr.mapNothing": "Nothing to draw: the model has no UVs",
+  "gr.mapDoneMany": "{n} groups, {k} maps (one per atlas)",
+  "gr.mapOverlap": "{n} groups share UV space with others and do not appear separately: a map cannot give the same texels two colours. Use the split for those."
 }

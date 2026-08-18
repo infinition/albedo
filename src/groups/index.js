@@ -110,6 +110,7 @@ export function createGroups({
   <button class="tb-i" type="button" data-el="clearPick" data-i18n-title="gr.clearPick" title="Tout désélectionner" hidden>
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
   </button>
+  <button class="wide" type="button" data-el="map" data-i18n="gr.map" hidden>Carte</button>
   <button class="wide" type="button" data-el="split" data-i18n="gr.split" hidden>Découper</button>
   <button class="wide" type="button" data-el="unsplit" data-i18n="gr.unsplit" hidden>Annuler la découpe</button>
   <span class="gr-note" data-el="note"></span>
@@ -139,6 +140,21 @@ export function createGroups({
     <label class="gr-check"><input type="checkbox" data-el="bMaterial" checked /><span data-i18n="gr.bMaterial">Le matériau</span></label>
     <label class="gr-check"><input type="checkbox" data-el="bIslands" /><span data-i18n="gr.bIslands">Les coutures UV</span></label>
     <p class="gr-hint" data-i18n="gr.islandsHint">Sur un atlas généré, les îlots sont découpés pour le rangement et pas pour le sens.</p>
+
+    <p class="gr-sub" data-i18n="gr.mapTitle">Carte d'identité</p>
+    <label class="gr-field">
+      <span><span data-i18n="gr.mapSize">Taille</span> <span class="gr-num" data-el="mapSizeValue">—</span></span>
+      <input type="range" data-el="mapSize" min="9" max="13" step="1" value="11" />
+    </label>
+    <label class="gr-field">
+      <span><span data-i18n="gr.mapBleed">Bavure</span> <span class="gr-num" data-el="mapBleedValue">—</span></span>
+      <input type="range" data-el="mapBleed" min="0" max="32" step="1" value="8" />
+    </label>
+    <label class="gr-field">
+      <span><span data-i18n="gr.mapSmooth">Adoucir</span> <span class="gr-num" data-el="mapSmoothValue">—</span></span>
+      <input type="range" data-el="mapSmooth" min="0" max="8" step="1" value="0" />
+    </label>
+    <p class="gr-hint" data-i18n="gr.mapHint">Bords durs pour sélectionner une part par sa couleur, adoucis pour s'en servir comme masque de fondu.</p>
 
     <p class="gr-sub" data-i18n="gr.premerge">Pré-fusion</p>
     <label class="gr-field">
@@ -244,6 +260,10 @@ export function createGroups({
     set("wNormal", number("wNormal", 0.5).toFixed(1));
     set("sColour", number("sColour", 0.03).toFixed(3));
     set("sAngle", `${number("sAngle", 6)}°`);
+    set("mapSize", `${1 << number("mapSize", 11)}`);
+    set("mapBleed", `${number("mapBleed", 8)}`);
+    const smooth = number("mapSmooth", 0);
+    set("mapSmooth", smooth ? String(smooth) : t("gr.hard"));
   }
   for (const node of host.querySelectorAll('.gr-menu input[type="range"]')) {
     node.addEventListener("input", paintValues);
@@ -274,7 +294,18 @@ export function createGroups({
     pending = setTimeout(() => run({ reuse: true }), 180);
   }
 
+  /*
+   * Only the settings the *engine* reads re-run it.
+   *
+   * The map's size, bleed and softening live in the same menu and change
+   * nothing about the segmentation — they describe a picture drawn from a result
+   * that already exists. Wiring them to a re-run would spend seconds of engine
+   * time producing an identical answer, which is the sort of waste that only
+   * shows up on a large model and looks like the tool being slow.
+   */
+  const MAP_ONLY = new Set(["mapSize", "mapBleed", "mapSmooth"]);
   for (const node of host.querySelectorAll(".gr-menu input")) {
+    if (MAP_ONLY.has(node.dataset.el)) continue;
     node.addEventListener("change", retune);
   }
 
@@ -731,6 +762,7 @@ export function createGroups({
     el.famWrap.hidden = false;
     el.views.hidden = false;
     el.split.hidden = false;
+    el.map.hidden = false;
     applyCut(k);
     setView(view || 1);
   }
@@ -947,6 +979,89 @@ export function createGroups({
     viewer.invalidate?.();
   }
 
+  /**
+   * Draw the segmentation into the atlas and write it out.
+   *
+   * The one output that leaves the application. A split gives objects inside
+   * Albedo; this gives a file every texturing tool already understands, and it
+   * touches nothing in the scene on the way.
+   */
+  async function saveMap() {
+    if (!data?.shown) return;
+    const meshes = cached?.meshes?.length ? cached.meshes : sourceMeshes();
+    onBusy?.(true);
+    say(t("gr.mapping"), 0.35);
+    try {
+      const { paintGroupMaps } = await import("./idmap.js");
+      const maps = paintGroupMaps({
+        meshes,
+        labelOfSuper: data.shown,
+        size: 1 << number("mapSize", 11),
+        bleed: number("mapBleed", 8),
+        smooth: number("mapSmooth", 0),
+      });
+      if (!maps.length) {
+        toast?.(t("gr.mapNothing"), 4500);
+        return;
+      }
+
+      // One file per atlas. The name carries the material only when there is
+      // more than one, so the ordinary case stays a single tidy `groupes.png`.
+      const many = maps.length > 1;
+      let written = 0;
+      let groups = 0;
+      // Groups that shared UV space with another and were overwritten by it.
+      let lost = 0;
+      for (const [i, map] of maps.entries()) {
+        groups = Math.max(groups, map.groups);
+        lost += Math.max(0, map.groups - map.resolved);
+        const stem = many ? `${t("gr.mapFile")}-${map.label || i + 1}` : t("gr.mapFile");
+        const name = `${stem.replace(/[\/:*?"<>|]/g, "_")}.png`;
+        const url = map.canvas.toDataURL("image/png");
+        if (tauri) {
+          const path = await tauri.dialog.save({
+            defaultPath: name,
+            filters: [{ name: t("dlg.pngImage"), extensions: ["png"] }],
+          });
+          if (!path) continue;
+          const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) =>
+            c.charCodeAt(0)
+          );
+          const { writeFile } = await import("@tauri-apps/plugin-fs");
+          await writeFile(path, bytes);
+        } else {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = name;
+          a.click();
+        }
+        written++;
+      }
+      if (!written) return;
+      toast?.(
+        t(many ? "gr.mapDoneMany" : "gr.mapDone")
+          .replace("{n}", num(groups))
+          .replace("{k}", num(written)),
+        4500
+      );
+      /*
+       * Said out loud, and after the success rather than instead of it.
+       *
+       * A map missing two thirds of its groups is still a usable map for the
+       * ones it has; what makes it dangerous is believing it holds them all.
+       */
+      if (lost > 0) {
+        toast?.(t("gr.mapOverlap").replace("{n}", num(lost)), 9000);
+      }
+    } catch (e) {
+      toast?.(String(e?.message || e), 5000);
+    } finally {
+      say("", 0);
+      onBusy?.(false);
+    }
+  }
+
+  el.map?.addEventListener("click", () => saveMap());
   el.split?.addEventListener("click", () => doSplit());
   el.unsplit?.addEventListener("click", () => undoSplit());
 
@@ -1021,6 +1136,7 @@ export function createGroups({
         el.famWrap.hidden = false;
         el.views.hidden = false;
         el.split.hidden = false;
+        el.map.hidden = false;
         recut();
       } else {
         if (el.stats) el.stats.hidden = true;
@@ -1029,6 +1145,7 @@ export function createGroups({
         el.famWrap.hidden = true;
         el.views.hidden = true;
         el.split.hidden = true;
+        el.map.hidden = true;
         wireU.uGroupLutSize.value.set(0, 0);
       }
       if (open) setView(data ? view : 0);
@@ -1047,6 +1164,7 @@ export function createGroups({
       el.famWrap.hidden = true;
       el.views.hidden = true;
       el.split.hidden = true;
+      el.map.hidden = true;
       el.unsplit.hidden = true;
       cut = null;
     },

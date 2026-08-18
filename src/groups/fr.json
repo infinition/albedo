@@ -52,5 +52,18 @@
   "gr.invert": "Inverser la sélection",
   "gr.clearPick": "Tout désélectionner",
   "gr.splitPicked": "Découper la sélection",
-  "gr.restName": "Reste"
+  "gr.restName": "Reste",
+  "gr.map": "Carte",
+  "gr.mapTitle": "Carte d'identité",
+  "gr.mapSize": "Taille",
+  "gr.mapBleed": "Bavure",
+  "gr.mapSmooth": "Adoucir",
+  "gr.hard": "dur",
+  "gr.mapHint": "Bords durs pour sélectionner une part par sa couleur, adoucis pour s'en servir comme masque de fondu.",
+  "gr.mapping": "Dessin de la carte…",
+  "gr.mapFile": "groupes",
+  "gr.mapDone": "{n} groupes écrits",
+  "gr.mapNothing": "Rien à dessiner : le modèle n'a pas d'UV",
+  "gr.mapDoneMany": "{n} groupes, {k} cartes (une par atlas)",
+  "gr.mapOverlap": "{n} groupes partagent leur espace UV avec d'autres et n'apparaissent pas séparément : une carte ne peut pas donner deux couleurs aux mêmes texels. Utilisez la découpe pour ceux-là."
 }
