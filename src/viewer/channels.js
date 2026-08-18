@@ -83,6 +83,71 @@ function uvChecker() {
   return checkerTexture;
 }
 
+/**
+ * Carry a material's cutout onto whatever stands in for it.
+ *
+ * A cutout is not a look. `alphaTest` is what decides that a leaf card is a leaf
+ * and not the rectangle it is modelled on, and every inspection channel was
+ * dropping it: the stand-in is built from scratch with the channel's own texture
+ * and nothing else, so a plant that was leaf-shaped in the shaded view came back
+ * as a solid black quad the moment you looked at its albedo. On hand-painted art
+ * the two views are otherwise near identical, which is what makes that read as
+ * "the transparency is broken" rather than "this is a different mode".
+ *
+ * Blending is deliberately *not* carried over, and that is the line: a pane of
+ * glass has a roughness value and a data view exists to show it, not to let you
+ * look through it. The cutout is the other case — there is no surface there at
+ * all — and a channel that draws one is answering about a pixel the model does
+ * not have.
+ *
+ * Done in the shader rather than by copying `alphaTest` across, because the
+ * stand-in's own `map` is the *channel's* texture and its alpha says nothing
+ * about the shape: the threshold has to be read from the base map. `alphaMap`
+ * was the other candidate and cannot serve, because three samples it from the
+ * green channel.
+ *
+ * `USE_UV` is set so `vUv` exists whatever the stand-in carries — a channel with
+ * no texture declares no uv varying at all otherwise. The transform is passed by
+ * reference rather than copied, so a texture whose offset changes later is still
+ * sampled where it actually is.
+ */
+function keepCutout(out, mat) {
+  const threshold = mat.alphaTest > 0 ? mat.alphaTest : 0;
+  // A separate alpha map wins, being the more explicit of the two statements,
+  // and is read the way three reads it: from the green channel.
+  const source = mat.alphaMap || mat.map;
+  if (!threshold || !source) return out;
+  const channel = mat.alphaMap ? "g" : "a";
+  // Brought up to date once, here, because the base map is not bound as a map
+  // on the stand-in and so nothing else will refresh it. Skipped when the
+  // texture keeps its own matrix, which is then already the one to use.
+  if (source.matrixAutoUpdate) source.updateMatrix();
+  const uniforms = {
+    cutoutMap: { value: source },
+    cutoutUv: { value: source.matrix },
+    cutoutTest: { value: threshold },
+  };
+  out.defines = { ...(out.defines || {}), USE_UV: "" };
+  out.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "void main() {",
+        "uniform sampler2D cutoutMap;\nuniform mat3 cutoutUv;\nuniform float cutoutTest;\nvoid main() {"
+      )
+      .replace(
+        "#include <clipping_planes_fragment>",
+        "#include <clipping_planes_fragment>\n\tif ( texture2D( cutoutMap, ( cutoutUv * vec3( vUv, 1.0 ) ).xy )." +
+          channel +
+          " < cutoutTest ) discard;"
+      );
+  };
+  // A shader nobody else compiled needs a key nobody else shares, or three hands
+  // this material the program it built for a stand-in that has no cutout.
+  out.customProgramCacheKey = () => `cutout:${channel}:${threshold}`;
+  return out;
+}
+
 export class ChannelView {
   constructor(viewer) {
     this.viewer = viewer;
@@ -535,28 +600,34 @@ export class ChannelView {
       // The retopology look: a neutral gray, matte, lit like the model, so the
       // wireframe reads against a surface that says nothing about itself. Not an
       // inspection channel: the light stays, which is what makes it a surface.
-      return new THREE.MeshStandardMaterial({
+      return keepCutout(new THREE.MeshStandardMaterial({
         color: new THREE.Color(0x9b9b9b),
         roughness: 0.95,
         metalness: 0,
         side: mat.side,
         flatShading: this.flat,
-      });
+      }), mat);
     }
     if (channel === "clayUnlit") {
       // The same gray without the light, which is where the wireframe reads
       // best of all: no shading competes with the lines. Unlit, so it is a
       // MeshBasicMaterial like the inspection channels.
-      return new THREE.MeshBasicMaterial({
-        color: new THREE.Color(0x9b9b9b),
-        side: mat.side,
-      });
+      return keepCutout(
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0x9b9b9b),
+          side: mat.side,
+        }),
+        mat
+      );
     }
     if (channel === "normalGeom") {
-      return new THREE.MeshNormalMaterial({ side: mat.side, flatShading: this.flat });
+      return keepCutout(
+        new THREE.MeshNormalMaterial({ side: mat.side, flatShading: this.flat }),
+        mat
+      );
     }
     if (channel === "uv") {
-      return new THREE.MeshBasicMaterial({ map: uvChecker(), side: mat.side });
+      return keepCutout(new THREE.MeshBasicMaterial({ map: uvChecker(), side: mat.side }), mat);
     }
     const key = MAP_OF[channel];
     const tex = key ? mat[key] : null;
@@ -573,7 +644,7 @@ export class ChannelView {
     } else {
       out.toneMapped = false;
     }
-    return out;
+    return keepCutout(out, mat);
   }
 
   apply(mode) {
