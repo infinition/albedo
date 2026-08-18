@@ -803,11 +803,31 @@ export function createPainting({ viewer, wireUniforms }) {
 
   function refreshUniforms() {
     if (!wireUniforms) return;
-    wireUniforms.uPaint.value = tool || showPaint ? 1 : 0;
-    wireUniforms.uPaintRegion.value = anyRegion() ? 1 : 0;
+    const on = attached && showPaint;
+    wireUniforms.uPaint.value = on ? 1 : 0;
+    wireUniforms.uPaintRegion.value = on && anyRegion() ? 1 : 0;
   }
 
   let showPaint = true;
+
+  /**
+   * Whether the mode this painting belongs to is on screen.
+   *
+   * **The overlay outlives the chrome that controls it, so it has to be lifted
+   * by hand.** `uPaint` is a uniform on materials, and the materials stay on the
+   * meshes when the bar goes away: closing the mode left the model tinted amber
+   * and violet with no brush, no eye button and nothing at all on screen to say
+   * why, or how to stop it. The only way back was to reopen a mode you had just
+   * decided to leave.
+   *
+   * This is the same trap `uSide` fell into with the comparison curtain, and it
+   * has the same shape: state that belongs to *looking at* the model, held on
+   * the model rather than on the surface that offers it.
+   *
+   * The painting itself is untouched — it is work, and closing a panel is not a
+   * reason to throw work away. It comes back, drawn, when the mode does.
+   */
+  let attached = true;
 
   // ---------------------------------------------------------------------------
   // One stamp
@@ -1691,6 +1711,18 @@ export function createPainting({ viewer, wireUniforms }) {
     },
     setView(on) {
       showPaint = !!on;
+      refreshUniforms();
+      changed();
+    },
+
+    /**
+     * Put the overlay up or take it down, without touching what is painted.
+     *
+     * Called as the mode opens and closes. See `attached`.
+     */
+    attach(on) {
+      attached = !!on;
+      if (!attached) api.setTool(null);
       refreshUniforms();
       changed();
     },

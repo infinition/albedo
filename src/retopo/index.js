@@ -1828,15 +1828,33 @@ export function createRetopo({
   el.pUse.addEventListener("change", syncPaint);
 
   /*
-   * Escape puts the pen down.
+   * The two keys anybody reaches for after a stroke they did not mean.
    *
-   * A brush is a mode, and every mode in this application has one key that gets
-   * out of it. Registered on the document because the canvas does not take focus
-   * — clicking it paints — so a key listener on it would never fire.
+   * Escape puts the pen down: a brush is a mode, and every mode in this
+   * application has one key that gets out of it. Ctrl+Z takes the stroke back,
+   * because that is what Ctrl+Z means everywhere and nobody is going to hunt for
+   * a button in a bar while looking at a mark they just made by accident.
+   *
+   * Registered on the document because the canvas does not take focus — clicking
+   * it paints — so a key listener on it would never fire. Scoped to the mode
+   * being open, and to *this* undo: the run history has its own buttons and its
+   * own meaning, and a key that sometimes takes back a brush stroke and
+   * sometimes a twenty second decimation would be worse than no key at all.
    */
   document.addEventListener("keydown", (e) => {
-    if (!open || e.key !== "Escape" || !painting.tool) return;
-    painting.setTool(null);
+    if (!open) return;
+    if (e.key === "Escape" && painting.tool) {
+      painting.setTool(null);
+      syncPaint();
+      return;
+    }
+    if (!(e.ctrlKey || e.metaKey) || !painting.tool) return;
+    const key = e.key.toLowerCase();
+    const redo = key === "y" || (key === "z" && e.shiftKey);
+    if (key !== "z" && key !== "y") return;
+    e.preventDefault();
+    if (redo) painting.redo();
+    else painting.undo();
     syncPaint();
   });
 
@@ -2804,6 +2822,7 @@ export function createRetopo({
       paintScope();
       // Only after `dressScene`: it is what patches the materials the paint is
       // drawn by, and on a model nobody has run yet nothing has been patched.
+      painting.attach(true);
       syncPaint();
       /*
        * Put the comparison back after every channel switch.
@@ -2839,7 +2858,7 @@ export function createRetopo({
        * leave a viewer whose camera does not respond and whose bar has no brush
        * in it to explain why.
        */
-      painting.setTool(null);
+      painting.attach(false);
       host.classList.remove("open");
       document.body.classList.remove("retopo-open");
       if (tab) tab.hidden = true;
