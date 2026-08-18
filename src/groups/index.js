@@ -73,7 +73,7 @@ export function createGroups({
   -->
   <label class="gr-slider" data-el="countWrap" hidden>
     <span data-i18n="gr.groups">Groupes</span>
-    <input type="range" data-el="count" min="1" max="2" step="1" value="1" />
+    <input type="range" data-el="count" min="0" max="1000" step="1" value="0" />
     <span class="gr-num" data-el="countValue">—</span>
   </label>
 
@@ -336,6 +336,51 @@ export function createGroups({
    */
   const MOST_COMPARABLE = 2500;
 
+  /*
+   * The group slider steps through a *ladder* of counts rather than over a
+   * range, and every rung is a number of groups somebody might actually want.
+   *
+   * It was a plain linear range first, which is unusable on anything real: a
+   * mesh with a hundred thousand superfaces spread over two hundred pixels puts
+   * five hundred groups under every pixel, so two groups, five and ten — the
+   * answers people are looking for — all sit inside the first pixel and cannot
+   * be reached at all.
+   *
+   * A logarithmic range fixes the ceiling and not the floor: it spends an even
+   * share of the travel on each decade, so getting from one group to two still
+   * takes a dozen presses of an arrow key. A ladder that grows by six percent
+   * but never by less than one gives 1, 2, 3, … one rung at a time where the
+   * counts are small, and 40,000 → 42,400 where they are not. Around two hundred
+   * rungs cover any mesh, and every one of them is a different answer.
+   */
+  let rungs = [1];
+
+  function buildLadder() {
+    const lo = Math.max(1, data?.report?.floor ?? 1);
+    const hi = Math.max(lo, data?.report?.superfaces ?? lo);
+    const out = [];
+    let v = lo;
+    while (v < hi) {
+      out.push(v);
+      v = Math.max(v + 1, Math.round(v * 1.06));
+    }
+    out.push(hi);
+    rungs = out;
+    el.count.max = String(rungs.length - 1);
+  }
+
+  const groupsAt = (position) =>
+    rungs[Math.min(rungs.length - 1, Math.max(0, position | 0))] ?? 1;
+
+  /** The rung nearest a group count. The inverse, as far as one exists. */
+  function positionOf(k) {
+    let best = 0;
+    for (let i = 1; i < rungs.length; i++) {
+      if (Math.abs(rungs[i] - k) < Math.abs(rungs[best] - k)) best = i;
+    }
+    return best;
+  }
+
   /**
    * Merge parts that look alike, whether or not they touch.
    *
@@ -457,7 +502,7 @@ export function createGroups({
     viewer.invalidate?.();
   }
 
-  const recut = () => applyCut(parseInt(el.count.value, 10));
+  const recut = () => applyCut(groupsAt(parseInt(el.count.value, 10)));
   // The slider counts groups, so it reads left to right as "fewer, more". The
   // merge order runs the other way, which is the cut's problem and not the
   // reader's.
@@ -549,10 +594,9 @@ export function createGroups({
     if (channels) channels.apply(channels.mode);
 
     paintReport(report);
+    buildLadder();
     const k = Math.max(report.floor, Math.min(report.suggested, report.superfaces));
-    el.count.min = String(Math.max(1, report.floor));
-    el.count.max = String(Math.max(1, report.superfaces));
-    el.count.value = String(k);
+    el.count.value = String(positionOf(k));
     el.countWrap.hidden = false;
     el.famWrap.hidden = false;
     el.views.hidden = false;
@@ -794,13 +838,12 @@ export function createGroups({
       view = state?.view ?? 1;
       if (data) {
         paintReport(data.report);
-        el.count.min = String(Math.max(1, data.report.floor));
-        el.count.max = String(Math.max(1, data.report.superfaces));
+        buildLadder();
         el.countWrap.hidden = false;
         el.famWrap.hidden = false;
         el.views.hidden = false;
         el.split.hidden = false;
-        applyCut(parseInt(el.count.value, 10));
+        recut();
       } else {
         if (el.stats) el.stats.hidden = true;
         if (el.paneEmpty) el.paneEmpty.hidden = false;
