@@ -228,19 +228,26 @@ impl Grid {
         g
     }
 
-    /// Everything within one cell of `p`, which covers any radius up to `cell`.
-    fn near(&self, p: Vec3, out: &mut Vec<u32>) {
+    /// Everything within `span` cells of `p`, which covers any radius up to
+    /// `span * cell`.
+    fn near_span(&self, p: Vec3, span: i32, out: &mut Vec<u32>) {
         out.clear();
         let (x, y, z) = self.key(p);
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                for dz in -1..=1 {
+        let span = span.clamp(1, 32);
+        for dx in -span..=span {
+            for dy in -span..=span {
+                for dz in -span..=span {
                     if let Some(v) = self.map.get(&(x + dx, y + dy, z + dz)) {
                         out.extend_from_slice(v);
                     }
                 }
             }
         }
+    }
+
+    /// Everything within one cell of `p`, which covers any radius up to `cell`.
+    fn near(&self, p: Vec3, out: &mut Vec<u32>) {
+        self.near_span(p, 1, out);
     }
 }
 
@@ -391,6 +398,49 @@ impl PaintField {
     /// identity: the engine behaves exactly as it did before the brush existed.
     pub fn density_at(&self, p: Vec3) -> f32 {
         self.nearest(p).map(|s| s.density).unwrap_or(0.0)
+    }
+
+    /// The nearest painted sample within a radius of your choosing.
+    ///
+    /// **The plain queries look one match radius away, and one match radius is a
+    /// quarter of an edge of the mesh that was painted.** That is exactly right
+    /// when the question is "was *this vertex* painted", and useless when it is
+    /// "is this place inside the painted region" — which is what the bake asks,
+    /// about a low poly whose vertices are nowhere near the ones the brush
+    /// touched. Asked at the wrong scale, a region painted over a whole ear
+    /// answers "outside" for every triangle of the low poly covering it, and the
+    /// patch comes out empty.
+    ///
+    /// So the scale is the caller's to pick, because only the caller knows what
+    /// "near" means for the mesh it is holding.
+    fn nearest_within(&self, p: Vec3, radius: f32) -> Option<&Sample> {
+        let cell = self.painting.match_radius.max(1e-6);
+        let span = (radius / cell).ceil() as i32;
+        let mut scratch = Vec::new();
+        self.samples.near_span(p, span.max(1), &mut scratch);
+        let limit = radius * radius;
+        let mut best = None;
+        let mut best_d = limit;
+        for i in scratch {
+            let s = &self.painting.samples[i as usize];
+            let d = s.p.distance_squared(p);
+            if d <= best_d {
+                best_d = d;
+                best = Some(s);
+            }
+        }
+        best
+    }
+
+    /// Whether a run may touch this point, judged at the caller's own scale.
+    ///
+    /// See [`nearest_within`](Self::nearest_within). Without a region painted the
+    /// answer is yes everywhere, as it is for [`in_region`](Self::in_region).
+    pub fn in_region_within(&self, p: Vec3, radius: f32) -> bool {
+        if !self.painting.has_region {
+            return true;
+        }
+        self.nearest_within(p, radius).map(|s| s.region).unwrap_or(false)
     }
 
     /// Whether this point was painted as untouchable.
@@ -662,6 +712,37 @@ mod tests {
         // Untouched ground stays exactly as it was: influence has no effect
         // where nothing was painted.
         assert!((field.edge_scale_at(Vec3::new(5.0, 5.0, 5.0), 1.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_region_can_be_asked_at_the_scale_of_another_mesh() {
+        // Painted on a dense mesh: samples a hundredth apart, matched at a
+        // quarter of that. The low poly asking about it has vertices a tenth
+        // apart, so none of them sits on a painted point.
+        let mut samples = Vec::new();
+        for i in 0..40 {
+            samples.push(Sample {
+                p: Vec3::new(i as f32 * 0.01, 0.0, 0.0),
+                density: 0.0,
+                freeze: false,
+                region: true,
+            });
+        }
+        let field = PaintField::new(Painting {
+            match_radius: 0.0025,
+            has_region: true,
+            samples,
+            guides: vec![],
+        });
+
+        let between = Vec3::new(0.105, 0.02, 0.0);
+        // The strict question says no, and is right to: nothing was painted
+        // *there*.
+        assert!(!field.in_region(between));
+        // The question the bake actually has says yes.
+        assert!(field.in_region_within(between, 0.05));
+        // And it is still a region, not a licence: far away is still outside.
+        assert!(!field.in_region_within(Vec3::new(3.0, 0.0, 0.0), 0.05));
     }
 
     #[test]

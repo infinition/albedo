@@ -22,6 +22,7 @@
 use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
+use retopo_core::util::UnionFind;
 use retopo_core::{Adjacency, Mesh};
 
 #[derive(Clone, Debug)]
@@ -79,6 +80,99 @@ pub struct Atlas {
     pub utilisation: f32,
     /// Texels per world unit. Useful to report, and to compare two bakes.
     pub texel_density: f32,
+}
+
+/// Take the atlas the mesh already carries, instead of making a new one.
+///
+/// **A bake regenerates the UV layout every time, and that is the thing that
+/// makes a second bake useless as a correction.** Change a cage distance and
+/// re-run, and what comes back is not a fixed version of the texture you had —
+/// it is a different texture, with the islands somewhere else. Nothing can be
+/// compared against the previous result, nothing can be patched into it, and any
+/// work done downstream of the first bake is thrown away.
+///
+/// So: when a mesh already has coordinates worth keeping, keep them. The bake
+/// then answers a question it could not answer before — "shoot these rays again,
+/// into the picture I already have" — and that is what makes a partial re-bake
+/// possible at all.
+///
+/// # Charts, for free
+///
+/// The one thing an atlas holds that a bare mesh does not is which chart each
+/// triangle belongs to, and it does not have to be guessed: **unwrapping is
+/// exactly the act of splitting vertices at chart borders.** Two triangles in a
+/// laid-out mesh share a render vertex if and only if they are in the same
+/// island — the seam is the duplication. So the charts fall out of a union-find
+/// over the triangles' own corners, with no geometry and no angle threshold
+/// involved.
+///
+/// Returns `None` when the mesh has no usable coordinates, so a caller that
+/// asked for this on a mesh that has never been unwrapped is told rather than
+/// handed a single chart covering a fold.
+pub fn from_uvs(mesh: &Mesh) -> Option<Atlas> {
+    let nt = mesh.triangle_count();
+    if nt == 0 || mesh.uvs.len() != mesh.positions.len() {
+        return None;
+    }
+
+    // Coordinates that are all zero are the absence of an unwrap written down,
+    // which several exporters do. Rasterising that puts the whole model on one
+    // texel and reports a healthy looking utilisation.
+    let spread = mesh.uvs.iter().fold((f32::MAX, f32::MIN), |(lo, hi), uv| {
+        (lo.min(uv.x).min(uv.y), hi.max(uv.x).max(uv.y))
+    });
+    if !(spread.1 - spread.0).is_finite() || spread.1 - spread.0 < 1e-6 {
+        return None;
+    }
+
+    let mut find = UnionFind::new(mesh.positions.len());
+    for f in &mesh.triangles {
+        find.union(f[0], f[1]);
+        find.union(f[1], f[2]);
+    }
+
+    let mut label: HashMap<u32, u32> = HashMap::new();
+    let mut chart_of_tri = Vec::with_capacity(nt);
+    for f in &mesh.triangles {
+        let root = find.find(f[0]);
+        let next = label.len() as u32;
+        chart_of_tri.push(*label.entry(root).or_insert(next));
+    }
+
+    // Utilisation is reported the same way `unwrap` reports it — the share of
+    // the square the charts actually cover — so the two paths can be compared in
+    // the same column of the same report.
+    let mut uv_area = 0.0f32;
+    let mut world_area = 0.0f32;
+    for (t, f) in mesh.triangles.iter().enumerate() {
+        let (a, b, c) = (f[0] as usize, f[1] as usize, f[2] as usize);
+        let (ua, ub, uc) = (mesh.uvs[a], mesh.uvs[b], mesh.uvs[c]);
+        uv_area += ((ub - ua).perp_dot(uc - ua)).abs() * 0.5;
+        world_area += mesh.face_area(t);
+    }
+
+    Some(Atlas {
+        positions: mesh.positions.clone(),
+        normals: if mesh.normals.len() == mesh.positions.len() {
+            mesh.normals.clone()
+        } else {
+            vec![Vec3::Y; mesh.positions.len()]
+        },
+        uvs: mesh.uvs.clone(),
+        triangles: mesh.triangles.clone(),
+        // Identity: nothing was re-indexed, which is the whole point. It is also
+        // what lets a caller map an atlas triangle back to the mesh triangle it
+        // came from, and therefore what makes a painted region addressable here.
+        xref: (0..mesh.positions.len() as u32).collect(),
+        chart_of_tri,
+        chart_count: label.len(),
+        utilisation: uv_area.clamp(0.0, 1.0),
+        texel_density: if world_area > 1e-12 {
+            (uv_area / world_area).sqrt()
+        } else {
+            0.0
+        },
+    })
 }
 
 pub fn unwrap(mesh: &Mesh, opts: &AtlasOptions) -> Atlas {
@@ -769,5 +863,73 @@ mod tests {
         let a = unwrap(&Mesh::default(), &AtlasOptions::default());
         assert_eq!(a.chart_count, 0);
         assert!(a.triangles.is_empty());
+    }
+
+    /// A mesh carrying an atlas, the way one comes back from a bake.
+    fn laid_out(atlas: &Atlas) -> Mesh {
+        let mut m = Mesh::default();
+        m.positions = atlas.positions.clone();
+        m.normals = atlas.normals.clone();
+        m.uvs = atlas.uvs.clone();
+        m.triangles = atlas.triangles.clone();
+        m.tri_material = vec![0; m.triangles.len()];
+        m.materials.push(Material::default());
+        m.rebuild_weld(0.0);
+        m
+    }
+
+    #[test]
+    fn an_existing_layout_is_taken_as_it_stands() {
+        // Unwrap once, then read the result back: the second atlas has to be the
+        // first one, because that is the whole promise — a re-bake that does not
+        // move anything.
+        let mesh = box_mesh();
+        let made = unwrap(&mesh, &AtlasOptions::default());
+        let baked = laid_out(&made);
+
+        let again = from_uvs(&baked).expect("a laid out mesh has an atlas");
+        assert_eq!(again.triangles.len(), made.triangles.len());
+        assert_eq!(again.chart_count, made.chart_count, "the islands moved");
+        for (a, b) in again.uvs.iter().zip(baked.uvs.iter()) {
+            assert!((*a - *b).length() < 1e-9, "the coordinates were not kept");
+        }
+    }
+
+    #[test]
+    fn a_mesh_that_was_never_unwrapped_is_refused() {
+        // No coordinates at all, and coordinates that are all zero — which is how
+        // several exporters write "there is no unwrap here". Both have to be told
+        // apart from a real layout rather than rasterised onto one texel.
+        let mut bare = box_mesh();
+        bare.uvs.clear();
+        assert!(from_uvs(&bare).is_none());
+
+        let mut flat = box_mesh();
+        flat.uvs = vec![Vec2::ZERO; flat.positions.len()];
+        assert!(from_uvs(&flat).is_none());
+    }
+
+    #[test]
+    fn charts_come_from_the_seams_the_unwrap_left() {
+        // Six faces of a box, split into six charts by `unwrap`, which duplicates
+        // the corners. Reading that back has to find six islands from the vertex
+        // sharing alone, with no angle threshold in sight.
+        let mesh = box_mesh();
+        let made = unwrap(&mesh, &AtlasOptions::default());
+        let baked = laid_out(&made);
+        let again = from_uvs(&baked).unwrap();
+
+        let mut seen = std::collections::HashSet::new();
+        for c in &again.chart_of_tri {
+            seen.insert(*c);
+        }
+        assert_eq!(seen.len(), again.chart_count);
+        assert!(again.chart_count >= 6, "a box has at least six islands, got {}", again.chart_count);
+        // Two triangles of one quad face share corners, so they are one island.
+        for pair in again.chart_of_tri.chunks(2) {
+            if pair.len() == 2 {
+                assert_eq!(pair[0], pair[1], "one face came out split across islands");
+            }
+        }
     }
 }

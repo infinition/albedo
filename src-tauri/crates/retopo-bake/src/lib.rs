@@ -9,5 +9,5 @@
 pub mod atlas;
 pub mod bake;
 
-pub use atlas::{unwrap, Atlas, AtlasOptions};
-pub use bake::{bake, BakeOptions, BakeResult, BakeStats};
+pub use atlas::{from_uvs, unwrap, Atlas, AtlasOptions};
+pub use bake::{bake, BakeOptions, BakeResult, BakeStats, PatchOptions};

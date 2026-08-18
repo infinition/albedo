@@ -138,6 +138,18 @@ pub struct RemeshRequest {
     /// Read the painting at all. Off is the way to compare a run against the
     /// same run without it, which is the only way to judge what the brush did.
     pub use_painting: bool,
+
+    // --- the bake, in part ---
+    /// Keep the UV layout the low poly already has instead of unwrapping again.
+    ///
+    /// A bake has always rebuilt the atlas, which is why re-baking could never be
+    /// a *correction*: what came back had its islands somewhere else, so it
+    /// replaced the previous texture rather than improving it.
+    pub reuse_uvs: bool,
+    /// Re-shoot only the painted region and blend it into the existing maps.
+    pub patch_bake: bool,
+    /// Texels of cross-fade at the border of the patch.
+    pub patch_feather: u32,
 }
 
 impl Default for RemeshRequest {
@@ -178,6 +190,9 @@ impl Default for RemeshRequest {
             density_influence: 0.75,
             flow_strength: 0.5,
             use_painting: true,
+            reuse_uvs: false,
+            patch_bake: false,
+            patch_feather: 8,
         }
     }
 }
@@ -240,6 +255,13 @@ pub struct RemeshReport {
     /// Welded points the painting held still: frozen, on a crease guide, or
     /// outside the region the run was restricted to.
     pub paint_locked: usize,
+    /// Texels a patch bake re-shot, when it was one. `None` for a whole bake.
+    ///
+    /// The number that says whether the region reached the atlas at all: a patch
+    /// that touched forty texels of four million is a region painted where this
+    /// mesh is not, and from the outside that is indistinguishable from a bake
+    /// that quietly did nothing.
+    pub texels_patched: Option<usize>,
 }
 
 /// Run the whole pipeline on one GLB and write another. No Tauri in it.
@@ -420,7 +442,7 @@ pub fn remesh_file(
     // because the whole low poly inherited a single pair of metallic and
     // roughness scalars.
     if req.bake {
-        result = run_bake(&result, &mesh, req, &mut report, &mut chart_bytes, &mut |f| {
+        result = run_bake(&result, &mesh, req, field.as_ref(), &mut report, &mut chart_bytes, &mut |f| {
             progress(b0 + f * (b1 - b0))
         })?;
     }
@@ -455,10 +477,38 @@ fn run_bake(
     low: &retopo_core::Mesh,
     high: &retopo_core::Mesh,
     req: &RemeshRequest,
+    field: Option<&Arc<retopo_core::PaintField>>,
     report: &mut RemeshReport,
     chart_bytes: &mut Option<Vec<u8>>,
     progress: &mut dyn FnMut(f32),
 ) -> Result<retopo_core::Mesh, String> {
+    /*
+     * A patch needs a region to be a patch.
+     *
+     * Refused rather than quietly downgraded to a whole bake: the two cost
+     * wildly different amounts of time and produce wildly different results, and
+     * "I asked for a touch-up and it re-baked everything" is the kind of surprise
+     * that costs somebody an afternoon of work they had done on the old texture.
+     */
+    let patch = if req.patch_bake {
+        let field = field.ok_or(
+            "retouche demandée sans zone peinte : peins la zone à refaire d'abord",
+        )?;
+        if !field.has_region() {
+            return Err(
+                "retouche demandée mais aucune zone n'est peinte, seulement de la densité \
+                 ou du gel : c'est le pinceau Zone qui dit où retoucher"
+                    .into(),
+            );
+        }
+        Some(retopo_bake::PatchOptions {
+            field: field.clone(),
+            feather: req.patch_feather,
+        })
+    } else {
+        None
+    };
+
     let opts = retopo_bake::BakeOptions {
         atlas: retopo_bake::AtlasOptions {
             resolution: req.map_size,
@@ -480,6 +530,8 @@ fn run_bake(
         // And this is the painted colour smeared past each border, so filtering
         // never samples the background through a seam.
         dilate: req.bleed,
+        reuse_uvs: req.reuse_uvs,
+        patch,
     };
     let baked =
         retopo_bake::bake(low, high, &opts, progress).map_err(|e| format!("bake: {e:#}"))?;
@@ -496,7 +548,22 @@ fn run_bake(
     // atlas, so if it ever splits or reorders triangles the mask would line up
     // with nothing and paint noise that looks like a real chart layout. Counts
     // disagreeing means no file, and the viewer keeps the mode switched off.
-    let charts = retopo_bake::unwrap(low, &opts.atlas);
+    /*
+     * The same atlas the bake used, not a fresh one.
+     *
+     * This re-derives the chart ids so the viewer can colour the islands, and it
+     * has to take the same branch the bake took. Unwrapping again while the bake
+     * kept the mesh's own coordinates would hand the viewer a plausible chart
+     * layout belonging to an atlas that does not exist, which is worse than no
+     * layout at all: it would be read as the truth.
+     */
+    let charts = match (opts.reuse_uvs || opts.patch.is_some())
+        .then(|| retopo_bake::atlas::from_uvs(low))
+        .flatten()
+    {
+        Some(a) => a,
+        None => retopo_bake::unwrap(low, &opts.atlas),
+    };
     if charts.chart_of_tri.len() != baked.mesh.triangle_count() {
         eprintln!(
             "ilots ignores : {} ids pour {} triangles cuits ({} triangles dans l'atlas)",
@@ -514,6 +581,7 @@ fn run_bake(
     }
 
     report.charts = baked.stats.charts;
+    report.texels_patched = baked.stats.texels_patched;
     report.utilisation = baked.stats.utilisation;
     report.hits = baked.stats.hits;
     report.misses = baked.stats.misses;
@@ -550,6 +618,9 @@ pub fn bake_file(
     let started = std::time::Instant::now();
     let mut report = RemeshReport::default();
 
+    // Kept before the meshes shadow the arguments: the painting sits beside the
+    // source *file*, and by the next line `high` is a mesh.
+    let high_path = high;
     let hb = std::fs::read(high).map_err(|e| format!("lecture de la source impossible: {e}"))?;
     let lb = std::fs::read(low).map_err(|e| format!("lecture du résultat impossible: {e}"))?;
     let high = retopo_core::glb::load_bytes(&hb).map_err(|e| format!("{e:#}"))?;
@@ -558,8 +629,29 @@ pub fn bake_file(
     report.input_triangles = high.triangle_count();
     report.output_triangles = low.triangle_count();
 
+    /*
+     * The painting travels beside the source, and a re-bake reads it fresh.
+     *
+     * Deliberately re-read here rather than remembered from the run that made
+     * this pair: the whole point of patching is that you look at a bad result,
+     * paint the part that is wrong, and re-bake *that*. The region is therefore
+     * always newer than the geometry it applies to.
+     */
+    let painting = if req.use_painting {
+        retopo_core::Painting::load(&sidecar(high_path, "paint"))?
+    } else {
+        None
+    };
+    let field = painting
+        .and_then(retopo_core::PaintField::from_painting)
+        .map(Arc::new);
+    if let Some(f) = field.as_ref() {
+        report.paint_samples = f.sample_count();
+        report.paint_guides = f.guide_count();
+    }
+
     let mut chart_bytes: Option<Vec<u8>> = None;
-    let baked = run_bake(&low, &high, req, &mut report, &mut chart_bytes, progress)?;
+    let baked = run_bake(&low, &high, req, field.as_ref(), &mut report, &mut chart_bytes, progress)?;
     if let Some(raw) = &chart_bytes {
         let _ = std::fs::write(sidecar(output, "charts"), raw);
     }
@@ -620,6 +712,11 @@ albedo bake <source.glb> <résultat.glb> [options du bake]
   --ao               produire l'occlusion ambiante
   --ao-samples <N>   rayons par texel, défaut 16
   --ao-distance <f>  portée de l'occlusion, défaut 0.15
+
+ Retoucher plutôt que refaire :
+  --keep-uv          garder les UV du maillage au lieu de le redéplier
+  --patch            ne recuire que la zone peinte, et la fondre dans l'existant
+  --feather <N>      texels de fondu au bord de la retouche, défaut 8
 ";
 
 /// `albedo.exe remesh …`, or `None` when this is an ordinary launch.
@@ -685,6 +782,18 @@ pub fn cli_main() -> Option<i32> {
             "--no-paint" => {
                 req.use_painting = false;
                 i += 1;
+            }
+            "--keep-uv" => {
+                req.reuse_uvs = true;
+                i += 1;
+            }
+            "--patch" => {
+                req.patch_bake = true;
+                i += 1;
+            }
+            "--feather" => {
+                req.patch_feather = take(i).and_then(|v| v.parse().ok()).unwrap_or(8);
+                i += 2;
             }
             "--density" => {
                 req.density_influence = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.75);
@@ -965,6 +1074,20 @@ fn bake_args(cmd: &mut Command, request: &RemeshRequest) {
             .arg(request.ao_samples.to_string())
             .arg("--ao-distance")
             .arg(request.ao_distance.to_string());
+    }
+    /*
+     * The engine runs in a child process, so anything the request gained has to
+     * be spelled on the command line or it simply does not arrive.
+     *
+     * This is not theoretical: every field added to `RemeshRequest` since this
+     * function existed has had to be added here too, and the failure mode when
+     * it is forgotten is a setting that moves in the interface and changes
+     * nothing in the result, with no error anywhere.
+     */
+    if request.patch_bake {
+        cmd.arg("--patch").arg("--feather").arg(request.patch_feather.to_string());
+    } else if request.reuse_uvs {
+        cmd.arg("--keep-uv");
     }
 }
 

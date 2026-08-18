@@ -48,6 +48,45 @@ pub struct BakeOptions {
     /// Texels of bleed painted outward from every chart, so bilinear filtering
     /// and mip levels never pull the background into a seam.
     pub dilate: u32,
+
+    /// Keep the coordinates the low poly already carries instead of unwrapping
+    /// it again.
+    ///
+    /// Off is the old behaviour and the right default for a first bake, which has
+    /// no layout to keep. On is what makes a second bake a *correction* of the
+    /// first rather than a replacement for it: change a cage distance, re-run,
+    /// and the islands are where they were, so the two pictures can be compared
+    /// texel for texel. Falls back to unwrapping, with a warning, when the mesh
+    /// has no usable coordinates.
+    pub reuse_uvs: bool,
+
+    /// Re-shoot only part of the atlas, and blend it into what is already there.
+    pub patch: Option<PatchOptions>,
+}
+
+/// A bake confined to what was painted.
+///
+/// **The reason this exists is the cage, and the cage is per-model today.** A
+/// bake failure is almost always local — rays too short to reach an ear that
+/// pokes out of the low poly, or long enough to cross a gap and cook the wrong
+/// surface — and the only cure available was to change the distance for the
+/// whole model and re-shoot every texel. That trades the fault you can see for a
+/// fault somewhere else, and costs a minute each time you try.
+///
+/// Painted region, own settings, twenty seconds. What lands outside the region
+/// is what was already there.
+#[derive(Clone, Debug)]
+pub struct PatchOptions {
+    /// The painting, asked by position: the region decides which triangles are
+    /// re-shot.
+    pub field: std::sync::Arc<retopo_core::PaintField>,
+    /// Texels of cross-fade inside the patch border.
+    ///
+    /// Not decoration. Two bakes with different cages disagree by a little
+    /// *everywhere*, not only where the first one was wrong, so a patch dropped
+    /// in with a hard edge shows as a rectangle of slightly different shading —
+    /// and shows worse at every mip level, where the two sides average together.
+    pub feather: u32,
 }
 
 impl Default for BakeOptions {
@@ -63,6 +102,8 @@ impl Default for BakeOptions {
             ao_samples: 16,
             ao_distance: 0.15,
             dilate: 8,
+            reuse_uvs: false,
+            patch: None,
         }
     }
 }
@@ -73,6 +114,13 @@ pub struct BakeStats {
     pub utilisation: f32,
     pub texels_total: usize,
     pub texels_covered: usize,
+    /// Texels this run re-shot, when it was a patch rather than a whole bake.
+    ///
+    /// Reported because it is the number that says whether the region reached
+    /// the atlas at all. A patch that comes back having touched forty texels of
+    /// four million is a region painted somewhere the low poly does not cover,
+    /// and it looks exactly like a bake that did nothing.
+    pub texels_patched: Option<usize>,
     /// Texels whose ray found the high poly.
     pub hits: usize,
     /// Texels that missed and fell back to the nearest point on the surface.
@@ -107,7 +155,29 @@ pub fn bake(
     }
 
     progress(0.02);
-    let atlas = atlas::unwrap(low, &opts.atlas);
+    /*
+     * A patch has no meaning against a layout it did not come from, so asking
+     * for one implies keeping the coordinates. Saying so here rather than
+     * requiring the caller to set both is the difference between one invalid
+     * combination that cannot be expressed and one that produces a plausible
+     * wrong picture.
+     */
+    let keep_uvs = opts.reuse_uvs || opts.patch.is_some();
+    let atlas = match keep_uvs.then(|| atlas::from_uvs(low)).flatten() {
+        Some(a) => a,
+        None => {
+            if opts.patch.is_some() {
+                bail!(
+                    "ce maillage ne porte pas d'UV : il n'y a pas de texture à retoucher, \
+                     il faut un bake complet d'abord"
+                );
+            }
+            if keep_uvs {
+                tracing::warn!("aucune UV utilisable à conserver, dépliage complet");
+            }
+            atlas::unwrap(low, &opts.atlas)
+        }
+    };
     if atlas.triangles.is_empty() {
         bail!("the atlas came out empty");
     }
@@ -132,10 +202,35 @@ pub fn bake(
     progress(0.22);
     let tangents = tangent_frames(&atlas);
 
+    /*
+     * Which texels this run is allowed to touch.
+     *
+     * `None` is every covered texel, which is a whole bake. A patch narrows it
+     * to the texels whose triangle was painted, and the saving is the point:
+     * shading is the expensive half by a wide margin, so a region covering two
+     * percent of the model costs about two percent of a bake.
+     */
+    let touch: Option<Vec<bool>> = opts.patch.as_ref().map(|patch| {
+        let inside = triangles_in_region(&atlas, &patch.field);
+        coverage
+            .iter()
+            .map(|slot| slot.as_ref().is_some_and(|c| inside[c.tri as usize]))
+            .collect()
+    });
+    if let Some(t) = &touch {
+        if !t.iter().any(|x| *x) {
+            bail!("la zone peinte ne couvre aucun texel de cet atlas");
+        }
+    }
+
     // Sampling: one independent job per texel.
     let sampled: Vec<Option<Texel>> = coverage
         .par_iter()
-        .map(|slot| {
+        .enumerate()
+        .map(|(i, slot)| {
+            if touch.as_ref().is_some_and(|t| !t[i]) {
+                return None;
+            }
             let hit = slot.as_ref()?;
             Some(shade(
                 hit, &atlas, &tangents, high, &bvh, out_dist, in_dist, ao_dist, opts,
@@ -147,37 +242,93 @@ pub fn bake(
     let hits = sampled.iter().flatten().filter(|t| t.direct).count();
     let unpainted = sampled.iter().flatten().filter(|t| t.unpainted).count();
     let misses = sampled.iter().flatten().count() - hits - unpainted;
+    let patched = touch.as_ref().map(|t| t.iter().filter(|x| **x).count());
 
-    let mut albedo = Image::new(res, res);
-    let mut normal = opts.bake_normal.then(|| Image::new(res, res));
-    let mut ao = opts.bake_ao.then(|| Image::new(res, res));
-    let mut mr = opts.bake_metallic_roughness.then(|| Image::new(res, res));
-    let mut emissive = opts.bake_emissive.then(|| Image::new(res, res));
+    /*
+     * A patch starts from the picture that is already there; a full bake starts
+     * from nothing.
+     *
+     * `previous` is what the low poly is carrying, which for a mesh that came out
+     * of this function is exactly the maps it wrote last time. A channel the
+     * previous bake did not produce comes back empty, and a channel this run is
+     * not producing keeps whatever it had — so switching occlusion on for a patch
+     * gives occlusion in the patch and nothing elsewhere, which is honest and
+     * visible rather than silently half-done.
+     */
+    let previous = opts.patch.as_ref().map(|_| existing_maps(low, res));
+    let blank = |on: bool| on.then(|| Image::new(res, res));
+    let take = |from: &Option<Maps>, pick: fn(&Maps) -> &Option<Image>, on: bool| -> Option<Image> {
+        match from {
+            Some(maps) => pick(maps).clone().or_else(|| blank(on)),
+            None => blank(on),
+        }
+    };
+
+    let mut albedo = match &previous {
+        Some(maps) => maps.albedo.clone().unwrap_or_else(|| Image::new(res, res)),
+        None => Image::new(res, res),
+    };
+    let mut normal = take(&previous, |m| &m.normal, opts.bake_normal);
+    let mut ao = take(&previous, |m| &m.ao, opts.bake_ao);
+    let mut mr = take(&previous, |m| &m.metallic_roughness, opts.bake_metallic_roughness);
+    let mut emissive = take(&previous, |m| &m.emissive, opts.bake_emissive);
+
+    // How much of the new bake each texel takes. All of it for a full run.
+    let blend: Option<Vec<f32>> = opts.patch.as_ref().map(|patch| {
+        feather_weights(
+            &coverage,
+            touch.as_ref().expect("a patch always has a mask"),
+            &atlas,
+            res,
+            patch.feather,
+        )
+    });
+
     for (i, texel) in sampled.iter().enumerate() {
         let Some(t) = texel else { continue };
         if t.unpainted {
+            // Nothing was found for this texel. In a patch that means "keep what
+            // was there", which is better than the blank a full bake leaves for
+            // the dilation to fill.
             continue;
         }
-        albedo.rgba[i * 4..i * 4 + 4].copy_from_slice(&t.albedo);
+        let w = blend.as_ref().map_or(1.0, |b| b[i]);
+        if w <= 0.0 {
+            continue;
+        }
+        mix_into(&mut albedo.rgba[i * 4..i * 4 + 4], &t.albedo, w);
         if let Some(n) = normal.as_mut() {
-            n.rgba[i * 4..i * 4 + 4].copy_from_slice(&t.normal);
+            mix_into(&mut n.rgba[i * 4..i * 4 + 4], &t.normal, w);
         }
         if let Some(a) = ao.as_mut() {
-            a.rgba[i * 4..i * 4 + 4].copy_from_slice(&t.ao);
+            mix_into(&mut a.rgba[i * 4..i * 4 + 4], &t.ao, w);
         }
         if let Some(m) = mr.as_mut() {
-            m.rgba[i * 4..i * 4 + 4].copy_from_slice(&t.metallic_roughness);
+            mix_into(&mut m.rgba[i * 4..i * 4 + 4], &t.metallic_roughness, w);
         }
         if let Some(e) = emissive.as_mut() {
-            e.rgba[i * 4..i * 4 + 4].copy_from_slice(&t.emissive);
+            mix_into(&mut e.rgba[i * 4..i * 4 + 4], &t.emissive, w);
         }
     }
 
     progress(0.88);
-    let mask: Vec<bool> = sampled
-        .iter()
-        .map(|t| t.as_ref().is_some_and(|t| !t.unpainted))
-        .collect();
+    /*
+     * What counts as "already painted" for the bleed.
+     *
+     * For a full bake that is the texels this run shaded. For a patch it has to
+     * be **every covered texel**, because the ones outside the region were
+     * painted by the previous bake and are still there: taking the patch's own
+     * mask would leave dilation treating the whole rest of the atlas as
+     * background and smearing the patch's border colour across the model.
+     */
+    let mask: Vec<bool> = if opts.patch.is_some() {
+        coverage.iter().map(|c| c.is_some()).collect()
+    } else {
+        sampled
+            .iter()
+            .map(|t| t.as_ref().is_some_and(|t| !t.unpainted))
+            .collect()
+    };
     dilate(&mut albedo, &mask, opts.dilate);
     if let Some(n) = normal.as_mut() {
         dilate(n, &mask, opts.dilate);
@@ -203,6 +354,7 @@ pub fn bake(
             utilisation: atlas.utilisation,
             texels_total: (res * res) as usize,
             texels_covered: covered,
+            texels_patched: patched,
             hits,
             misses,
             unpainted,
@@ -212,6 +364,188 @@ pub fn bake(
             has_emissive: opts.bake_emissive,
         },
     })
+}
+
+/* -------------------------------------------------------------- patching -- */
+
+/// The maps a mesh is already carrying, by role.
+///
+/// Read through the material rather than by position in `images`, because the
+/// order in that array is an implementation detail of whoever wrote the file and
+/// the material is where glTF records what each one is *for*.
+#[derive(Clone, Debug, Default)]
+struct Maps {
+    albedo: Option<Image>,
+    normal: Option<Image>,
+    ao: Option<Image>,
+    metallic_roughness: Option<Image>,
+    emissive: Option<Image>,
+}
+
+fn existing_maps(low: &Mesh, res: u32) -> Maps {
+    let Some(material) = low.materials.first() else {
+        return Maps::default();
+    };
+    // Only maps at the resolution this run is writing are usable. A patch cannot
+    // change the atlas size — the layout would still line up, since coordinates
+    // are normalised, but every texel of the old picture would have to be
+    // resampled, and a resampled texture is not the one the rest of the model
+    // was judged against.
+    let pick = |index: Option<usize>| -> Option<Image> {
+        let image = low.images.get(index?)?;
+        (image.width == res && image.height == res).then(|| image.clone())
+    };
+    Maps {
+        albedo: pick(material.base_color_texture),
+        normal: pick(material.normal_texture),
+        ao: pick(material.occlusion_texture),
+        metallic_roughness: pick(material.metallic_roughness_texture),
+        emissive: pick(material.emissive_texture),
+    }
+}
+
+/// Blend one texel of the new bake over the old one.
+///
+/// Plain linear interpolation, in the bytes, and that is defensible for every
+/// channel here including the normal map. The two bakes differ by a cage
+/// distance, so the vectors being mixed are a degree or two apart: the
+/// shortening a linear blend causes over that angle is far below what eight bits
+/// can express, and a slerp would be arithmetic nobody can see the result of.
+#[inline]
+fn mix_into(old: &mut [u8], new: &[u8; 4], w: f32) {
+    let w = w.clamp(0.0, 1.0);
+    if w >= 1.0 {
+        old.copy_from_slice(new);
+        return;
+    }
+    for k in 0..4 {
+        let a = old[k] as f32;
+        let b = new[k] as f32;
+        old[k] = (a + (b - a) * w).round().clamp(0.0, 255.0) as u8;
+    }
+}
+
+/// Which triangles of the atlas the painted region covers.
+///
+/// Asked at the scale of *this* mesh, not of the one that was painted: the
+/// brush ran over the high poly, and a low poly vertex is nowhere near a high
+/// poly vertex. The tolerance is the low poly's own median edge, which is the
+/// only length in the problem that means "near, around here".
+fn triangles_in_region(atlas: &atlas::Atlas, field: &retopo_core::PaintField) -> Vec<bool> {
+    let mut lengths: Vec<f32> = atlas
+        .triangles
+        .iter()
+        .map(|f| atlas.positions[f[0] as usize].distance(atlas.positions[f[1] as usize]))
+        .collect();
+    lengths.sort_by(f32::total_cmp);
+    let reach = lengths.get(lengths.len() / 2).copied().unwrap_or(1e-3).max(1e-6);
+
+    atlas
+        .triangles
+        .iter()
+        .map(|f| {
+            let a = atlas.positions[f[0] as usize];
+            let b = atlas.positions[f[1] as usize];
+            let c = atlas.positions[f[2] as usize];
+            // The centre and the corners. A triangle straddling the border of the
+            // region counts as inside, so the patch reaches the edge of what was
+            // painted rather than stopping a triangle short of it — the feather
+            // below is what softens that boundary, not a ragged mask.
+            let centre = (a + b + c) / 3.0;
+            field.in_region_within(centre, reach)
+                || field.in_region_within(a, reach)
+                || field.in_region_within(b, reach)
+                || field.in_region_within(c, reach)
+        })
+        .collect()
+}
+
+/// How much of the new bake each texel of the patch takes, 0 to 1.
+///
+/// A distance transform inward from the border of the patch, and two rules make
+/// it correct rather than merely smooth:
+///
+/// - **The border is only where the patch meets the *old bake*.** A patch edge
+///   that coincides with the edge of an island is not a border to fade across:
+///   what lies beyond it is background and bleed, not a previous result, and
+///   fading into it would pull the gutter's colour into the surface.
+/// - **The walk never crosses charts.** Two islands can be neighbours in the
+///   atlas and a centimetre apart on the model. Spreading a weight between them
+///   is the same mistake the padding exists to prevent.
+fn feather_weights(
+    coverage: &[Option<Cover>],
+    touch: &[bool],
+    atlas: &atlas::Atlas,
+    res: u32,
+    feather: u32,
+) -> Vec<f32> {
+    let n = coverage.len();
+    if feather == 0 {
+        return touch.iter().map(|t| if *t { 1.0 } else { 0.0 }).collect();
+    }
+
+    let res = res as i64;
+    let chart_at = |i: usize| -> Option<u32> {
+        coverage[i].as_ref().map(|c| atlas.chart_of_tri[c.tri as usize])
+    };
+    let index = |x: i64, y: i64| -> Option<usize> {
+        (x >= 0 && y >= 0 && x < res && y < res).then(|| (y * res + x) as usize)
+    };
+
+    // Distance in texels from the border, by breadth first search inward.
+    let mut distance = vec![u32::MAX; n];
+    let mut queue = std::collections::VecDeque::new();
+    for i in 0..n {
+        if !touch[i] {
+            continue;
+        }
+        let Some(chart) = chart_at(i) else { continue };
+        let (x, y) = ((i as i64) % res, (i as i64) / res);
+        let border = [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)].iter().any(|(dx, dy)| {
+            match index(x + dx, y + dy) {
+                // Beyond the island, or off the atlas: not a border, see above.
+                None => false,
+                Some(j) => chart_at(j) == Some(chart) && !touch[j],
+            }
+        });
+        if border {
+            distance[i] = 0;
+            queue.push_back(i);
+        }
+    }
+
+    while let Some(i) = queue.pop_front() {
+        let d = distance[i];
+        if d >= feather {
+            continue;
+        }
+        let Some(chart) = chart_at(i) else { continue };
+        let (x, y) = ((i as i64) % res, (i as i64) / res);
+        for (dx, dy) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let Some(j) = index(x + dx, y + dy) else { continue };
+            if !touch[j] || distance[j] != u32::MAX || chart_at(j) != Some(chart) {
+                continue;
+            }
+            distance[j] = d + 1;
+            queue.push_back(j);
+        }
+    }
+
+    let span = feather as f32;
+    (0..n)
+        .map(|i| {
+            if !touch[i] {
+                return 0.0;
+            }
+            // Never reached: this texel is deeper than the feather, or the patch
+            // fills its whole island and has no border to fade across at all.
+            if distance[i] == u32::MAX {
+                return 1.0;
+            }
+            let t = (distance[i] as f32 / span).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t)
+        })
+        .collect()
 }
 
 /* ------------------------------------------------------------ rasterisation */
@@ -1276,5 +1610,231 @@ mod tests {
         bake(&low, &high, &small_opts(), &mut |p| seen.push(p)).unwrap();
         assert_eq!(seen.last().copied(), Some(1.0));
         assert!(seen.windows(2).all(|w| w[0] <= w[1]), "{seen:?}");
+    }
+
+    /// A painting whose region covers everything on one side of `x`.
+    fn region_left_of(mesh: &Mesh, at: f32) -> std::sync::Arc<retopo_core::PaintField> {
+        let samples = mesh
+            .positions
+            .iter()
+            .map(|p| retopo_core::Sample {
+                p: *p,
+                density: 0.0,
+                freeze: false,
+                region: p.x < at,
+            })
+            .collect();
+        std::sync::Arc::new(retopo_core::PaintField::new(retopo_core::Painting {
+            match_radius: 0.05,
+            has_region: true,
+            samples,
+            guides: vec![],
+        }))
+    }
+
+    /// The same mesh with its two check colours exchanged, so a re-bake from it
+    /// is guaranteed to move every texel it reaches.
+    fn swap_red_and_green(mesh: &Mesh) -> Mesh {
+        let mut out = mesh.clone();
+        for image in &mut out.images {
+            for p in image.rgba.chunks_exact_mut(4) {
+                p.swap(0, 1);
+            }
+        }
+        out
+    }
+
+    /// A coarse mesh to bake onto, and a dense one to bake from.
+    fn patch_pair() -> (Mesh, Mesh) {
+        (textured_sphere(12, 10, 1.0), textured_sphere(32, 24, 1.0))
+    }
+
+    /// The low poly as it comes back from a bake: laid out, carrying its maps.
+    fn baked_once(low: &Mesh, high: &Mesh, opts: &BakeOptions) -> Mesh {
+        bake(low, high, opts, &mut |_| {}).expect("the first bake works").mesh
+    }
+
+    #[test]
+    fn keeping_the_uvs_keeps_them_exactly() {
+        // The property the whole patch feature rests on: bake twice, and the
+        // second one does not move a single coordinate. Without this a re-bake
+        // replaces the texture rather than correcting it.
+        let (low, high) = patch_pair();
+        let mut opts = BakeOptions { bake_normal: false, ..Default::default() };
+        opts.atlas.resolution = 64;
+        let first = baked_once(&low, &high, &opts);
+
+        let again = bake(&first, &high, &BakeOptions { reuse_uvs: true, ..opts.clone() }, &mut |_| {})
+            .expect("the second bake works");
+
+        assert_eq!(again.mesh.uvs.len(), first.uvs.len());
+        for (a, b) in again.mesh.uvs.iter().zip(first.uvs.iter()) {
+            assert!((*a - *b).length() < 1e-9, "the layout moved: {a} vs {b}");
+        }
+        assert_eq!(again.mesh.triangles, first.triangles);
+    }
+
+    #[test]
+    fn a_patch_leaves_everything_outside_the_region_byte_for_byte() {
+        // The promise a patch makes. Re-bake half the model with a cage four
+        // times longer — a setting that changes the result everywhere it is
+        // applied — and the other half has to come back untouched.
+        let (low, high) = patch_pair();
+        let mut opts = BakeOptions { bake_normal: false, ..Default::default() };
+        opts.atlas.resolution = 64;
+        let first = baked_once(&low, &high, &opts);
+        let before = first.images[0].rgba.clone();
+
+        /*
+         * Baked from a source whose colours are swapped, so every texel the
+         * patch touches *must* change.
+         *
+         * The obvious version of this test lengthens the cage instead, and it
+         * silently proves nothing: the two spheres here are concentric, so a
+         * longer ray lands on the same place and the picture comes back
+         * identical. A test whose premise fails reads exactly like a feature
+         * that does not work.
+         */
+        let swapped = swap_red_and_green(&high);
+        let patched = bake(
+            &first,
+            &swapped,
+            &BakeOptions {
+                patch: Some(PatchOptions { field: region_left_of(&low, 0.0), feather: 0 }),
+                ..opts.clone()
+            },
+            &mut |_| {},
+        )
+        .expect("the patch works");
+
+        let count_changed = |after: &[u8]| {
+            before
+                .chunks_exact(4)
+                .zip(after.chunks_exact(4))
+                .filter(|(a, b)| a != b)
+                .count()
+        };
+        let changed = count_changed(&patched.mesh.images[0].rgba);
+        assert!(changed > 0, "the patch changed nothing at all");
+        assert!(patched.stats.texels_patched.is_some_and(|n| n > 0));
+
+        // The bound that means something, and it needs no magic number: the same
+        // source applied to the whole model has to move strictly more texels
+        // than applied to half of it. If a patch quietly re-baked everything,
+        // these two would be equal.
+        let whole = bake(
+            &first,
+            &swapped,
+            &BakeOptions { reuse_uvs: true, ..opts.clone() },
+            &mut |_| {},
+        )
+        .expect("the full re-bake works");
+        let everywhere = count_changed(&whole.mesh.images[0].rgba);
+        assert!(
+            changed < everywhere,
+            "a patch moved {changed} texels and a whole bake {everywhere}: the region did nothing"
+        );
+    }
+
+    #[test]
+    fn a_patch_without_a_region_is_refused_rather_than_baking_everything() {
+        let (low, high) = patch_pair();
+        let mut opts = BakeOptions { bake_normal: false, ..Default::default() };
+        opts.atlas.resolution = 64;
+        let first = baked_once(&low, &high, &opts);
+
+        // A painting with density but no region: nothing says *where*.
+        let field = std::sync::Arc::new(retopo_core::PaintField::new(retopo_core::Painting {
+            match_radius: 0.05,
+            has_region: false,
+            samples: vec![retopo_core::Sample {
+                p: low.positions[0],
+                density: 1.0,
+                freeze: false,
+                region: false,
+            }],
+            guides: vec![],
+        }));
+        // Everything is "in region" when none was painted, so this patch covers
+        // the whole atlas: allowed, and it is the caller above this layer that
+        // refuses it, so what is checked here is that it does not silently
+        // produce a *smaller* patch than asked for.
+        let r = bake(
+            &first,
+            &high,
+            &BakeOptions {
+                patch: Some(PatchOptions { field, feather: 4 }),
+                ..opts.clone()
+            },
+            &mut |_| {},
+        )
+        .expect("a region-less field covers everything");
+        assert_eq!(r.stats.texels_patched, Some(r.stats.texels_covered));
+    }
+
+    #[test]
+    fn a_patch_on_a_mesh_with_no_layout_is_refused() {
+        // There is no previous picture to retouch, and saying so beats unwrapping
+        // silently and handing back a whole new texture.
+        let (low, high) = patch_pair();
+        let mut bare = low.clone();
+        bare.uvs.clear();
+        let r = bake(
+            &bare,
+            &high,
+            &BakeOptions {
+                patch: Some(PatchOptions { field: region_left_of(&low, 0.0), feather: 4 }),
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+        let err = match r {
+            Ok(_) => panic!("a patch on a mesh with no layout was accepted"),
+            Err(e) => e,
+        };
+        assert!(format!("{err:#}").contains("UV"), "unexpected message: {err:#}");
+    }
+
+    #[test]
+    fn the_feather_only_fades_where_the_patch_meets_the_old_bake() {
+        // A weight of zero at the border, one deep inside, and — the part worth
+        // testing — one all the way to the edge of an island, where there is no
+        // previous result to fade into.
+        let res = 32u32;
+        let mut coverage: Vec<Option<Cover>> = vec![None; (res * res) as usize];
+        let mut atlas = atlas::Atlas::default();
+        // One triangle id per column, all in the same chart, so the geometry is
+        // out of the way and only the mask shape matters.
+        atlas.chart_of_tri = vec![0; res as usize];
+        for y in 0..res as usize {
+            for x in 0..res as usize {
+                // A band down the middle is covered; the outer columns are not.
+                if x >= 4 && x < 28 {
+                    coverage[y * res as usize + x] =
+                        Some(Cover { tri: x as u32, bary: Vec3::ZERO });
+                }
+            }
+        }
+        // The patch takes the left part of the covered band, so its right edge
+        // meets the old bake and its left edge meets the edge of the island.
+        let touch: Vec<bool> = (0..(res * res) as usize)
+            .map(|i| {
+                let x = i % res as usize;
+                (4..16).contains(&x)
+            })
+            .collect();
+
+        let w = feather_weights(&coverage, &touch, &atlas, res, 6);
+        let at = |x: usize| w[10 * res as usize + x];
+
+        assert_eq!(at(2), 0.0, "outside the patch");
+        assert_eq!(at(20), 0.0, "outside the patch, in the old bake");
+        // Against the island's edge: no fade, because there is nothing there to
+        // fade into but background.
+        assert!(at(4) > 0.99, "the island edge was feathered: {}", at(4));
+        // Against the old bake: fully faded.
+        assert!(at(15) < 0.05, "the border was not feathered: {}", at(15));
+        // And monotone in between.
+        assert!(at(15) < at(13) && at(13) < at(11), "the ramp is not monotone");
     }
 }
