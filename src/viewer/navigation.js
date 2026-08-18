@@ -139,21 +139,21 @@ export class Navigation {
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
     this.padPrev = [];
 
-/**
- * Everything a user may need to correct without touching the code.
- *
- * The three *how fast* numbers are a pair each, one per mode, and that is the
- * only structural oddity here. Turning around an object and walking through a
- * scene ask opposite things of the same hardware: a stick throw that nudges
- * an orbit pleasantly is a crawl across a terrain, and the pace that makes
- * flying usable spins the model past you when inspecting it. One number for
- * both meant retuning the panel every time the mode changed.
- *
- * What the device *is* stays shared, deliberately: dead zone, inverted axes,
- * per-axis gain and roll lock describe the unit on the desk, not the job it is
- * doing, and doubling them would be four more rows to keep in step for no
- * question anyone asks.
- */
+    /**
+     * Everything a user may need to correct without touching the code.
+     *
+     * The three *how fast* numbers are a pair each, one per mode, and that is the
+     * only structural oddity here. Turning around an object and walking through a
+     * scene ask opposite things of the same hardware: a stick throw that nudges
+     * an orbit pleasantly is a crawl across a terrain, and the pace that makes
+     * flying usable spins the model past you when inspecting it. One number for
+     * both meant retuning the panel every time the mode changed.
+     *
+     * What the device *is* stays shared, deliberately: dead zone, inverted axes,
+     * per-axis gain and roll lock describe the unit on the desk, not the job it is
+     * doing, and doubling them would be four more rows to keep in step for no
+     * question anyone asks.
+     */
     this.settings = {
       // Not under `pad` or `space`: the keys, the stick and the cap all travel
       // at this pace, and three multipliers for one idea is how they drift.
