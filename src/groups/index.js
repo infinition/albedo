@@ -334,11 +334,27 @@ export function createGroups({
   /** Read one sidecar as a typed array, straight out of the response bytes. */
   async function blob(base, kind, Kind) {
     const raw = await tauri.core.invoke("segment_blob", { base, kind });
-    // Tauri hands an ArrayBuffer back for a byte response; older shapes arrive
-    // as a plain array of numbers, which `Uint8Array.from` normalises for the
-    // price of one copy on a path that should never be taken.
-    const bytes = raw instanceof ArrayBuffer ? new Uint8Array(raw) : Uint8Array.from(raw);
-    return new Kind(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+    // A byte response arrives as an ArrayBuffer; other shapes are normalised for
+    // the price of one copy on a path that should not be taken.
+    const bytes =
+      raw instanceof ArrayBuffer
+        ? new Uint8Array(raw)
+        : ArrayBuffer.isView(raw)
+          ? new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)
+          : Uint8Array.from(raw);
+    /*
+     * A four byte view has to start on a four byte boundary.
+     *
+     * Nothing promises the bytes arrive at offset zero of their buffer, and a
+     * `Uint32Array` built on an offset that is not a multiple of four throws
+     * rather than misreading — which is the good failure, but only if somebody
+     * has thought about it. Copying when it happens costs one allocation on a
+     * path that is usually not taken, and the alternative is a run that dies
+     * after all the work is done.
+     */
+    const aligned =
+      bytes.byteOffset % 4 === 0 ? bytes : new Uint8Array(bytes);
+    return new Kind(aligned.buffer, aligned.byteOffset, aligned.byteLength / 4);
   }
 
   async function run() {
