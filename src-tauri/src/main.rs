@@ -175,19 +175,20 @@ fn save_prefs(data: String) -> Result<(), String> {
     std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
-const MODEL_EXTS: &[&str] = &[
-    "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf", "3ds", "usdz",
-    "usd", "usda", "usdc", "wrl", "vrml", "vox", "amf", "pcd", "xyz", "nif",
-    "kf", "kfa",
-];
-
 /// Path handed over by the shell ("Open with…"), if any.
 ///
-/// Any existing file is passed through rather than filtered against the list
-/// above. The frontend is what actually knows the readable formats, and
+/// Any existing file is passed through rather than filtered against a list of
+/// extensions. The frontend is what actually knows the readable formats, and
 /// keeping a second list here only produced files that opened when dropped on
 /// the window but not when opened from the shell. An unreadable file now gets
 /// a real error message instead of silence.
+///
+/// There was such a list here — `MODEL_EXTS`, behind a `supported_extensions`
+/// command — and nothing on either side of the bridge ever read it. Being
+/// unread is why it was the one list in the project still missing `usd`,
+/// `usda` and `usdc`. The lists that are read are `library.rs`, which decides
+/// what a scan counts as a model, and `SUPPORTED` in `loaders.js`, which is
+/// what the viewer can actually open.
 fn cli_model_path() -> Option<String> {
     std::env::args().skip(1).find_map(|arg| {
         if arg.starts_with('-') {
@@ -210,12 +211,6 @@ fn startup_file() -> Option<String> {
         return None;
     }
     cli_model_path()
-}
-
-/// Formats the viewer accepts, so the frontend and the shell stay in sync.
-#[tauri::command]
-fn supported_extensions() -> Vec<String> {
-    MODEL_EXTS.iter().map(|s| s.to_string()).collect()
 }
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "tga", "dds"];
@@ -424,7 +419,6 @@ fn main() {
             retopo::retopo_cancel,
             retopo::retopo_sidecar,
             startup_file,
-            supported_extensions,
             scan_textures,
             find_textures,
             thumbnail_job,

@@ -2,6 +2,7 @@ import "./library.css";
 import { thumbnailFor, releaseThumbnails, cancelPending } from "./thumbs.js";
 import { applyStaticIn, locale, register, t } from "../i18n/index.js";
 import { setPressed } from "../ui/toggle.js";
+import { inlineRename } from "../ui/rename.js";
 import libFr from "./fr.json";
 import libEn from "./en.json";
 
@@ -258,6 +259,36 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       name.className = "label";
       name.textContent = root.name;
       row.appendChild(icon("drive"));
+      /*
+       * A library is named by the folder it was added from, and that name is
+       * almost never the one you would give it: `assets_final_v3` says nothing
+       * in a list of five. The Rust side has been able to rename a root since
+       * the registry was written; this is the first thing to ask it.
+       *
+       * The field replaces the whole row rather than the label, because the row
+       * is a `<button>` and a text field inside one takes the button's clicks
+       * instead of its own.
+       */
+      const pen = document.createElement("span");
+      pen.className = "drop";
+      pen.textContent = "✎";
+      pen.title = t("lib.rename");
+      pen.addEventListener("click", (e) => {
+        e.stopPropagation();
+        inlineRename(row, root.name, {
+          className: "lib-rename inline-rename",
+          commit: async (value) => {
+            const next = value.trim();
+            if (!next || next === root.name) return;
+            state.roots = await call("library_rename", { path: root.path, name: next })
+              .catch((err) => (notice(String(err)), null)) || state.roots;
+            if (state.root?.path === root.path) state.root.name = next;
+            paintRoots();
+          },
+          after: paintRoots,
+        });
+      });
+
       const drop = document.createElement("span");
       drop.className = "drop";
       drop.textContent = "✕";
@@ -270,7 +301,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
         if (!state.root && state.roots[0]) await openRoot(state.roots[0]);
         else paint();
       });
-      row.append(name, drop);
+      row.append(name, pen, drop);
       row.addEventListener("click", () => openRoot(root));
       el.roots.appendChild(row);
     }

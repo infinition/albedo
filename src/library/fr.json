@@ -19,6 +19,7 @@
   "lib.empty": "Ajoute un dossier pour commencer.",
   "lib.noMatch": "Rien ne correspond.",
   "lib.remove": "Retirer de la liste (le dossier n'est pas touché)",
+  "lib.rename": "Renommer cette bibliothèque",
   "lib.collapse": "Replier",
   "lib.expand": "Déplier",
   "lib.allLibrary": "Toute la bibliothèque",

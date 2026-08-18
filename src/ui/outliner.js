@@ -3,6 +3,7 @@ import { forgetPortraits, portrait } from "./portrait.js";
 import { selection, decorId } from "../selection.js";
 import { renameNode } from "../naming.js";
 import { num, t } from "../i18n/index.js";
+import { inlineRename } from "./rename.js";
 import "./tree.css";
 
 /**
@@ -245,34 +246,17 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
 
   /** Turn a name into a text field, and put the name back if it is cancelled. */
   function startRename(span, text, rename) {
-    {
-      editing = null;
-      const input = document.createElement("input");
-      input.className = "tree-rename";
-      input.value = text;
-      span.replaceWith(input);
-      input.focus();
-      input.select();
-
-      let done = false;
-      const finish = (commit) => {
-        if (done) return;
-        done = true;
+    editing = inlineRename(span, text, {
+      className: "tree-rename inline-rename",
+      commit: (value) => {
+        const applied = rename(value);
+        if (applied && applied !== text) notice(t("toast.renamed").replace("{name}", applied));
+      },
+      after: () => {
         editing = null;
-        if (commit) {
-          const applied = rename(input.value);
-          if (applied && applied !== text) notice(t("toast.renamed").replace("{name}", applied));
-        }
         paint();
-      };
-      input.addEventListener("keydown", (ev) => {
-        ev.stopPropagation();
-        if (ev.key === "Enter") finish(true);
-        if (ev.key === "Escape") finish(false);
-      });
-      input.addEventListener("blur", () => finish(true));
-      editing = input;
-    }
+      },
+    });
   }
 
   /** A group header: caret, folder, label, count, and sometimes a plus. */

@@ -1123,8 +1123,11 @@ body.inspector .ov-view { max-width: calc(100cqw - 2 * var(--gap)); }
 }
 
 /* Under a narrow stage the counters go first: they are the only thing in the bar
-   you can read off the panel instead. */
-@container (max-width: 900px) {
+   you can read off the panel instead. Named, like every other rule in this
+   stylesheet: the counters are lent to the shared bar by the retopology module,
+   which registers a container of its own, and an unnamed query is one moved
+   element away from answering about the wrong box. */
+@container stage (max-width: 900px) {
   .tb-counts { display: none; }
 }
 .ov-tr, .ov-br { transition: right 0.22s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s; }
@@ -1630,6 +1633,26 @@ label:focus-within > .slider-value { opacity: 1; color: var(--accent); }
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/*
+ * A name being typed, wherever it is being typed.
+ *
+ * The scene tree and the library both turn a label into a field in place, and
+ * the two looked slightly different for no reason anyone chose: the second one
+ * was written by copying the first and then not copying all of it. One
+ * definition, and each list only says how wide it may be.
+ */
+.inline-rename {
+  appearance: none;
+  border: 1px solid var(--accent, #7cc4ff);
+  background: rgb(0 0 0 / 0.35);
+  color: var(--fg, #e6e9ef);
+  font: inherit;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.inline-rename:focus { outline: none; }
 
 .row { display: flex; gap: 8px; align-items: center; }
 

@@ -19,6 +19,7 @@
   "lib.empty": "Add a folder to get started.",
   "lib.noMatch": "Nothing matches.",
   "lib.remove": "Remove from the list (the folder is untouched)",
+  "lib.rename": "Rename this library",
   "lib.collapse": "Collapse",
   "lib.expand": "Expand",
   "lib.allLibrary": "The whole library",
