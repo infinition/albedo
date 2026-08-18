@@ -139,15 +139,30 @@ export class Navigation {
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
     this.padPrev = [];
 
-    /** Everything a user may need to correct without touching the code. */
+/**
+ * Everything a user may need to correct without touching the code.
+ *
+ * The three *how fast* numbers are a pair each, one per mode, and that is the
+ * only structural oddity here. Turning around an object and walking through a
+ * scene ask opposite things of the same hardware: a stick throw that nudges
+ * an orbit pleasantly is a crawl across a terrain, and the pace that makes
+ * flying usable spins the model past you when inspecting it. One number for
+ * both meant retuning the panel every time the mode changed.
+ *
+ * What the device *is* stays shared, deliberately: dead zone, inverted axes,
+ * per-axis gain and roll lock describe the unit on the desk, not the job it is
+ * doing, and doubling them would be four more rows to keep in step for no
+ * question anyone asks.
+ */
     this.settings = {
       // Not under `pad` or `space`: the keys, the stick and the cap all travel
       // at this pace, and three multipliers for one idea is how they drift.
+      // Fly only, having no meaning while orbiting: there is nowhere to travel.
       flySpeed: 1,
-      pad: { sensitivity: 1, deadzone: 0.14, invertY: false },
+      pad: { sensitivity: { orbit: 1, fly: 1 }, deadzone: 0.14, invertY: false },
       space: {
-        translation: 1,
-        rotation: 1,
+        translation: { orbit: 1, fly: 1 },
+        rotation: { orbit: 1, fly: 1 },
         deadzone: 0.06,
         // A SpaceMouse reports six signed axes but vendors disagree on which
         // way each one points; these flip an axis without a rebuild.
@@ -411,12 +426,25 @@ export class Navigation {
   // Gamepad
   // -------------------------------------------------------------------------
 
+  /**
+   * One of the paired speeds, for the mode in force.
+   *
+   * Numbers are still accepted, and this is not politeness: a settings file
+   * written by any earlier build holds one, and the panel is restored from it
+   * before anything has had a chance to convert it.
+   */
+  paced(value) {
+    if (typeof value === "number") return value;
+    return value?.[this.mode] ?? 1;
+  }
+
   readGamepad() {
     if (this.gamepadIndex === null || !navigator.getGamepads) return null;
     const pad = navigator.getGamepads()[this.gamepadIndex];
     if (!pad) return null;
 
-    const { deadzone, sensitivity, invertY } = this.settings.pad;
+    const { deadzone, invertY } = this.settings.pad;
+    const sensitivity = this.paced(this.settings.pad.sensitivity);
     // Radial deadzone on each stick: a per-axis cut makes diagonals crooked.
     const stick = (ax, ay) => {
       const x = pad.axes[ax] || 0;
@@ -523,9 +551,29 @@ export class Navigation {
     this.spaceDevice = device;
 
     // Full deflection is about ±350 on every model seen in the wild.
+    /*
+     * Out of the dead zone, not over it.
+     *
+     * This used to answer 0 below the threshold and the raw reading above it,
+     * so the value jumped from nothing to the width of the dead zone in one
+     * step. A cap held anywhere near that edge — which is where it sits during
+     * a pitch, the gesture that pushes hardest on the other axes — crossed back
+     * and forth report after report, a hundred times a second, and the travel
+     * it drives went on, off, on, off. That is the stutter, and it is on the
+     * *translation* axes, which is why switching the pitch axis off changed
+     * nothing: that switch zeroes the pitch term, not the cap's crosstalk into
+     * forward and up.
+     *
+     * The stick already had this treatment. The cap never did.
+     */
     const norm = (v) => {
-      const s = v / 350;
-      return Math.abs(s) < this.settings.space.deadzone ? 0 : clamp(s, -1, 1);
+      const s = clamp(v / 350, -1, 1);
+      const dead = this.settings.space.deadzone;
+      const mag = Math.abs(s);
+      if (mag <= dead) return 0;
+      // Rises from zero at the edge, and the curve buys fine control near it.
+      const scaled = (mag - dead) / (1 - dead);
+      return Math.sign(s) * scaled ** 1.6;
     };
 
     device.addEventListener("inputreport", (e) => {
@@ -563,8 +611,8 @@ export class Navigation {
     const s = this.spaceNav;
     if (!s) return null;
     const cfg = this.settings.space;
-    const t = cfg.translation;
-    const r = cfg.rotation;
+    const t = this.paced(cfg.translation);
+    const r = this.paced(cfg.rotation);
     // Off is a zero rather than a skipped multiplication, so an axis switched
     // off cannot leak through whatever reads these afterwards.
     const k = (name, master) =>

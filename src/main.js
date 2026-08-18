@@ -3728,6 +3728,8 @@ void shellReady.then(async () => {
   if (headless) neutralLook();
   else {
     restoreDevices();
+    // The panel was wired before the settings existed; this is it looking again.
+    hud.repaintDevices?.();
     applyPrefs();
   }
 });
@@ -5429,7 +5431,19 @@ function detectLayout(e) {
 
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.matches("input, select, textarea")) return;
-  if (library?.isOpen && e.code !== "KeyB") return;
+  /*
+   * The library takes the keyboard only while it takes the screen.
+   *
+   * Blocking every shortcut for as long as the library was open made sense when
+   * open meant covering the model. It does not with the preview strip out: the
+   * model is on screen, beside the grid of files, and the whole point of the
+   * split is to work on the one while browsing the other. G, R and S did
+   * nothing there, and the only way to reach them was to shut the library.
+   *
+   * Typing is already safe twice over — the guard above skips inputs, and the
+   * search field stops the event before it ever reaches this listener.
+   */
+  if (library?.isOpen && !library.isPeeking && e.code !== "KeyB") return;
   // On AZERTY, report W/Z and A/Q at the physical positions their letters
   // occupy, so every case below matches the keycap the user reads.
   const azerty = detectLayout(e) === "azerty";

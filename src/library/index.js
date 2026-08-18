@@ -1133,6 +1133,17 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
     get isOpen() {
       return state.open;
     },
+    /**
+     * Whether the viewer is still on screen beside the library.
+     *
+     * Asked by the shortcut handler, which blocks everything while the library
+     * is up. That block is right when the library covers the model — there is
+     * nothing for a key to act on — and wrong the moment the preview strip is
+     * out, because then the model is right there being looked at.
+     */
+    get isPeeking() {
+      return state.open && state.peek;
+    },
     dispose() {
       observer?.disconnect();
       releaseThumbnails();

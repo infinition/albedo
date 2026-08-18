@@ -99,9 +99,11 @@ export function wireHud({ viewer, nav, tauri, onNotice, onSettings }) {
   // The button above is for that first time and for letting go on purpose.
   nav.watchSpaceMouse();
 
-  wireDeviceSettings(nav, onSettings);
+  // The saved settings are read after this runs, so the panel needs a way to be
+  // told to look again rather than a snapshot taken before they arrived.
+  const repaintDevices = wireDeviceSettings(nav, onSettings);
 
-  return { setMode, toggleMode, toggleFullscreen, toggleInspector };
+  return { setMode, toggleMode, toggleFullscreen, toggleInspector, repaintDevices };
 }
 
 /**
@@ -206,17 +208,81 @@ function wireDeviceSettings(nav, onChange = () => {}) {
     }
     const evt = el.type === "checkbox" ? "change" : "input";
     el.addEventListener(evt, () => {
+      // Repainting a slider fires `input` too, and a value put there by the
+      // panel must not be read back as a value chosen by the user: that wrote
+      // the mode we just left over the one we just switched to.
+      if (painting) return;
       apply(el.type === "checkbox" ? el.checked : Number(el.value));
       onChange();
     });
   };
   const s = nav.settings;
-  bind("pad-sens", (v) => (s.pad.sensitivity = v), s.pad.sensitivity);
+
+  /*
+   * The three speeds are a pair each, so the sliders need to know which half.
+   *
+   * `tuning` is a panel state and not a camera state: reading `nav.mode`
+   * directly would make the sliders jump under the hand the moment the mode
+   * changed, and changing the mode to tune the other one is exactly what nobody
+   * should have to do. It starts on the mode in force, which is the reading you
+   * came to change, and stays where it is put.
+   */
+  let tuning = nav.mode === "fly" ? "fly" : "orbit";
+  let painting = false;
+  // Older settings files hold a bare number where a pair now goes.
+  const pair = (value) =>
+    typeof value === "number" ? { orbit: value, fly: value } : value;
+  s.pad.sensitivity = pair(s.pad.sensitivity);
+  s.space.translation = pair(s.space.translation);
+  s.space.rotation = pair(s.space.rotation);
+
+  const PACED = [
+    ["pad-sens", () => s.pad.sensitivity],
+    ["sm-trans", () => s.space.translation],
+    ["sm-rot", () => s.space.rotation],
+  ];
+
+  const paintTuning = () => {
+    $("tune-orbit")?.classList.toggle("active", tuning === "orbit");
+    $("tune-fly")?.classList.toggle("active", tuning === "fly");
+    painting = true;
+    for (const [id, get] of PACED) {
+      const el = $(id);
+      if (!el) continue;
+      el.value = String(get()[tuning] ?? 1);
+      // The readout is written by whoever wired it, and only ever on `input`.
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    painting = false;
+  };
+
+  for (const [id, mode] of [["tune-orbit", "orbit"], ["tune-fly", "fly"]]) {
+    $(id)?.addEventListener("click", () => {
+      tuning = mode;
+      paintTuning();
+    });
+  }
+
+  bind("pad-sens", (v) => (s.pad.sensitivity[tuning] = v));
   bind("pad-dead", (v) => (s.pad.deadzone = v), s.pad.deadzone);
   bind("pad-inverty", (v) => (s.pad.invertY = v), s.pad.invertY);
-  bind("sm-trans", (v) => (s.space.translation = v), s.space.translation);
-  bind("sm-rot", (v) => (s.space.rotation = v), s.space.rotation);
+  bind("sm-trans", (v) => (s.space.translation[tuning] = v));
+  bind("sm-rot", (v) => (s.space.rotation[tuning] = v));
   bind("sm-lockroll", (v) => (s.space.lockRoll = v), s.space.lockRoll);
+  paintTuning();
+
+  return () => {
+    // Normalised again: what arrived from the preferences may be the old shape.
+    s.pad.sensitivity = pair(s.pad.sensitivity);
+    s.space.translation = pair(s.space.translation);
+    s.space.rotation = pair(s.space.rotation);
+    painting = true;
+    $("pad-dead").value = String(s.pad.deadzone);
+    $("pad-inverty").checked = !!s.pad.invertY;
+    $("sm-lockroll").checked = !!s.space.lockRoll;
+    painting = false;
+    paintTuning();
+  };
 }
 
 /** Show which devices are live, both in the panel and on the viewport. */
