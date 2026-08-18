@@ -474,3 +474,44 @@ body.inspector #retopo .rt-bar {
  * own inputs, for a result nobody can see.
  */
 .rt-mirror { display: none; }
+
+/*
+ * The painting's counters.
+ *
+ * A list of label-and-number rows rather than a sentence, for the same reason
+ * the run's report is: painting is the one part of this mode with no preview
+ * button, so the only proof a brush reached the model is the number it moved.
+ * The list is empty until something has been painted — an empty row of zeros
+ * says the same thing as no row at all, and takes space to say it.
+ */
+.rt-paint-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 6px 0;
+}
+.rt-paint-counts:empty { margin: 0; }
+.rt-paint-counts > div { display: flex; gap: 6px; align-items: baseline; }
+.rt-paint-counts dt { font-size: 11px; color: var(--dim, #8b929c); }
+.rt-paint-counts dd {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg, #e6e9ef);
+}
+
+/*
+ * A live brush colours its own button, in the colour it paints with.
+ *
+ * The plate already marks the active position, the way every other radio group
+ * in this bar does. This is on top of it, because a brush is not a view that can
+ * be glanced at and forgotten: the pointer stops turning the camera while one is
+ * on, and the reason for that has to be visible from anywhere on screen rather
+ * than in the one corner the eye happens to be.
+ */
+#viewbar [data-tool].active { box-shadow: inset 0 0 0 1px currentColor; }
+#viewbar [data-tool="density"].active { color: #ffd166; }
+#viewbar [data-tool="freeze"].active { color: #b98cff; }
+#viewbar [data-tool="region"].active { color: #4ade80; }
+#viewbar [data-tool="guide"].active { color: #ffb020; }

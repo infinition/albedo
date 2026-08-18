@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { buildCage } from "./cage.js";
+import { createPainting } from "./paint.js";
 import { ICONS } from "./icons.js";
 /*
  * No import of the overlay here.
@@ -100,6 +101,7 @@ const SHELL = `
     <div class="rt-menu-tabs">
       <button class="seg active" type="button" data-mtab="remesh" data-i18n="rt.menuRemesh">Remesh</button>
       <button class="seg" type="button" data-mtab="bake" data-i18n="rt.menuBake">Bake</button>
+      <button class="seg" type="button" data-mtab="paint" data-i18n="rt.menuPaint">Peinture</button>
     </div>
 
     <div data-mtabpane="remesh">
@@ -152,6 +154,65 @@ const SHELL = `
         <span><span data-i18n="rt.smoothAngle">Angle du lissage</span> <span class="rt-num" data-el="mRelaxAngleValue">—</span></span>
         <input type="range" data-el="mRelaxAngle" min="20" max="150" step="5" value="75" />
       </label>
+    </div>
+
+    <div data-mtabpane="paint" hidden>
+      <!--
+        The brush lives here rather than in the panel, for the same reason every
+        other setting does: a brush size only means something while you are
+        watching the ring it draws on the model, and the panel is on the far side
+        of the screen from the model.
+      -->
+      <p class="rt-sub" data-i18n="rt.brush">Pinceau</p>
+      <label class="rt-field">
+        <span><span data-i18n="rt.brushSize">Taille</span> <span class="rt-num" data-el="pSizeValue">—</span></span>
+        <input type="range" data-el="pSize" min="0.5" max="35" step="0.5" value="6" />
+      </label>
+      <label class="rt-field">
+        <span><span data-i18n="rt.brushStrength">Force</span> <span class="rt-num" data-el="pStrengthValue">—</span></span>
+        <input type="range" data-el="pStrength" min="0.05" max="1" step="0.05" value="0.6" />
+      </label>
+      <label class="rt-field">
+        <span><span data-i18n="rt.brushHardness">Dureté</span> <span class="rt-num" data-el="pHardnessValue">—</span></span>
+        <input type="range" data-el="pHardness" min="0" max="1" step="0.05" value="0.25" />
+      </label>
+      <p class="rt-hint" data-i18n="rt.brushHint">Maj + molette change la taille sans quitter le modèle
+        des yeux. Alt, le bouton du stylet ou la gomme inversent le trait.</p>
+
+      <p class="rt-sub" data-i18n="rt.pen">Stylet</p>
+      <label class="rt-check"><input type="checkbox" data-el="pPressureSize" checked /><span data-i18n="rt.pressureSize">La pression change la taille</span></label>
+      <label class="rt-check"><input type="checkbox" data-el="pPressureStrength" checked /><span data-i18n="rt.pressureStrength">La pression change la force</span></label>
+
+      <p class="rt-sub" data-i18n="rt.guideKind">Guide</p>
+      <div class="segment" role="group" data-i18n-aria="rt.guideKind" aria-label="Guide">
+        <button class="seg active" type="button" data-guide="crease" data-i18n="rt.guideCrease">Pli</button>
+        <button class="seg" type="button" data-guide="flow" data-i18n="rt.guideFlow">Flux</button>
+      </div>
+      <p class="rt-hint" data-i18n="rt.guideHint">Un pli est une promesse : le résultat aura encore une
+        arête là. Un flux dit dans quel sens les boucles doivent courir, donc
+        les arêtes qui le suivent sont gardées et celles qui le traversent sont
+        celles qu'on dépense.</p>
+
+      <p class="rt-sub" data-i18n="rt.influence">Ce que le moteur en fait</p>
+      <label class="rt-field">
+        <span><span data-i18n="rt.densityInfluence">Poids de la densité</span> <span class="rt-num" data-el="pDensityValue">—</span></span>
+        <input type="range" data-el="pDensity" min="0" max="1" step="0.05" value="0.75" />
+      </label>
+      <label class="rt-field">
+        <span><span data-i18n="rt.flowInfluence">Poids du flux</span> <span class="rt-num" data-el="pFlowValue">—</span></span>
+        <input type="range" data-el="pFlow" min="0" max="1" step="0.05" value="0.5" />
+      </label>
+      <label class="rt-check"><input type="checkbox" data-el="pUse" checked /><span data-i18n="rt.usePaint">Lire la peinture au prochain calcul</span></label>
+      <p class="rt-hint" data-i18n="rt.usePaintHint">Décoché, le calcul ignore tout ce qui est peint sans
+        l'effacer : c'est la seule façon de voir ce que la peinture a vraiment
+        changé, en comparant deux résultats plutôt qu'un résultat et un souvenir.</p>
+
+      <div class="rt-menu-row">
+        <button class="seg" type="button" data-pclear="density" data-i18n="rt.clearDensity">Densité</button>
+        <button class="seg" type="button" data-pclear="freeze" data-i18n="rt.clearFreeze">Gel</button>
+        <button class="seg" type="button" data-pclear="region" data-i18n="rt.clearRegion">Zone</button>
+        <button class="seg" type="button" data-pclear="guides" data-i18n="rt.clearGuides">Guides</button>
+      </div>
     </div>
 
     <div data-mtabpane="bake" hidden>
@@ -247,6 +308,44 @@ const BAR_SCENE = `
 </div>
 `;
 
+/**
+ * The brushes, and what they leave on the model.
+ *
+ * A group of its own beside Scène, because it answers a different question from
+ * every other group in the bar: not "how am I looking at this" but "what am I
+ * telling the engine about it". The tools are a radio plate for the same reason
+ * the A/B modes are — only one hand is on the pen at a time — and the first
+ * position is *no brush*, which is what makes the pointer the camera's again
+ * without hunting for the tool you last used to switch it off.
+ */
+const BAR_PAINT = `
+<div class="tb-group">
+  <span class="tb-label" data-i18n="rt.paintGroup">Peindre</span>
+  <div class="tb-row">
+    <div class="tb-plate" role="radiogroup" data-i18n-aria="rt.paintAria" aria-label="Ce que le stylet peint">
+      <button class="tb-i active" type="button" data-tool="" data-icon="brushOff"
+              data-i18n-title="rt.toolOff" title="Aucun pinceau : le pointeur tourne la caméra"></button>
+      <button class="tb-i" type="button" data-tool="density" data-icon="brushDensity"
+              data-i18n-title="rt.toolDensity" title="Densité : où les triangles valent la peine (Alt inverse)"></button>
+      <button class="tb-i" type="button" data-tool="freeze" data-icon="brushFreeze"
+              data-i18n-title="rt.toolFreeze" title="Geler : ne jamais toucher à ça"></button>
+      <button class="tb-i" type="button" data-tool="region" data-icon="brushRegion"
+              data-i18n-title="rt.toolRegion" title="Zone : la seule partie que ce calcul a le droit de modifier"></button>
+      <button class="tb-i" type="button" data-tool="guide" data-icon="brushGuide"
+              data-i18n-title="rt.toolGuide" title="Guide : tracer un pli ou un sens de boucles sur la surface"></button>
+    </div>
+    <button class="tb-i tb-t" type="button" data-el="paintView" data-icon="paintView" aria-pressed="true"
+            data-i18n-title="rt.paintViewTitle" title="Montrer ce qui est peint"></button>
+    <button class="tb-i" type="button" data-el="paintUndo" data-icon="undo"
+            data-i18n-title="rt.paintUndo" title="Annuler le dernier trait" disabled></button>
+    <button class="tb-i" type="button" data-el="paintRedo" data-icon="redo"
+            data-i18n-title="rt.paintRedo" title="Refaire le trait" disabled></button>
+    <button class="tb-i" type="button" data-el="paintClear" data-icon="paintClear"
+            data-i18n-title="rt.paintClear" title="Tout effacer" disabled></button>
+  </div>
+</div>
+`;
+
 /** The four numbers you check between every run. */
 const BAR_HUD = `
 <dl class="tb-counts" data-el="hud">
@@ -312,6 +411,15 @@ const PANEL = `
       zones seulement mauvaises rejoignent les pires, ce qui est la façon de
       les trouver.</p>
   </div>
+</section>
+
+<section data-el="paintSection">
+  <h2 data-i18n="rt.paintTitle">Peinture</h2>
+  <p class="rt-hint" data-i18n="rt.paintIntro">Quatre pinceaux, dans la barre au-dessus du modèle. Ce
+    qu'ils laissent n'est pas un réglage de plus : c'est ce que tu sais du
+    modèle et que le budget de triangles ne peut pas deviner.</p>
+  <dl class="rt-paint-counts" data-el="paintCounts"></dl>
+  <p class="rt-hint" data-el="paintHint"></p>
 </section>
 
 <div data-el="settings" class="rt-mirror">
@@ -555,6 +663,9 @@ export function createRetopo({
   // Before Caméra, so the two groups that say *what* is on screen stay together
   // and the two that say *how you are looking at it* stay together after them.
   lend(bar, BAR_SCENE, document.getElementById("vb-camera")?.closest(".tb-group"));
+  // After Scène and before the counters: what is on screen, then what you are
+  // telling the engine about it, then the numbers it comes back with.
+  lend(bar, BAR_PAINT, document.getElementById("vb-camera")?.closest(".tb-group"));
   lend(bar, BAR_HUD);
 
   // Three roots, one map. Nothing is named twice across them, and a lookup that
@@ -604,6 +715,7 @@ export function createRetopo({
     el.run.textContent = runLabel();
     el.methodHint.textContent = t(METHOD_HINT[method]);
     paintScope();
+    syncPaint();
     refresh();
     if (lastReport) reportOn(lastReport.r, lastReport.bakeOnly);
   });
@@ -1534,6 +1646,164 @@ export function createRetopo({
     });
   }
 
+  // --- what is painted on the model ---------------------------------------
+
+  /**
+   * The brushes.
+   *
+   * Built once with the mode, not once per open: a painting is work, and losing
+   * it because the panel was closed for a second would make it work nobody does
+   * twice. It is the mode's own state and travels with the document through
+   * `saveState`, like the run history beside it.
+   *
+   * The uniforms are the shared ones, so the paint is drawn by the same patched
+   * shader as the wireframe and the two data views. See `paint.js` for why that
+   * matters rather than being tidy.
+   */
+  const painting = createPainting({ viewer, wireUniforms: wireU });
+
+  /** The brush size slider is a percentage; the brush wants a fraction. */
+  const brushPercent = () => Number(el.pSize.value);
+
+  /*
+   * The tool buttons, held as nodes rather than looked up.
+   *
+   * These five move between `held` and the bar every time the mode opens and
+   * shuts, so neither root can answer for them at both ends of that: `held` is
+   * empty while the mode is open and the bar is empty while it is shut. The
+   * nodes themselves are the same objects throughout.
+   */
+  const toolButtons = [...held.querySelectorAll("[data-tool]")];
+
+  /** The slider is a view of the brush size, which lives in `paint.js`. */
+  const syncBrushSlider = () => {
+    const pct = painting.brush.size * 100;
+    el.pSize.value = pct.toFixed(1);
+    el.pSizeValue.textContent = `${pct.toFixed(1)} %`;
+  };
+
+  function syncPaint() {
+    const s = painting.stats();
+    const tool = painting.tool;
+    for (const b of toolButtons) {
+      b.classList.toggle("active", (b.dataset.tool || null) === tool);
+    }
+    for (const b of el.menu.querySelectorAll("[data-guide]")) {
+      b.classList.toggle("active", b.dataset.guide === painting.guideKind);
+    }
+    setPressed(el.paintView, painting.view);
+    el.paintUndo.disabled = !painting.canUndo;
+    el.paintRedo.disabled = !painting.canRedo;
+    el.paintClear.disabled = painting.empty;
+
+    syncBrushSlider();
+    el.pStrengthValue.textContent = Number(el.pStrength.value).toFixed(2);
+    el.pHardnessValue.textContent = Number(el.pHardness.value).toFixed(2);
+    el.pDensityValue.textContent = Number(el.pDensity.value).toFixed(2);
+    el.pFlowValue.textContent = Number(el.pFlow.value).toFixed(2);
+
+    /*
+     * The counts, as a list rather than a sentence.
+     *
+     * Painting is the one part of this mode with no preview button: the only way
+     * to know a brush reached the model is to see the number it moved. An empty
+     * list is the honest answer when nothing has been painted, and it is why the
+     * section is written even when it is empty.
+     */
+    const rows = [
+      [t("rt.countDensity"), s.density],
+      [t("rt.countFreeze"), s.freeze],
+      [t("rt.countRegion"), s.region],
+      [t("rt.countGuides"), s.guides],
+    ].filter(([, n]) => n > 0);
+    el.paintCounts.innerHTML = rows.length
+      ? rows.map(([k, n]) => `<div><dt>${k}</dt><dd>${fr(n)}</dd></div>`).join("")
+      : "";
+    el.paintHint.textContent = !rows.length
+      ? t("rt.paintNothing")
+      : !el.pUse.checked
+        ? t("rt.paintIgnored")
+        : s.region
+          ? t("rt.paintRegionOn")
+          : t("rt.paintReady");
+  }
+  painting.onChange = syncPaint;
+
+  for (const b of toolButtons) {
+    b.addEventListener("click", () => {
+      const next = b.dataset.tool || null;
+      // Clicking the live tool puts the pen down, which is one click rather than
+      // two to get the camera back.
+      painting.setTool(painting.tool === next ? null : next);
+      if (painting.tool) showPane?.("retopo");
+      syncPaint();
+    });
+  }
+  for (const b of el.menu.querySelectorAll("[data-guide]")) {
+    b.addEventListener("click", () => {
+      painting.setGuideKind(b.dataset.guide);
+      // Choosing a kind of guide is choosing to draw one.
+      painting.setTool("guide");
+      syncPaint();
+    });
+  }
+  el.paintView.addEventListener("click", () => {
+    painting.setView(!painting.view);
+    syncPaint();
+  });
+  el.paintUndo.addEventListener("click", () => {
+    painting.undo();
+    syncPaint();
+  });
+  el.paintRedo.addEventListener("click", () => {
+    painting.redo();
+    syncPaint();
+  });
+  el.paintClear.addEventListener("click", () => {
+    painting.clear("all");
+    say2(t("rt.paintCleared"));
+    syncPaint();
+  });
+  for (const b of el.menu.querySelectorAll("[data-pclear]")) {
+    b.addEventListener("click", () => {
+      painting.clear(b.dataset.pclear);
+      syncPaint();
+    });
+  }
+  for (const k of ["pSize", "pStrength", "pHardness"]) {
+    el[k].addEventListener("input", () => {
+      painting.setBrush({
+        size: brushPercent() / 100,
+        strength: Number(el.pStrength.value),
+        hardness: Number(el.pHardness.value),
+      });
+      syncPaint();
+    });
+  }
+  for (const k of ["pPressureSize", "pPressureStrength"]) {
+    el[k].addEventListener("change", () => {
+      painting.setBrush({
+        pressureSize: el.pPressureSize.checked,
+        pressureStrength: el.pPressureStrength.checked,
+      });
+    });
+  }
+  for (const k of ["pDensity", "pFlow"]) el[k].addEventListener("input", syncPaint);
+  el.pUse.addEventListener("change", syncPaint);
+
+  /*
+   * Escape puts the pen down.
+   *
+   * A brush is a mode, and every mode in this application has one key that gets
+   * out of it. Registered on the document because the canvas does not take focus
+   * — clicking it paints — so a key listener on it would never fire.
+   */
+  document.addEventListener("keydown", (e) => {
+    if (!open || e.key !== "Escape" || !painting.tool) return;
+    painting.setTool(null);
+    syncPaint();
+  });
+
   // --- running ------------------------------------------------------------
 
   /**
@@ -1700,6 +1970,25 @@ export function createRetopo({
             r.aspectAfter < r.aspectBefore ? "good" : "");
       }
       if (r.quads) add(t("rt.hudQuads"), `${fr(r.quads)} · ${(r.quadFraction * 100).toFixed(0)} %`, "good");
+
+      /*
+       * What the painting did, and whether it arrived at all.
+       *
+       * The failure that matters here has no symptom of its own: a sidecar whose
+       * points do not land on the mesh produces an ordinary looking run that
+       * ignored everything you drew. `paintMatched` against `paintSamples` is
+       * the one place that shows, so it is reported as a ratio and flagged when
+       * it goes wrong rather than left to be noticed.
+       */
+      if (r.paintSamples || r.paintGuides) {
+        const share = r.paintSamples ? r.paintMatched / r.paintSamples : 1;
+        if (r.paintSamples) {
+          add(t("rt.paintRead"), `${fr(r.paintMatched)} / ${fr(r.paintSamples)}`,
+              share > 0.9 ? "good" : share > 0.5 ? "warn" : "bad");
+        }
+        if (r.paintGuides) add(t("rt.countGuides"), fr(r.paintGuides));
+        if (r.paintLocked) add(t("rt.paintHeld"), fr(r.paintLocked));
+      }
     } else {
       add(t("rt.bakeTime"), `${(r.millis / 1000).toFixed(2)} s`);
       add(t("rt.geometry"), t("rt.unchanged"));
@@ -1925,7 +2214,21 @@ export function createRetopo({
    */
   async function inputForMesh(dirs, mesh, index, total) {
     const p = sourcePath?.();
-    if (total === 1 && isGltf(p) && scope === "all" && countMeshes() === 1) return p;
+    /*
+     * The fast path hands the engine the file already on disk, and it cannot
+     * survive a painting.
+     *
+     * Two reasons, either one enough. The sidecar goes *beside the input*, so
+     * taking this path would write a `.paint` file into the person's own asset
+     * folder next to their model. And the painted points are in the coordinates
+     * of the scene as it stands — turned by the orientation buttons, moved by
+     * the handles — which is what an export writes and is not what the file on
+     * disk contains.
+     */
+    const paintBytes = usePaint() ? painting.sidecarFor(mesh) : null;
+    if (!paintBytes && total === 1 && isGltf(p) && scope === "all" && countMeshes() === 1) {
+      return p;
+    }
 
     say(t("rt.exporting"), 0);
     // The group, not the object inside it: the orientation buttons and the edit
@@ -1961,6 +2264,15 @@ export function createRetopo({
     const { writeFile } = await import("@tauri-apps/plugin-fs");
     const path = numbered(dirs.input, index);
     await writeFile(path, new Uint8Array(glb));
+    /*
+     * The painting travels beside the model, never inside it.
+     *
+     * Same arrangement the results already use for the quad mask, the deviation
+     * and the chart ids: glTF has nowhere to put any of them, and inventing a
+     * custom vertex semantic is what made the engine refuse whole files once
+     * already — see the note above about `_ABARY`.
+     */
+    if (paintBytes) await writeFile(`${path}.paint`, paintBytes);
     return path;
   }
 
@@ -1989,10 +2301,16 @@ export function createRetopo({
       maxError: Number(el.maxError.value) / 1000,
       relaxStrength: Number(el.relaxStrength.value),
       pairQuads: el.quads.checked,
+      densityInfluence: Number(el.pDensity.value),
+      flowStrength: Number(el.pFlow.value),
+      usePainting: usePaint(),
       ...bakeRequest(),
       bake: el.bake.checked,
     };
   }
+
+  /** Whether this run reads what is painted. */
+  const usePaint = () => el.pUse.checked && !painting.empty;
 
   /**
    * The budget, per mesh.
@@ -2002,8 +2320,27 @@ export function createRetopo({
    * detail, so a bolt and a hull both come out at forty percent rather than the
    * hull eating a whole scene-wide allowance and the bolt vanishing.
    */
-  const budgetFor = (mesh) =>
-    Math.max(4, Math.round((countTriangles(mesh) * Number(el.target.value)) / 100));
+  const budgetFor = (mesh) => {
+    const total = countTriangles(mesh);
+    const pct = Number(el.target.value) / 100;
+    /*
+     * A percentage of *what*, once a run is confined to part of a model.
+     *
+     * The slider means "keep this share of the detail", and with a region
+     * painted the only detail on the table is the region's own: everything else
+     * is locked and cannot be spent. Asking the engine for ten percent of a
+     * whole head while only the face may be touched is a target it cannot reach
+     * — it grinds through every remaining candidate and gives up — and the
+     * result then looks like a slider that stopped working.
+     *
+     * So the percentage is spent inside the region and the rest is counted as
+     * it stands.
+     */
+    const share = usePaint() ? painting.regionShare(mesh) : 1;
+    const inside = total * share;
+    const outside = total - inside;
+    return Math.max(4, Math.round(outside + inside * pct));
+  };
 
   /** Add up N per-mesh reports into the one the panel shows. */
   function totalReport(reports) {
@@ -2369,6 +2706,9 @@ export function createRetopo({
       }
       dressScene();
       paintScope();
+      // Only after `dressScene`: it is what patches the materials the paint is
+      // drawn by, and on a model nobody has run yet nothing has been patched.
+      syncPaint();
       /*
        * Put the comparison back after every channel switch.
        *
@@ -2395,6 +2735,15 @@ export function createRetopo({
     },
     hide() {
       open = false;
+      /*
+       * The pen goes down with the mode.
+       *
+       * The brush holds the canvas's pointer events in the capture phase and
+       * turns the orbit controls off while a stroke is live. Leaving it on would
+       * leave a viewer whose camera does not respond and whose bar has no brush
+       * in it to explain why.
+       */
+      painting.setTool(null);
       host.classList.remove("open");
       document.body.classList.remove("retopo-open");
       if (tab) tab.hidden = true;
@@ -2443,7 +2792,7 @@ export function createRetopo({
      * when it returns, so each model keeps its own runs.
      */
     saveState() {
-      return { history, cursor, last, lastRun, hasQuads, devMax };
+      return { history, cursor, last, lastRun, hasQuads, devMax, painting: painting.snapshot() };
     },
     loadState(state) {
       history = state?.history || [];
@@ -2458,7 +2807,9 @@ export function createRetopo({
       el.err.hidden = true;
       el.report.textContent = "";
       el.resultSection.hidden = true;
+      painting.restore(state?.painting);
       paintHistory();
+      syncPaint();
       refresh();
     },
     /** The shared selection moved: only the scope line depends on it. */

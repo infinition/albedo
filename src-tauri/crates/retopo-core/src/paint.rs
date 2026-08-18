@@ -526,6 +526,72 @@ mod tests {
         b
     }
 
+    /*
+     * A sidecar the *interface* wrote, byte for byte.
+     *
+     * Everything else in this file checks that this module agrees with itself.
+     * This one checks the only thing that can actually break in the field: that
+     * the two halves of the feature, written in two languages against one
+     * paragraph of documentation, still agree. It was produced by driving
+     * `src/retopo/paint.js` with real pointer events over a 2x2 plane placed at
+     * x = 0.5 — a region dab and one crease guide — and captured as it came out.
+     *
+     * If a future change to either side breaks the layout, this fails here
+     * rather than in a run that silently ignores everything the artist drew.
+     */
+    const FROM_THE_BRUSH: &str = "QUxCUE5UMDEBAAAAAACAPQoAAAABAAAAAAAAPwAAAD8AAAAAAAAAAAIAAAAAAIA+AACAPgAAAAAAAAAAAgAAAAAAAD8AAIA+AAAAAAAAAAACAAAAAABAPwAAgD4AAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAgD4AAAAAAAAAAAAAAAACAAAAAAAAPwAAAAAAAAAAAAAAAAIAAAAAAEA/AAAAAAAAAAAAAAAAAgAAAAAAgD4AAIC+AAAAAAAAAAACAAAAAAAAPwAAgL4AAAAAAAAAAAIAAAAAAAAAAADAPgAAgD8CAAAA7T8PPu0/j74AAAAA5N/WPu0/j74AAAAA";
+
+    /// Just enough base64 to read one test fixture, so the crate does not gain a
+    /// dependency for the sake of a string constant.
+    fn unbase64(text: &str) -> Vec<u8> {
+        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = Vec::new();
+        let (mut acc, mut bits) = (0u32, 0u32);
+        for c in text.bytes() {
+            if c == b'=' || c.is_ascii_whitespace() {
+                continue;
+            }
+            let Some(v) = ALPHABET.iter().position(|&a| a == c) else {
+                continue;
+            };
+            acc = (acc << 6) | v as u32;
+            bits += 6;
+            if bits >= 8 {
+                bits -= 8;
+                out.push((acc >> bits) as u8);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_interfaces_own_bytes_are_read_the_way_it_wrote_them() {
+        let raw = unbase64(FROM_THE_BRUSH);
+        let p = Painting::parse(&raw).expect("the interface's sidecar parses");
+
+        assert!(p.has_region, "a region was painted and the flag says so");
+        assert_eq!(p.samples.len(), 10);
+        assert_eq!(p.guides.len(), 1);
+        assert_eq!(p.guides[0].kind, Guide::CREASE);
+        assert_eq!(p.guides[0].points.len(), 2);
+
+        // The plane sits at x = 0.5, so a painted point at the mesh's own origin
+        // has to arrive here at x = 0.5: the interface writes world coordinates,
+        // which is the space the exported GLB is in. Local ones would put every
+        // stroke wherever the model happened to be before it was placed.
+        assert!(
+            p.samples.iter().any(|s| (s.p.x - 0.5).abs() < 1e-5 && s.region),
+            "no sample landed where the mesh was placed: {:?}",
+            p.samples.iter().map(|s| s.p.x).collect::<Vec<_>>()
+        );
+        assert!(p.samples.iter().all(|s| !s.freeze));
+
+        // And the whole thing answers questions once indexed.
+        let field = PaintField::from_painting(p).expect("not empty");
+        assert!(field.has_region());
+        assert_eq!(field.guide_count(), 1);
+    }
+
     #[test]
     fn round_trips_through_the_sidecar() {
         let samples = vec![

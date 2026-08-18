@@ -51,7 +51,7 @@ const ALL_EDGES = 7;
  * the whole file with "invalid semantic name" rather than skipping four
  * attributes it has no use for.
  */
-export const WIRE_ATTRIBUTES = ["aBary", "aEdges", "aChart", "aDev"];
+export const WIRE_ATTRIBUTES = ["aBary", "aEdges", "aChart", "aDev", "aPaint"];
 
 /**
  * Take the overlay's attributes off for the duration of something, and put them
@@ -203,6 +203,27 @@ export function makeWireUniforms() {
     // surface, where a hair of light still says "line".
     uWireColor: { value: new THREE.Color(0.03, 0.03, 0.04) },
     uQuads: { value: 0 },
+    /*
+     * The painting, drawn over the shaded surface.
+     *
+     * Here rather than in a shader of its own, for the reason that decides every
+     * other overlay in this file: the paint has to be legible *on the model*,
+     * under whichever of the eleven channels is on, beside the wireframe, and
+     * through the x-ray. A second material would be a second answer to "what am
+     * I looking at" and would lose all four of those the moment it was switched
+     * on.
+     */
+    uPaint: { value: 0 },
+    /**
+     * Whether a working region was painted anywhere.
+     *
+     * Its own uniform rather than being read off the attribute, because the
+     * question is about the whole model: with a region painted, everything
+     * outside it is greyed, including meshes that carry no attribute at all and
+     * would otherwise read as zero — which is the correct answer here, and only
+     * because this flag says a region exists to be outside of.
+     */
+    uPaintRegion: { value: 0 },
     // The curtain. `uSplit` is where it sits across the viewport, 0 to 1.
     uSplit: { value: 0.5 },
     uViewport: { value: new THREE.Vector2(1, 1) },
@@ -230,10 +251,13 @@ attribute vec3 aBary;
 attribute float aEdges;
 attribute float aChart;
 attribute float aDev;
+/** density in x, frozen in y, inside-the-region in z. */
+attribute vec3 aPaint;
 varying vec3 vBary;
 varying float vEdges;
 varying float vChart;
 varying float vDev;
+varying vec3 vPaint;
 /*
  * Our own view space normal, rather than three's vNormal.
  *
@@ -255,10 +279,13 @@ uniform vec2 uViewport;
 uniform float uView;
 uniform float uDevScale;
 uniform float uXray;
+uniform float uPaint;
+uniform float uPaintRegion;
 varying vec3 vBary;
 varying float vEdges;
 varying float vChart;
 varying float vDev;
+varying vec3 vPaint;
 varying vec3 vRtNormal;
 
 /*
@@ -353,6 +380,43 @@ if (uXray > 0.5) {
   gl_FragColor.a *= clamp(1.25 - facing, 0.12, 1.0);
 }
 
+/*
+ * The painting.
+ *
+ * Tinted onto the shaded colour rather than replacing it, and that is the whole
+ * point of drawing it here: the person is judging where the detail *is* while
+ * deciding where it should go, so the form has to stay visible underneath. A
+ * flat mask would hide exactly the thing being reasoned about.
+ *
+ * Drawn before the wireframe so the lines stay legible over the paint, which is
+ * the pair you actually work with: the tint says where, the wire says how dense.
+ */
+if (uPaint > 0.5) {
+  // Outside a region that was painted: greyed and darkened. Not hidden — you
+  // still have to see the shape you are not working on to judge the boundary.
+  if (uPaintRegion > 0.5 && vPaint.z < 0.5) {
+    float grey = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(grey), 0.85) * 0.45;
+  }
+
+  // Density, warm one way and cold the other around an untouched middle. The
+  // two colours are the two directions of one brush, so they have to read as
+  // opposites rather than as two unrelated marks.
+  float d = clamp(vPaint.x, -1.0, 1.0);
+  if (abs(d) > 0.004) {
+    vec3 warm = vec3(1.00, 0.72, 0.20);
+    vec3 cold = vec3(0.25, 0.55, 1.00);
+    vec3 tint = d > 0.0 ? warm : cold;
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, tint, min(abs(d), 1.0) * 0.62);
+  }
+
+  // Frozen, on top of everything: it overrides the others, so it has to look
+  // like it does.
+  if (vPaint.y > 0.5) {
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.72, 0.52, 1.0), 0.62);
+  }
+}
+
 if (uWire > 0.0) {
   vec3 d = fwidth(vBary);
   vec3 a = smoothstep(vec3(0.0), d * 1.3, vBary);
@@ -400,6 +464,7 @@ const VERT_MAIN = /* glsl */ `
   vEdges = aEdges;
   vChart = aChart;
   vDev = aDev;
+  vPaint = aPaint;
   vRtNormal = normalMatrix * normal;
 `;
 

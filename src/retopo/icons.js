@@ -155,6 +155,60 @@ export const ICONS = {
      <circle cx="8" cy="8" r="1.8" opacity="0.8"/>`
   ),
 
+  // --- the brushes ---
+  //
+  // Each one carries the colour it paints with, so the button and the mark it
+  // leaves on the model are the same colour: picking a brush from the bar is
+  // then the same act as recognising what is already painted.
+
+  /** No brush: the pointer is the camera's again. */
+  brushOff: wrap(
+    `<path d="M4 3.2 4 12l2.4-2.3 1.7 3.6 1.9-.9-1.7-3.5 3.2-.1z" stroke="#c3c9d4"/>`
+  ),
+
+  /** Density: a brush over a gradient of dots, dense one end and sparse the other. */
+  brushDensity: wrap(
+    `<circle cx="3.4" cy="12.6" r="0.8" fill="#ffb833" stroke="none"/>
+     <circle cx="5.8" cy="12.6" r="0.65" fill="#ffb833" stroke="none" opacity="0.85"/>
+     <circle cx="8" cy="12.6" r="0.5" fill="#ffb833" stroke="none" opacity="0.6"/>
+     <circle cx="10" cy="12.6" r="0.4" fill="#5b8def" stroke="none" opacity="0.7"/>
+     <circle cx="12" cy="12.6" r="0.3" fill="#5b8def" stroke="none" opacity="0.5"/>
+     <path d="M11.6 2.4 13.6 4.4 8.4 9.6 6.4 7.6z" stroke="#ffb833"/>`
+  ),
+
+  /** Freeze: a snowflake, which is the one thing nobody has to be taught. */
+  brushFreeze: wrap(
+    `<path d="M8 2.4v11.2M3.2 5.2l9.6 5.6M12.8 5.2l-9.6 5.6" stroke="#b98cff"/>
+     <path d="M6.4 3.6 8 2.4l1.6 1.2M6.4 12.4 8 13.6l1.6-1.2" stroke="#b98cff"/>`
+  ),
+
+  /** Region: a dashed area with a solid patch inside, the part being worked on. */
+  brushRegion: wrap(
+    `<rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.4" stroke="#6b7280"
+           stroke-dasharray="1.6 1.4"/>
+     <path d="M5.4 9.6a3 3 0 0 1 5.4-2.4 2.2 2.2 0 0 1 .6 3z" fill="#4ade80" stroke="none"
+           opacity="0.9"/>`
+  ),
+
+  /** Guide: a curve drawn across a surface, with the pen that drew it. */
+  brushGuide: wrap(
+    `<path d="M2.4 11.2c2.6-5.4 8.6-5.4 11.2-8" stroke="#ffb020"/>
+     <circle cx="2.4" cy="11.2" r="1" fill="#ffb020" stroke="none"/>
+     <circle cx="13.6" cy="3.2" r="1" fill="#ffb020" stroke="none"/>`
+  ),
+
+  /** Show the painting, or stop showing it: an eye over a swatch. */
+  paintView: wrap(
+    `<path d="M1.6 8s2.4-3.8 6.4-3.8S14.4 8 14.4 8s-2.4 3.8-6.4 3.8S1.6 8 1.6 8z"/>
+     <circle cx="8" cy="8" r="1.8" fill="#ffb833" stroke="none"/>`
+  ),
+
+  /** Wipe the painting. */
+  paintClear: wrap(
+    `<path d="M6.2 12.6 2.8 9.2l6-6 3.4 3.4z" stroke="#ff8b7a"/>
+     <path d="M4.6 11h8.6"/>`
+  ),
+
   /** Undo and redo, for the result history. */
   undo: wrap(`<path d="M6.4 4.2 3 7.6l3.4 3.4"/><path d="M3 7.6h6.2a3.8 3.8 0 0 1 0 7.6H7.6"/>`),
   redo: wrap(`<path d="M9.6 4.2 13 7.6l-3.4 3.4"/><path d="M13 7.6H6.8a3.8 3.8 0 0 0 0 7.6h1.6"/>`),
