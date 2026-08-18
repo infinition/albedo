@@ -3385,7 +3385,7 @@ async function usePedestal(path, remember = true) {
     $("btn-pedestal").dataset.i18n = "pane.standDrop";
     $("pedestal-tools").hidden = false;
     if (remember && tauri) prefs.set("pedestal", path);
-    selectDecorItem({ type: "pedestal" });
+    selectDecorItem({ type: "pedestal" }, { showHelper: remember });
     paintDecorTree();
   } catch (e) {
     $("pedestal-file").textContent = t("pane.standUnreadable");
@@ -4230,9 +4230,20 @@ function updateLightControls(entry) {
   }
 }
 
-// The initial selection at load is only for the panel, so it must not draw
-// the light helper: that line in the viewport should appear from a click,
-// never sit there before anyone touched the light list.
+/*
+ * The initial selection at load is only for the panel, so it must not draw
+ * the light helper: that line in the viewport should appear from a click,
+ * never sit there before anyone touched the light list.
+ *
+ * `showHelper` says the same thing about the stand's handles, which is the half
+ * that was never written. A stand is remembered between sessions, so `applyPrefs`
+ * loads it and selects it to fill the panel in — and selecting a stand brought
+ * its gizmo out. With no model open the stand itself is not even drawn
+ * (`placePedestal` hides it until there is something to stand under), so what
+ * came up on an empty viewport was a set of handles on nothing, before anybody
+ * had clicked at all. Hence the second condition below: handles belong to what
+ * is on screen.
+ */
 function selectDecorItem(sel, { showHelper = true } = {}) {
   decorSelection = sel;
   updateDecorSelectedLabel();
@@ -4259,7 +4270,7 @@ function selectDecorItem(sel, { showHelper = true } = {}) {
     }
   } else if (sel.type === "pedestal") {
     viewer.showLightHelper(null);
-    if (viewer.pedestal) {
+    if (showHelper && viewer.pedestal && viewer.stand.visible) {
       setGizmoMode("translate");
     }
   } else if (sel.type === "background") {
