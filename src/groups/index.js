@@ -31,11 +31,20 @@ register({ fr: grFr, en: grEn });
  * touched, no attribute is rewritten, nothing is asked of the engine. The whole
  * cost is a few thousand numbers, which is why it keeps up with a drag.
  *
+ * ## Two questions, not one
+ *
+ * The hierarchy only ever produces *connected* parts, because two rocks lying
+ * apart on the same ground share no edge and no merging will ever join them.
+ * That is why the first slider has a floor it cannot go below, and why there is
+ * a second one: which parts *look* alike is a different question, asked of
+ * their mean colours rather than of what they touch, and answered above the
+ * engine rather than inside it.
+ *
  * ## What it does not do yet
  *
- * Editing a group by hand, and splitting the model along the groups. Both are
- * built on what is here — a stable per-triangle id and a partition that can be
- * read back — and neither changes the shape of it.
+ * Editing a group by hand — clicking one to select it, merging two, painting a
+ * boundary. All of it is built on what is here, a stable per-triangle id and a
+ * partition that can be read back, and none of it changes the shape of this.
  */
 export function createGroups({
   wire,
