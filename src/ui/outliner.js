@@ -2,7 +2,7 @@ import { readScene, thumbnail, toggleMap } from "./outline.js";
 import { forgetPortraits, portrait } from "./portrait.js";
 import { selection, decorId } from "../selection.js";
 import { renameNode } from "../naming.js";
-import { t } from "../i18n/index.js";
+import { num, t } from "../i18n/index.js";
 import "./tree.css";
 
 /**
@@ -44,7 +44,8 @@ import "./tree.css";
  * what must not exist during a thumbnail job.
  */
 
-const fr = (n) => n.toLocaleString("fr-FR");
+/* Grouped by the language that is on, never by French alone. */
+const fr = num;
 
 /** The key into the shared dictionary for each backdrop's name and hint. */
 const BG_LABEL_KEY = {
@@ -503,6 +504,12 @@ export function createOutliner({ host, viewer, channels, swapTexture, onNotice, 
       );
       row.appendChild(
         trash(t("tree.deleteLight"), () => {
+          // A scene with no light left is a black screen and no way back to one
+          // from this list, since the rows are what carry the controls.
+          if (viewer.lights.length <= 1) {
+            notice(t("toast.lightMinOne"));
+            return;
+          }
           viewer.removeLight(entry.id);
           selection.delete(id);
           notice(t("toast.lightRemoved").replace("{name}", entry.name));

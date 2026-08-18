@@ -19,7 +19,7 @@ import { wireHud, wireTimeline, showDevice } from "./ui/controls.js";
 import { selection, decorId, decorKey } from "./selection.js";
 import { adopt, nameFromFile, renameNode } from "./naming.js";
 import { createTabs } from "./ui/tabs.js";
-import { setLang, initLang, applyStatic, currentLang, t } from "./i18n/index.js";
+import { setLang, initLang, applyStatic, currentLang, num, t } from "./i18n/index.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -112,7 +112,7 @@ const documents = [];
 let activeDoc = null;
 let tabs = null;
 
-function makeDocument({ title = "Nouvel onglet", path = null, preview = false } = {}) {
+function makeDocument({ title = "", path = null, preview = false } = {}) {
   const doc = {
     id: ++docSeq,
     title,
@@ -464,7 +464,7 @@ async function closeDocument(id) {
    */
   if (doc.dirty || (doc === activeDoc && sceneDirty)) {
     if (doc !== activeDoc) switchTo(id);
-    if (!(await confirmDiscard(t("dlg.docModified").replace("{name}", doc.title)))) return;
+    if (!(await confirmDiscard(t("dlg.docModified").replace("{name}", doc.title || t("tabs.untitled"))))) return;
   }
 
   const index = documents.indexOf(doc);
@@ -1275,7 +1275,7 @@ function shortCount(v) {
 }
 
 function showStats(stats, extra) {
-  const n = (v) => v.toLocaleString("fr-FR");
+  const n = num;
   const count = stats.triangles || stats.points || 0;
   $("file-tris").hidden = !count;
   if (count) {
@@ -2008,8 +2008,8 @@ function paintMaterialList() {
     // actually go, and which material is worth hiding before a restricted run.
     const count = document.createElement("span");
     count.className = "mat-count";
-    count.textContent = triangles ? triangles.toLocaleString("fr-FR") : "";
-    count.title = triangles ? `${triangles.toLocaleString("fr-FR")} triangles` : "";
+    count.textContent = triangles ? num(triangles) : "";
+    count.title = triangles ? t("pane.trisCountTitle").replace("{n}", num(triangles)) : "";
 
     /*
      * One button for the mode, not two.
@@ -2572,44 +2572,6 @@ async function pasteClipboard() {
 
 $("part-copy").addEventListener("click", copySelection);
 $("part-paste").addEventListener("click", pasteClipboard);
-
-/**
- * Save the current view as a PNG.
- *
- * The same square render the shell asks for, with a clear background, so a
- * model can be dropped into a document without a screenshot tool and without
- * the overlays that would come with one.
- */
-async function saveSnapshot() {
-  if (!viewer.current) return;
-  const note = $("export-note");
-  try {
-    const url = viewer.snapshot(1024, { transparent: true });
-    const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0));
-    const name = (currentTitle || "albedo").replace(/\.[^.]+$/, "") + ".png";
-    if (tauri) {
-      const path = await tauri.dialog.save({
-        defaultPath: name,
-        filters: [{ name: t("dlg.pngImage"), extensions: ["png"] }],
-      });
-      if (!path) return;
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
-      await writeFile(path, bytes);
-      note.textContent = t("note.written").replace("{file}", fileLabel(path));
-    } else {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      a.click();
-      note.textContent = name;
-    }
-  } catch (e) {
-    note.textContent = `Image impossible : ${e.message || e}`;
-    console.warn("[albedo] image:", e);
-  }
-}
-
-$("btn-snapshot")?.addEventListener("click", saveSnapshot);
 
 // --- photo ----------------------------------------------------------------
 //
@@ -4255,9 +4217,6 @@ function selectDecorItem(sel, { showHelper = true } = {}) {
   }
 
   if ($("decor-act-dup")) $("decor-act-dup").disabled = sel.type !== "light";
-  if ($("decor-act-del"))
-    $("decor-act-del").disabled =
-      sel.type === "background" || (sel.type === "pedestal" && !viewer.pedestal);
 
   paintDecorTree();
 }
@@ -4266,11 +4225,16 @@ function selectLight(id) {
   selectDecorItem({ type: "light", id });
 }
 
+/**
+ * Which gizmo the selected light gets, if any.
+ *
+ * There is no button for this any more: the three that used to sit in the Décor
+ * actions bar are gone, and the mode is decided by what is selected. Painting
+ * them was the only thing left that reached for `#light-giz-*`, and those ids
+ * have not been in the markup for some time.
+ */
 function setLightGizmoMode(mode) {
   decorGizmoMode = mode;
-  $("light-giz-move")?.classList.toggle("active", mode === "translate");
-  $("light-giz-rotate")?.classList.toggle("active", mode === "rotate");
-  $("light-giz-off")?.classList.toggle("active", mode === null);
 
   const entry = viewer.lights.find((l) => l.id === decorSelection.id);
   if (entry && mode) {
@@ -4362,44 +4326,17 @@ $("light-penumbra")?.addEventListener("input", (e) => {
   saveLights();
 });
 
-// Light gizmo mode buttons
-$("light-giz-move")?.addEventListener("click", () => setLightGizmoMode("translate"));
-$("light-giz-rotate")?.addEventListener("click", () => setLightGizmoMode("rotate"));
-$("light-giz-off")?.addEventListener("click", () => setLightGizmoMode(null));
-
-// Actions toolbar
-$("decor-act-add")?.addEventListener("click", () => {
-  const entry = viewer.addLight($("light-kind")?.value || "directional");
-  selectDecorItem({ type: "light", id: entry.id });
-  saveLights();
-});
-$("decor-btn-add-light")?.addEventListener("click", () => {
-  const entry = viewer.addLight($("light-kind")?.value || "directional");
-  selectDecorItem({ type: "light", id: entry.id });
-  saveLights();
-});
-
+/*
+ * Adding and deleting a light live in the outliner, on the Lumières group and
+ * on each row. Two more buttons here did the same two things a second time and
+ * had already lost their markup, so the handlers ran for nobody.
+ */
 $("decor-act-dup")?.addEventListener("click", () => {
   if (decorSelection.type !== "light") return;
   const entry = viewer.duplicateLight(decorSelection.id);
   if (entry) {
     selectDecorItem({ type: "light", id: entry.id });
     saveLights();
-  }
-});
-
-$("decor-act-del")?.addEventListener("click", () => {
-  if (decorSelection.type === "light") {
-    if (viewer.lights.length <= 1) {
-      toast(t("toast.lightMinOne"));
-      return;
-    }
-    const idToDelete = decorSelection.id;
-    viewer.removeLight(idToDelete);
-    selectDecorItem({ type: "light", id: viewer.lights[0].id });
-    saveLights();
-  } else if (decorSelection.type === "pedestal" && viewer.pedestal) {
-    dropPedestal();
   }
 });
 

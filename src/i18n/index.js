@@ -52,6 +52,23 @@ export function register(tables) {
   }
 }
 
+/**
+ * The BCP 47 tag for the language that is on, for `Intl` and `toLocaleString`.
+ *
+ * Four modules had grown their own `toLocaleString("fr-FR")`, which meant a
+ * triangle count kept French grouping — thin spaces — under an English
+ * interface, and the toggle that flips every string on screen left the numbers
+ * behind. The locale is a property of the language, so it is answered here.
+ */
+export function locale() {
+  return lang === "fr" ? "fr-FR" : "en-GB";
+}
+
+/** A number, grouped the way the current language groups them. */
+export function num(v) {
+  return Number(v ?? 0).toLocaleString(locale());
+}
+
 /** The string for the current language, French when the key is missing. */
 export function t(key) {
   const s = D[lang]?.[key];

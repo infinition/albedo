@@ -19,7 +19,7 @@ import {
   snapshotIdentity,
   supersededBy,
 } from "../naming.js";
-import { applyStaticIn, register, t } from "../i18n/index.js";
+import { applyStaticIn, num, register, t } from "../i18n/index.js";
 import rtFr from "./fr.json";
 import rtEn from "./en.json";
 import "./retopo.css";
@@ -481,7 +481,8 @@ function countTriangles(root) {
   return Math.round(total);
 }
 
-const fr = (n) => n.toLocaleString("fr-FR");
+/* Grouped by the language that is on, never by French alone. */
+const fr = num;
 /** Compact for the floating bar's counters: 1 500 000 reads as 1.5M there. */
 const abbr = (n) =>
   n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M`

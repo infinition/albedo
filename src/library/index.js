@@ -1,6 +1,6 @@
 import "./library.css";
 import { thumbnailFor, releaseThumbnails, cancelPending } from "./thumbs.js";
-import { applyStaticIn, currentLang, register, t } from "../i18n/index.js";
+import { applyStaticIn, locale, register, t } from "../i18n/index.js";
 import libFr from "./fr.json";
 import libEn from "./en.json";
 
@@ -775,7 +775,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
       const date = new Date(entry.modified * 1000);
       meta.textContent =
         `${entry.ext.toUpperCase()} · ${bytes(entry.size)} · ` +
-        date.toLocaleDateString(currentLang() === "fr" ? "fr-FR" : "en-GB");
+        date.toLocaleDateString(locale());
     }
 
     // A tag shown here is one every chosen asset carries; removing it removes
