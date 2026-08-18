@@ -273,6 +273,17 @@ pub struct Mesh {
 
     pub materials: Vec<Material>,
     pub images: Vec<Image>,
+
+    /// Where each triangle of the *file* ended up, or `u32::MAX` if it was
+    /// dropped. Empty when nothing was dropped, which is the usual case.
+    ///
+    /// Written by [`Mesh::remove_degenerate`], and it exists because that method
+    /// silently changes the numbering everything downstream indexes by. Anything
+    /// that hands per-triangle results *back* to whoever supplied the file — a
+    /// segmentation, most of all — is otherwise off by however many degenerate
+    /// faces happened to be in it, which is a result that renders perfectly and
+    /// is wrong from the first dropped triangle onwards.
+    pub from_source: Vec<u32>,
 }
 
 impl Mesh {
@@ -521,6 +532,13 @@ impl Mesh {
         if keep.len() == before {
             return 0;
         }
+        // Recorded before the arrays move, so a caller can still say which
+        // triangle of the file each surviving one used to be. See `from_source`.
+        let mut map = vec![u32::MAX; before];
+        for (new, &old) in keep.iter().enumerate() {
+            map[old] = new as u32;
+        }
+        self.from_source = map;
         self.triangles = keep.iter().map(|&t| self.triangles[t]).collect();
         self.tri_material = keep.iter().map(|&t| self.tri_material[t]).collect();
         before - self.triangles.len()
@@ -708,6 +726,44 @@ mod tests {
         m.rebuild_weld(0.0);
         assert_eq!(m.remove_degenerate(), 1);
         assert_eq!(m.triangle_count(), 12);
+    }
+
+    #[test]
+    fn removal_records_where_every_surviving_triangle_came_from() {
+        // The renumbering is silent, and anything handing per-triangle results
+        // back to whoever supplied the file is wrong from the first dropped
+        // face onwards without this map. A segmenter measured 900,328 triangles
+        // going out and 900,290 coming back.
+        let mut m = cube();
+        let v = m.positions.len() as u32;
+        m.positions.extend([Vec3::ZERO, Vec3::ZERO, Vec3::ZERO]);
+        // Slid in at the front, so every later triangle shifts by one.
+        m.triangles.insert(0, [v, v + 1, v + 2]);
+        m.tri_material.insert(0, 0);
+        m.rebuild_weld(0.0);
+
+        let before = m.triangles.clone();
+        assert_eq!(m.remove_degenerate(), 1);
+        assert_eq!(m.from_source.len(), before.len(), "one entry per file triangle");
+        assert_eq!(m.from_source[0], u32::MAX, "the degenerate one is gone");
+
+        for (old, &new) in m.from_source.iter().enumerate() {
+            if new == u32::MAX {
+                continue;
+            }
+            assert_eq!(
+                m.triangles[new as usize], before[old],
+                "triangle {old} of the file is not where the map says it is"
+            );
+        }
+    }
+
+    #[test]
+    fn a_clean_mesh_records_no_map_at_all() {
+        // Empty means identity, which is the usual case and has to cost nothing.
+        let mut m = cube();
+        assert_eq!(m.remove_degenerate(), 0);
+        assert!(m.from_source.is_empty());
     }
 
     #[test]

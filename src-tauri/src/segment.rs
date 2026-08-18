@@ -73,13 +73,43 @@ pub fn segment_file(
     let result = retopo_segment::segment(&mesh, opts, progress);
     let d = &result.dendrogram;
 
-    write_u32(&sidecar(base, "super"), &d.super_of_face)?;
+    /*
+     * Answers are given back in the *file's* triangle numbering, not the
+     * engine's.
+     *
+     * The reader drops degenerate faces on import, because they have no normal,
+     * break the BVH's surface area heuristic and turn quadric errors into NaN.
+     * That is the right thing to do and it silently renumbers every triangle
+     * after the first one dropped. A caller laying these ids back onto the mesh
+     * it exported would be off by that many from there on — a segmentation that
+     * renders perfectly and is wrong. Measured in practice: a 900,328 triangle
+     * column arrived at the engine as 900,290.
+     *
+     * Dropped triangles get `u32::MAX`, which the viewer already reads as "no
+     * group" and leaves alone. A zero-area triangle has nothing to paint anyway.
+     */
+    let expand = |values: &[u32], stride: usize| -> Vec<u32> {
+        if mesh.from_source.is_empty() {
+            return values.to_vec();
+        }
+        let mut out = vec![u32::MAX; mesh.from_source.len() * stride];
+        for (old, &new) in mesh.from_source.iter().enumerate() {
+            if new == u32::MAX {
+                continue;
+            }
+            let (a, b) = (new as usize * stride, old * stride);
+            out[b..b + stride].copy_from_slice(&values[a..a + stride]);
+        }
+        out
+    };
+
+    write_u32(&sidecar(base, "super"), &expand(&d.super_of_face, 1))?;
 
     let mut flat = Vec::with_capacity(d.nbr_of_face.len() * 3);
     for n in &d.nbr_of_face {
         flat.extend_from_slice(n);
     }
-    write_u32(&sidecar(base, "nbr"), &flat)?;
+    write_u32(&sidecar(base, "nbr"), &expand(&flat, 3))?;
 
     let mut pairs = Vec::with_capacity(d.merges.len() * 2);
     for m in &d.merges {
@@ -98,7 +128,14 @@ pub fn segment_file(
     }
     write_f32(&sidecar(base, "feat"), &feat)?;
 
-    Ok(result.report)
+    let mut report = result.report;
+    // The count the caller can check against is the one in the file it sent,
+    // not the one left after the reader tidied it up.
+    if !mesh.from_source.is_empty() {
+        report.triangles = mesh.from_source.len();
+        report.dropped_triangles = mesh.from_source.len() - mesh.triangles.len();
+    }
+    Ok(report)
 }
 
 // --- the tab ---------------------------------------------------------------

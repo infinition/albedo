@@ -605,6 +605,8 @@ impl<'a> Decimator<'a> {
             weld_count: 0,
             materials: src.materials.clone(),
             images: src.images.clone(),
+            // A decimated mesh has no triangle of the file left to point at.
+            from_source: Vec::new(),
         };
 
         for t in 0..self.tri_alive.len() {

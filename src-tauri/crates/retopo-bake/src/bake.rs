@@ -809,6 +809,9 @@ fn assemble(
             ..Material::default()
         }],
         images,
+        // A baked mesh is built from the low poly's atlas, not read from a
+        // file, so there is no source triangle to point back at.
+        from_source: Vec::new(),
     };
     mesh.rebuild_weld(0.0);
     mesh

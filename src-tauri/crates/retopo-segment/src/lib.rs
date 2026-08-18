@@ -60,6 +60,12 @@ pub struct Segmentation {
 #[serde(rename_all = "camelCase")]
 pub struct SegmentReport {
     pub triangles: usize,
+    /// Faces the reader threw away as degenerate before any of this ran.
+    ///
+    /// Worth reporting rather than hiding: it is the difference between the
+    /// count the caller sent and the count that was segmented, and somebody
+    /// checking one against the other deserves to know why they differ.
+    pub dropped_triangles: usize,
     /// How many regions survived the pre-merge. The ceiling of the slider.
     pub superfaces: usize,
     pub merges: usize,
@@ -114,6 +120,8 @@ pub fn segment(
 
     let report = SegmentReport {
         triangles: mesh.triangle_count(),
+        // Filled by whoever read the file, since only they know what was in it.
+        dropped_triangles: 0,
         superfaces: dendrogram.super_count,
         merges: dendrogram.merges.len(),
         floor: dendrogram.floor,

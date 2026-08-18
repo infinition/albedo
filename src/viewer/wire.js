@@ -343,9 +343,12 @@ export function ensureGroupAttributes(meshes, superOfFace, nbrOfFace) {
 
     for (let i = 0; i < count; i++) {
       const t = tri + ((i / 3) | 0);
-      // Past the end of the data is a mesh the run did not cover, which is the
-      // "not segmented" case rather than the "group zero" one.
-      group[i] = superOfFace?.[t] ?? -1;
+      // Past the end of the data is a mesh the run did not cover, and the
+      // largest u32 is a triangle the engine threw away as degenerate. Both are
+      // the "not segmented" case rather than the "group zero" one, and neither
+      // survives a float exactly, so both become -1.
+      const s = superOfFace?.[t];
+      group[i] = s === undefined || s === 0xffffffff ? -1 : s;
       for (let k = 0; k < 3; k++) {
         const v = nbrOfFace?.[t * 3 + k];
         // An open border comes across as the largest u32, which does not
