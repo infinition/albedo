@@ -1,0 +1,252 @@
+//! Segmentation, the Rust half.
+//!
+//! Mirrors `retopo.rs` deliberately, down to the child process and the stdout
+//! line protocol, because the reasons are the same ones and they are written
+//! out at length over there: the release profile keeps `panic = "abort"`, so a
+//! malformed mesh reaching an unchecked index has to take a *child* down rather
+//! than the window; and a model worth segmenting is tens of megabytes, so it
+//! travels as a file rather than as a JSON array of numbers.
+//!
+//! What is different is the shape of the answer. Retopology hands back a mesh.
+//! Segmentation hands back four flat arrays about the mesh you already have —
+//! which superface each triangle is in, which superfaces sit across its three
+//! edges, the merge order, and what each merge cost — and the interface turns
+//! those into every level of the hierarchy without asking again.
+//!
+//! **They are written as raw little-endian binary, not as JSON.** The existing
+//! `retopo_sidecar` returns a `Vec<f32>` and Tauri serialises that as a JSON
+//! number array, which is fine for the five thousand triangles of a decimated
+//! result and is not fine here: this runs on the *source* mesh, two orders of
+//! magnitude larger, where the neighbour table alone is six megabytes and would
+//! arrive as twelve megabytes of text to parse. Little-endian because every
+//! platform Albedo runs on is, and because the browser side reads these straight
+//! into a `Uint32Array`, which uses the platform's own order.
+
+use std::path::{Path, PathBuf};
+
+use retopo_core::glb;
+use retopo_segment::{SegmentOptions, SegmentReport};
+
+/// Where a sidecar for `base` lives. Same convention as the retopology engine's.
+fn sidecar(base: &Path, ext: &str) -> PathBuf {
+    let mut name = base.file_name().unwrap_or_default().to_os_string();
+    name.push(".");
+    name.push(ext);
+    base.with_file_name(name)
+}
+
+fn write_u32(path: &Path, values: &[u32]) -> Result<(), String> {
+    let mut out = Vec::with_capacity(values.len() * 4);
+    for &v in values {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    std::fs::write(path, out).map_err(|e| format!("écriture de {} : {e}", path.display()))
+}
+
+fn write_f32(path: &Path, values: &[f32]) -> Result<(), String> {
+    let mut out = Vec::with_capacity(values.len() * 4);
+    for &v in values {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    std::fs::write(path, out).map_err(|e| format!("écriture de {} : {e}", path.display()))
+}
+
+/// Segment one file and leave the four sidecars beside `base`.
+pub fn segment_file(
+    input: &Path,
+    base: &Path,
+    opts: &SegmentOptions,
+    progress: &mut dyn FnMut(f32),
+) -> Result<SegmentReport, String> {
+    let mesh = glb::load_path(input).map_err(|e| format!("{e:#}"))?;
+    let result = retopo_segment::segment(&mesh, opts, progress);
+    let d = &result.dendrogram;
+
+    write_u32(&sidecar(base, "super"), &d.super_of_face)?;
+
+    let mut flat = Vec::with_capacity(d.nbr_of_face.len() * 3);
+    for n in &d.nbr_of_face {
+        flat.extend_from_slice(n);
+    }
+    write_u32(&sidecar(base, "nbr"), &flat)?;
+
+    let mut pairs = Vec::with_capacity(d.merges.len() * 2);
+    for m in &d.merges {
+        pairs.extend_from_slice(m);
+    }
+    write_u32(&sidecar(base, "merges"), &pairs)?;
+    write_f32(&sidecar(base, "costs"), &d.costs)?;
+
+    Ok(result.report)
+}
+
+// --- the command line ------------------------------------------------------
+
+const USAGE: &str = "\
+albedo segment <modèle.glb> [options]
+
+ Identifie les parts d'un mesh et écrit quatre fichiers à côté : la superface de
+ chaque triangle, ses trois voisines, l'ordre de fusion et son coût. Couper cet
+ ordre après N fusions donne N groupes de moins, ce qui est comment l'interface
+ fait glisser le nombre de groupes sans rien recalculer.
+
+  --out <base>       préfixe des fichiers produits, par défaut le modèle
+  --groups <N>       niveau à résumer à l'écran, par défaut celui suggéré
+
+  --colour <p>       poids de la couleur d'atlas (défaut 1.4)
+  --concave <p>      poids d'un pli rentrant (défaut 1.0)
+  --convex <p>       poids d'un pli sortant (défaut 0.25)
+  --normal <p>       poids de l'écart d'orientation (défaut 0.5)
+
+  --keep-islands     couper aussi aux coutures UV
+  --free-materials   ignorer les matériaux du fichier
+  --free-shells      autoriser un groupe à couvrir deux coquilles disjointes
+  --superface <c>    seuil de pré-fusion (défaut 0.03)
+
+  --machine          progression et rapport en lignes lisibles par la machine
+";
+
+/// `albedo.exe segment …`, or `None` when this is an ordinary launch.
+///
+/// Called from `main` beside `retopo::cli_main`, and for the same reason: there
+/// is no window here, no webview and no event loop, only geometry.
+pub fn cli_main() -> Option<i32> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) != Some("segment") {
+        return None;
+    }
+    crate::retopo::attach_console();
+
+    let mut input: Option<String> = None;
+    let mut base: Option<String> = None;
+    let mut groups: Option<usize> = None;
+    let mut opts = SegmentOptions::default();
+    let mut machine = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        let take = |i: usize| args.get(i + 1).cloned();
+        match args[i].as_str() {
+            "--out" => {
+                base = take(i);
+                i += 2;
+            }
+            "--groups" => {
+                groups = take(i).and_then(|v| v.parse().ok());
+                i += 2;
+            }
+            "--colour" | "--color" => {
+                opts.weights.colour = take(i).and_then(|v| v.parse().ok()).unwrap_or(1.4);
+                i += 2;
+            }
+            "--concave" => {
+                opts.weights.concavity = take(i).and_then(|v| v.parse().ok()).unwrap_or(1.0);
+                i += 2;
+            }
+            "--convex" => {
+                opts.weights.convexity = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.25);
+                i += 2;
+            }
+            "--normal" => {
+                opts.weights.normal = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.5);
+                i += 2;
+            }
+            "--superface" => {
+                opts.superface_cost = take(i).and_then(|v| v.parse().ok()).unwrap_or(0.03);
+                i += 2;
+            }
+            "--keep-islands" => {
+                opts.barriers.uv_island = true;
+                i += 1;
+            }
+            "--free-materials" => {
+                opts.barriers.material = false;
+                i += 1;
+            }
+            "--free-shells" => {
+                opts.barriers.shell = false;
+                i += 1;
+            }
+            "--machine" => {
+                machine = true;
+                i += 1;
+            }
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                return Some(0);
+            }
+            other if !other.starts_with('-') && input.is_none() => {
+                input = Some(other.to_string());
+                i += 1;
+            }
+            other => {
+                eprintln!("option inconnue : {other}\n\n{USAGE}");
+                return Some(2);
+            }
+        }
+    }
+
+    let Some(input) = input else {
+        eprintln!("{USAGE}");
+        return Some(2);
+    };
+    let input = PathBuf::from(input);
+    let base = base.map(PathBuf::from).unwrap_or_else(|| input.clone());
+
+    let mut last = -1.0f32;
+    let mut progress = |fraction: f32| {
+        if !machine {
+            return;
+        }
+        let rounded = (fraction * 100.0).floor();
+        if rounded > last {
+            last = rounded;
+            println!("progress {}", rounded / 100.0);
+        }
+    };
+
+    match segment_file(&input, &base, &opts, &mut progress) {
+        Ok(r) => {
+            if machine {
+                println!("report {}", serde_json::to_string(&r).unwrap_or_default());
+            } else {
+                let k = groups.unwrap_or(r.suggested);
+                println!(
+                    "{} triangles → {} superfaces en {:.2} s",
+                    r.triangles,
+                    r.superfaces,
+                    r.ms as f64 / 1000.0
+                );
+                println!(
+                    "groupes : de {} au minimum à {} au maximum, {} suggérés",
+                    r.floor, r.superfaces, r.suggested
+                );
+                println!(
+                    "entrée : {} coquille(s), {} îlot(s) UV, {} matériau(x)",
+                    r.shells, r.uv_islands, r.materials
+                );
+                if !r.colour_textured {
+                    // The one result that looks like a bad segmentation and is
+                    // not: with no atlas there is nothing for the strongest
+                    // feature to read, and the person cannot tell by looking.
+                    println!(
+                        "attention : aucun matériau ne porte de texture de couleur, \
+                         la couleur ne peut donc rien dire de plus que le matériau"
+                    );
+                }
+                if r.non_manifold_edges > 0 {
+                    println!(
+                        "attention : {} arête(s) non manifold, les plis y sont approximatifs",
+                        r.non_manifold_edges
+                    );
+                }
+                println!("coupe demandée : {k} groupes");
+            }
+            Some(0)
+        }
+        Err(e) => {
+            eprintln!("échec : {e}");
+            Some(1)
+        }
+    }
+}

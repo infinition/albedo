@@ -24,6 +24,7 @@ dependencies = [
  "retopo-bake",
  "retopo-core",
  "retopo-remesh",
+ "retopo-segment",
  "serde",
  "serde_json",
  "tauri",
@@ -2619,6 +2620,16 @@ dependencies = [
  "retopo-core",
  "serde",
  "tracing",
+]
+
+[[package]]
+name = "retopo-segment"
+version = "1.4.0"
+dependencies = [
+ "glam",
+ "rayon",
+ "retopo-core",
+ "serde",
 ]
 
 [[package]]

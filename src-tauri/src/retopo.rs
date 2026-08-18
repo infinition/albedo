@@ -798,7 +798,7 @@ pub fn cli_main() -> Option<i32> {
 /// flashes a console behind it. Attaching the parent's console gives the command
 /// line its output back without giving the window one.
 #[cfg(windows)]
-fn attach_console() {
+pub(crate) fn attach_console() {
     use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
     unsafe {
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
@@ -806,7 +806,7 @@ fn attach_console() {
 }
 
 #[cfg(not(windows))]
-fn attach_console() {}
+pub(crate) fn attach_console() {}
 
 // --- the tab ---------------------------------------------------------------
 

@@ -4,6 +4,7 @@
 
 mod library;
 mod retopo;
+mod segment;
 mod shell;
 
 use std::path::PathBuf;
@@ -389,6 +390,12 @@ fn main() {
     // so a malformed mesh takes the child down and leaves the window alone. That
     // is what lets the release profile keep `panic = "abort"`.
     if let Some(code) = retopo::cli_main() {
+        std::process::exit(code);
+    }
+    // `albedo.exe segment <modèle>` is the same arrangement for the same
+    // reasons: geometry, no window, and a child process so that a mesh the
+    // engine cannot survive takes only the child with it.
+    if let Some(code) = segment::cli_main() {
         std::process::exit(code);
     }
 

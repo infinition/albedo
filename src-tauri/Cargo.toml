@@ -25,6 +25,7 @@ serde_json = "1"
 retopo-core = { path = "crates/retopo-core" }
 retopo-remesh = { path = "crates/retopo-remesh" }
 retopo-bake = { path = "crates/retopo-bake" }
+retopo-segment = { path = "crates/retopo-segment" }
 
 # Attaching the shell provider from inside the application, so a portable copy
 # can offer it without an installer.
@@ -55,6 +56,8 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.retopo-bake]
 opt-level = 3
+[profile.release.package.retopo-segment]
+opt-level = 3
 
 # The BVH and the decimator are unusable at `opt-level = 0` on a real mesh, so a
 # debug build still optimises them while keeping fast recompiles of our own code.
@@ -63,4 +66,6 @@ opt-level = 3
 [profile.dev.package.retopo-remesh]
 opt-level = 3
 [profile.dev.package.retopo-bake]
+opt-level = 3
+[profile.dev.package.retopo-segment]
 opt-level = 3
