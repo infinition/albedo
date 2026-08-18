@@ -261,8 +261,7 @@ async function restoreViewState(s) {
   channels.setFlat(s.flat);
   $("opt-wire-dark").checked = s.wireDark;
   wire?.setColour(!s.wireDark);
-  $("opt-grid").checked = s.grid;
-  viewer.setGrid(s.grid);
+  setGrid(s.grid, false);
   $("opt-bounds").checked = s.bounds;
   viewer.setBounds(s.bounds);
   $("opt-skeleton").checked = s.skeleton;
@@ -320,8 +319,11 @@ async function resetViewSettings() {
   await setWireframe(false, false);
   await setWireOnly(false, false);
   channels.setFlat(false);
-  $("opt-grid").checked = true;
-  viewer.setGrid(true);
+  // The one line here that is not a constant, and deliberately. Everything
+  // else in this function is a look the *document* starts from; the floor is a
+  // setting the *session* starts from, which is what "on or off by default"
+  // means, and a literal `true` here was quietly overruling it on every new tab.
+  setGrid(prefs.get("grid") !== false, false);
   $("opt-bounds").checked = false;
   viewer.setBounds(false);
   $("opt-skeleton").checked = false;
@@ -934,6 +936,7 @@ function paintViewbar() {
   // Flat shading is a look, read from the channel view rather than from a
   // button that would have to remember its own state.
   setPressed($("vb-flat"), channels.flat);
+  setPressed($("vb-grid"), $("opt-grid").checked);
 }
 
 viewer.alsoKeep = () => {
@@ -2339,9 +2342,32 @@ $("opt-wire-dark").addEventListener("change", (e) => {
   viewer.invalidate();
   prefs.set("wireDark", e.target.checked);
 });
-$("opt-grid").addEventListener("change", (e) => {
-  viewer.setGrid(e.target.checked);
-  prefs.set("grid", e.target.checked);
+/**
+ * Show the floor, or do not, from any of the three places that ask.
+ *
+ * The pane's chip, the button in the bar and Maj+G are one switch with three
+ * handles, so the state lives here and all three read it back through
+ * `paintViewbar`. Written three times over, the bar would have gone on saying
+ * the floor was there after the keyboard had taken it away.
+ */
+function setGrid(on, remember = true) {
+  $("opt-grid").checked = on;
+  // The copy in the Apparence card, next to the colour the grid is drawn in.
+  // Written here rather than kept in step by hand, because a second checkbox
+  // for one state is only tolerable while it cannot disagree with the first.
+  const alt = $("opt-grid-default");
+  if (alt) alt.checked = on;
+  viewer.setGrid(on);
+  if (remember) prefs.set("grid", on);
+  paintViewbar();
+}
+
+$("opt-grid").addEventListener("change", (e) => setGrid(e.target.checked));
+$("opt-grid-default")?.addEventListener("change", (e) => setGrid(e.target.checked));
+$("vb-grid").addEventListener("click", () => {
+  const on = !isPressed($("vb-grid"));
+  setGrid(on);
+  toast(t(on ? "toast.gridShown" : "toast.gridHidden"));
 });
 $("opt-bounds").addEventListener("change", (e) => {
   viewer.setBounds(e.target.checked);
@@ -3445,6 +3471,9 @@ function applyPrefs() {
   setUiColour(p.uiColour, false);
   setGridColour(p.gridColour, false);
   $("canvas-colour").value = p.backgroundColour || "#14161a";
+  // Saved since the checkbox existed and never read back, so the grid came up
+  // on at every launch whatever the last session had decided.
+  setGrid(p.grid !== false, false);
   $("opt-dim-select").checked = !!p.dimOnSelect;
   viewer.setDimOnSelect(!!p.dimOnSelect);
   if (p.pedestal) usePedestal(p.pedestal, false);
@@ -5279,6 +5308,21 @@ window.addEventListener("keyup", (e) => {
     }
 
     const hit = viewer.pick(nx, ny);
+    /*
+     * The stand, judged against the model rather than before or after it.
+     *
+     * Asked outright first, it would have stolen every click aimed at a figure
+     * standing on it; asked only when the model missed, it would be unreachable
+     * wherever the two overlap, which is most of it. The ray answers the
+     * question already — whichever surface it met first is the one being pointed
+     * at — so the comparison is the whole of the rule.
+     */
+    const stand = viewer.pickStand(nx, ny);
+    if (stand && (!hit || stand.distance < hit.distance)) {
+      selection.choose(decorId("stand", "main"), "stand", e.ctrlKey || e.metaKey);
+      revealBar();
+      return;
+    }
     if (!hit) {
       // A handle is not part of the model, so a click on one lands here as a
       // click on nothing and would put away the very thing being aimed at.
@@ -5399,10 +5443,6 @@ window.addEventListener("keydown", (e) => {
         toast(t("toast.fly"));
       }
       break;
-    // Fly holds the mouse, so leaving it needs a key that is never a movement
-    // one. Escape usually never reaches us, the webview eats it to release the
-    // pointer, which the navigation already reads as the way out; this covers
-    // the case where the capture was refused and fly mode has the keys only.
     /*
      * Escape lets go of things, in the order you are holding them.
      *
@@ -5437,9 +5477,9 @@ window.addEventListener("keydown", (e) => {
     // because shift only means anything while a handle is already being dragged.
     case "KeyG":
       if (e.shiftKey) {
-        $("opt-grid").checked = !$("opt-grid").checked;
-        viewer.setGrid($("opt-grid").checked);
-        toast(t($("opt-grid").checked ? "toast.gridShown" : "toast.gridHidden"));
+        const on = !$("opt-grid").checked;
+        setGrid(on);
+        toast(t(on ? "toast.gridShown" : "toast.gridHidden"));
       } else setEditMode("translate");
       break;
     case "KeyS":

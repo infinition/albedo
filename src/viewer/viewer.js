@@ -121,8 +121,7 @@ export class Viewer {
     this.gridMain = 0x3a4150;
     this.gridSub = 0x272c35;
     this.grid = new THREE.GridHelper(10, 20, this.gridMain, this.gridSub);
-    this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.7;
+    this.dressGrid();
     this.scene.add(this.grid);
 
     this.boxHelper = new THREE.Box3Helper(new THREE.Box3(), 0x4c8dff);
@@ -368,7 +367,19 @@ export class Viewer {
       this.mixer.update(dt);
       this.needsRender = true;
     }
-    if (this.controls.enableDamping) this.controls.update();
+    /*
+      * Damping needs a tick every frame — but only while the rig is the thing
+      * driving the camera.
+      *
+      * `OrbitControls.update()` does not consult `enabled`: that flag gates the
+      * input listeners, not the maths. So it kept rebuilding the camera's
+      * position from its spherical offset around `target` and re-aiming it there
+      * on every single frame, including in fly mode, where nothing else was
+      * wrong: `updateFly` moved the camera, and a few milliseconds later the rig
+      * pulled it straight back onto the object it had been orbiting. The mode
+      * looked like it was stuck to the model's centre because it was.
+      */
+    if (this.controls.enabled && this.controls.enableDamping) this.controls.update();
     if (!this.needsRender) return;
     this.needsRender = false;
     this.draw(dt);
@@ -566,6 +577,36 @@ export class Viewer {
       const id = hit.object.userData.lightId;
       const entry = this.lights.find((l) => l.id === id);
       if (entry) return { id, object: entry.object };
+    }
+    return null;
+  }
+
+  /**
+   * Where the ray meets the stand, or nothing.
+   *
+   * A branch of its own because `pick` deliberately sees only `root`, and the
+   * stand is not in it: it lives outside the model's group so that it survives
+   * loading the next file. The consequence was that the one object in the scene
+   * you most often want to place by hand was the one object you could not point
+   * at — it had to be found in the outliner first, and G, R and S did nothing
+   * until it had been.
+   *
+   * The hit is returned whole rather than a yes or no, so the caller can measure
+   * it against the model's own and let the nearer surface win. A figurine
+   * standing on a plinth covers most of it; clicking the figurine has to select
+   * the figurine.
+   */
+  pickStand(x, y) {
+    if (!this.pedestal || !this.stand.visible || !this.pedestal.visible) return null;
+    // Same reason as `pickLight`: a stand just moved by a drag has its new
+    // matrix only after the next frame, and a click can arrive before it.
+    this.stand.updateMatrixWorld(true);
+    this._ray ||= new THREE.Raycaster();
+    this._ray.setFromCamera(new THREE.Vector2(x, y), this.camera);
+    for (const hit of this._ray.intersectObject(this.pedestal, true)) {
+      const o = hit.object;
+      if (!o.visible || (!o.isMesh && !o.isSkinnedMesh)) continue;
+      return hit;
     }
     return null;
   }
@@ -1430,7 +1471,11 @@ export class Viewer {
     );
     // Dragging a handle must not also orbit the camera behind it
     this.gizmo.addEventListener("dragging-changed", (e) => {
-      this.controls.enabled = !e.value;
+      // Restored to what it was, not to `true`: in fly mode the rig is off on
+      // purpose, and handing it back at the end of a drag put the camera back
+      // under the orbit update above.
+      if (e.value) this.controlsBeforeDrag = this.controls.enabled;
+      this.controls.enabled = e.value ? false : (this.controlsBeforeDrag ?? true);
       // Announced before and after, so whatever is keeping a history can take
       // its snapshot of the object as it was rather than as it ended up.
       /*
@@ -1992,6 +2037,27 @@ export class Viewer {
     held.mixer = null;
   }
 
+  /**
+   * How the floor grid is dressed, in the one place both callers can reach.
+   *
+   * The two lines below were written out twice, here and in `scaleGrid`, which
+   * rebuilds the grid from scratch on every reframe. Said once so a change to
+   * one cannot miss the other.
+   *
+   * The grid is also the only thing in the scene that visibly changes when the
+   * effect chain starts, and it is not this material's doing: measured on the
+   * default backdrop, its lines keep 37% of the floor lit at an average 15.65
+   * above the backdrop drawn directly, and 17% at 5.20 through the chain. Both
+   * the count of lit pixels and their strength halve, which is the signature of
+   * lost coverage rather than of lost brightness — one pixel wide geometry that
+   * the canvas multisamples and the chain does not. Making the lines opaque was
+   * tried and made it worse, not better.
+   */
+  dressGrid() {
+    this.grid.material.transparent = true;
+    this.grid.material.opacity = 0.7;
+  }
+
   /** Keep the floor grid readable whatever the model scale is. */
   scaleGrid(box) {
     const size = box.getSize(new THREE.Vector3());
@@ -2004,8 +2070,7 @@ export class Viewer {
     // grid is rebuilt from scratch on every reframe: written here they would be
     // restored to the built-in pair the first time a model changed size.
     this.grid = new THREE.GridHelper(step * divisions, divisions, this.gridMain, this.gridSub);
-    this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.7;
+    this.dressGrid();
     this.grid.position.y = box.min.y;
     this.grid.visible = this._gridVisible !== false;
     this.scene.add(this.grid);

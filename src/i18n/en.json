@@ -1,6 +1,7 @@
 {
   "bar.couleur": "Colour",
   "bar.flat": "Flat shading: one tone per face, to read the topology",
+  "bar.grid": "Floor grid (Shift+G)",
   "bar.calques": "Layers",
   "bar.objet": "Object",
   "bar.camera": "Camera",
@@ -528,6 +529,8 @@
   "err.lz4": "corrupt LZ4 block (zero offset)",
   "dev.padNone": "Gamepad: none detected",
   "dev.none": "No device chosen",
+  "pane.gridDefault": "Floor grid",
+  "pane.gridDefaultTitle": "Show the floor grid, and open on it next time (Shift+G)",
   "pane.dimSelect": "Dim on selection",
   "pane.dimSelectTitle": "Dim the backdrop while something is selected, to set it forward",
   "bar.colourAria": "Colour channel",

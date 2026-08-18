@@ -220,6 +220,14 @@
                       title="Traits clairs plutôt que sombres, pour un modèle sombre">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="1" fill="#15171b" stroke="#15171b"/><path d="M8 2.6v10.8M2.6 8h10.8" stroke="#d7dbe2"/></svg>
               </button>
+              <!-- The floor, which is a layer like any other: something drawn
+                   over the scene rather than a property of the model. The pane
+                   keeps the same switch, and Maj+G is the same one again. -->
+              <button class="tb-i tb-t" id="vb-grid" type="button" aria-pressed="true"
+                      data-i18n-title="bar.grid"
+                      title="Grille au sol (Maj+G)">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h12M2 10h12M6 2v12M10 2v12" opacity="0.85"/></svg>
+              </button>
               <!-- Retopo appends flat shading, forced opacity and x-ray here. -->
             </div>
           </div>
@@ -1237,6 +1245,20 @@
             <span data-i18n="pane.bgColour">Fond</span>
             <input type="color" id="canvas-colour" class="swatch" value="#14161a" />
           </div>
+          <!--
+            The floor, next to the colour it is drawn in, and next to the other
+            thing this card decides about the view.
+
+            The chip in the Calques pane is the same switch: this is a fourth
+            handle on it, not a second setting. Whichever one is used, the state
+            is written to the preferences and the next session opens on it, which
+            is what "on or off by default" asks for.
+          -->
+          <label class="check" data-i18n-title="pane.gridDefaultTitle"
+                 title="Afficher la grille au sol, et l'ouvrir ainsi la prochaine fois (Maj+G)">
+            <input type="checkbox" id="opt-grid-default" checked />
+            <span data-i18n="pane.gridDefault">Grille au sol</span>
+          </label>
           <label class="check" data-i18n-title="pane.dimSelectTitle"
                  title="Assombrir le fond tant qu'un élément est sélectionné, pour le détacher">
             <input type="checkbox" id="opt-dim-select" />

@@ -1,6 +1,7 @@
 {
   "bar.couleur": "Couleur",
   "bar.flat": "Ombrage simple : une teinte par face, pour lire la topologie",
+  "bar.grid": "Grille au sol (Maj+G)",
   "bar.calques": "Calques",
   "bar.objet": "Objet",
   "bar.camera": "Caméra",
@@ -528,6 +529,8 @@
   "err.lz4": "bloc LZ4 corrompu (décalage nul)",
   "dev.padNone": "Manette : aucune détectée",
   "dev.none": "Aucun périphérique choisi",
+  "pane.gridDefault": "Grille au sol",
+  "pane.gridDefaultTitle": "Afficher la grille au sol, et l’ouvrir ainsi la prochaine fois (Maj+G)",
   "pane.dimSelect": "Assombrir à la sélection",
   "pane.dimSelectTitle": "Assombrir le fond tant qu’un élément est sélectionné, pour le détacher",
   "bar.colourAria": "Canal de couleur",

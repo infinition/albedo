@@ -162,12 +162,22 @@ export class Navigation {
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
-    let recentring = false;
 
-    const freeLook = () => this.mode === "fly" && !!this.pointer;
-
+    /*
+     * Looking around is a drag, always, and the cursor is never taken.
+     *
+     * `setMode` had already given up grabbing the pointer, and said why: the
+     * webview puts its own banner over the model, the cursor disappears, and
+     * getting out again needs a key nobody was told about. But two things were
+     * left behind that put it straight back. A `focus` listener called
+     * `holdPointer()` every time the window came forward, and `freeLook()`
+     * answered "yes" whenever a shell existed at all — so under Tauri, which
+     * always provides one, fly mode turned the view on every stray mouse
+     * movement and shoved the cursor back to the middle whenever it neared an
+     * edge. Nothing had asked for either.
+     */
     canvas.addEventListener("mousedown", (e) => {
-      if (this.mode !== "fly" || e.button !== 0 || freeLook()) return;
+      if (this.mode !== "fly" || e.button !== 0) return;
       dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -179,39 +189,12 @@ export class Navigation {
       canvas.classList.remove("looking");
     });
     document.addEventListener("mousemove", (e) => {
-      if (this.mode !== "fly") return;
-      if (!freeLook() && !dragging) return;
-      if (recentring) {
-        // The jump we asked for ourselves is not a movement of the hand
-        recentring = false;
-        lastX = e.clientX;
-        lastY = e.clientY;
-        return;
-      }
+      if (this.mode !== "fly" || !dragging) return;
       this.look.x -= (e.clientX - lastX) * 0.0022;
       this.look.y = clamp(this.look.y - (e.clientY - lastY) * 0.0022, -HALF_PI, HALF_PI);
       lastX = e.clientX;
       lastY = e.clientY;
       this.applyLook();
-
-      if (!freeLook()) return;
-      const margin = 120;
-      const nearEdge =
-        e.clientX < margin ||
-        e.clientY < margin ||
-        e.clientX > window.innerWidth - margin ||
-        e.clientY > window.innerHeight - margin;
-      if (nearEdge) {
-        recentring = true;
-        this.pointer.recenter();
-      }
-    });
-    // A window that loses focus must not keep the cursor: alt-tab has to work.
-    window.addEventListener("blur", () => {
-      if (this.mode === "fly") this.releasePointer();
-    });
-    window.addEventListener("focus", () => {
-      if (this.mode === "fly") this.holdPointer();
     });
     canvas.addEventListener(
       "wheel",
@@ -314,19 +297,13 @@ export class Navigation {
   }
 
   /**
-   * Take the cursor at the window level, when running under the shell.
+   * Give the cursor back, whatever had taken it.
    *
-   * `pointer` is supplied by the application: navigation knows nothing about
-   * the desktop framework, it only knows there is or is not something able to
-   * hold a cursor.
+   * Nothing here takes it any more — looking around is a drag, and a drag needs
+   * no capture. This stays as the way out: a build that grabbed the cursor and
+   * a session that outlived it would otherwise leave the pointer held with no
+   * code left that knows how to let go.
    */
-  holdPointer() {
-    if (!this.pointer) return;
-    this.pointer.grab(true);
-    this.pointer.show(false);
-    this.pointer.recenter();
-  }
-
   releasePointer() {
     if (!this.pointer) return;
     this.pointer.grab(false);
@@ -552,11 +529,21 @@ export class Navigation {
       master *
       (cfg.gain?.[name] ?? 1) *
       (cfg.invert[name] ? -1 : 1);
+    /*
+      * `y` and `pitch` are the two that were the wrong way round.
+      *
+      * Lifting the cap sent the view down, and tilting it forward pitched up,
+      * so both had to be corrected in the panel before the device was usable —
+      * which is the one thing the invert switches are not for. They exist
+      * because vendors disagree with each other, not because the baseline is
+      * wrong. The baseline is what changed here; the switches still flip an
+      * axis for a unit that reports it the other way.
+      */
     const axes = {
       x: s.tx * k("x", t), // right
-      y: -s.tz * k("y", t), // up: the cap reports downwards
+      y: s.tz * k("y", t), // up
       z: s.ty * k("z", t), // forward, three's -Z
-      pitch: -s.rx * k("pitch", r),
+      pitch: s.rx * k("pitch", r),
       yaw: -s.rz * k("yaw", r),
       roll: cfg.lockRoll ? 0 : -s.ry * k("roll", r),
     };
