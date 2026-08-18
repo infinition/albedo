@@ -45,6 +45,7 @@ export function createGroups({
   toast,
   channels,
   showPane,
+  markDirty,
   onOpenChange,
 }) {
   const SHELL = `
@@ -93,6 +94,8 @@ export function createGroups({
     <button class="seg" type="button" data-view="3" data-i18n="gr.viewEdges">Contours</button>
   </div>
 
+  <button class="wide" type="button" data-el="split" data-i18n="gr.split" hidden>Découper</button>
+  <button class="wide" type="button" data-el="unsplit" data-i18n="gr.unsplit" hidden>Annuler la découpe</button>
   <span class="gr-note" data-el="note"></span>
   <button class="wide" type="button" data-el="close" data-i18n="gr.close">Fermer</button>
   <div class="gr-progress"><i data-el="fill"></i></div>
@@ -422,6 +425,10 @@ export function createGroups({
       for (let s = 0; s < label.length; s++) shown[s] = fam.of[label[s]];
     }
     wire.setGroupLut(shown);
+    // Kept, because the split cuts along whatever is *being shown* rather than
+    // along some other partition the person never saw.
+    data.shown = shown;
+    data.showingFamilies = tol > 0 && comparable;
 
     data.groups = count;
     data.families = families;
@@ -508,6 +515,10 @@ export function createGroups({
    */
   async function adopt(payload, meshes) {
     const { report, superOfFace, nbrOfFace, merges, costs, feat } = payload;
+    // A new segmentation describes the meshes as they are now, so an undo
+    // pointing at meshes that were replaced before it is no longer an undo.
+    cut = null;
+    el.unsplit.hidden = true;
     data = {
       report,
       superCount: report.superfaces,
@@ -536,6 +547,7 @@ export function createGroups({
     el.countWrap.hidden = false;
     el.famWrap.hidden = false;
     el.views.hidden = false;
+    el.split.hidden = false;
     applyCut(k);
     setView(view || 1);
   }
@@ -648,6 +660,67 @@ export function createGroups({
     }
   }
 
+  // --- the split ----------------------------------------------------------
+
+  /** The last split, so it can be put back. Null when there is nothing to undo. */
+  let cut = null;
+
+  async function doSplit() {
+    if (!data?.shown) return;
+    const meshes = sourceMeshes();
+    const { splitByGroup } = await import("./split.js");
+
+    const label = data.showingFamilies ? "gr.familyName" : "gr.groupName";
+    const result = splitByGroup({
+      root: viewer.root,
+      meshes,
+      labelOfSuper: data.shown,
+      name: (n) => t(label).replace("{n}", String(n + 1)),
+    });
+
+    if (!result.created.length) {
+      toast?.(t("gr.splitNothing"), 4000);
+      return;
+    }
+    cut = result;
+
+    /*
+     * The overlay goes off, and that is the point rather than tidiness.
+     *
+     * The parts are objects now. Painting them in group colours would be the
+     * tool still answering a question that has been settled, and the new meshes
+     * do not carry the attributes to do it with anyway: the split deliberately
+     * leaves this application's scaffolding behind.
+     */
+    wireU.uGroupView.value = 0;
+    el.split.hidden = true;
+    el.unsplit.hidden = false;
+    // The scene gained and lost objects. `absorb` is the call for that; `reset`
+    // here would corrupt the channel view's record of the original materials.
+    channels?.absorb?.();
+    markDirty?.();
+    viewer.invalidate?.();
+    toast?.(t("gr.splitDone").replace("{n}", num(result.created.length)), 3500);
+  }
+
+  async function undoSplit() {
+    if (!cut) return;
+    const { unsplit } = await import("./split.js");
+    unsplit(cut);
+    cut = null;
+    el.split.hidden = !data;
+    el.unsplit.hidden = true;
+    channels?.absorb?.();
+    markDirty?.();
+    // The restored meshes still carry their group attributes, so the overlay
+    // comes back exactly where it was rather than needing another run.
+    if (data) setView(view || 1);
+    viewer.invalidate?.();
+  }
+
+  el.split?.addEventListener("click", () => doSplit());
+  el.unsplit?.addEventListener("click", () => undoSplit());
+
   el.run?.addEventListener("click", () => {
     if (running) tauri?.core.invoke("segment_cancel").catch(() => {});
     else run();
@@ -717,6 +790,7 @@ export function createGroups({
         el.countWrap.hidden = false;
         el.famWrap.hidden = false;
         el.views.hidden = false;
+        el.split.hidden = false;
         applyCut(parseInt(el.count.value, 10));
       } else {
         if (el.stats) el.stats.hidden = true;
@@ -724,6 +798,7 @@ export function createGroups({
         el.countWrap.hidden = true;
         el.famWrap.hidden = true;
         el.views.hidden = true;
+        el.split.hidden = true;
         wireU.uGroupLutSize.value.set(0, 0);
       }
       if (open) setView(data ? view : 0);
@@ -739,6 +814,9 @@ export function createGroups({
       el.countWrap.hidden = true;
       el.famWrap.hidden = true;
       el.views.hidden = true;
+      el.split.hidden = true;
+      el.unsplit.hidden = true;
+      cut = null;
     },
   };
   return api;

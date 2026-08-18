@@ -41,5 +41,11 @@
   "gr.families": "Familles",
   "gr.famOff": "off",
   "gr.tooMany": "trop de parts",
-  "gr.statFamilies": "Familles"
+  "gr.statFamilies": "Familles",
+  "gr.split": "Découper",
+  "gr.unsplit": "Annuler la découpe",
+  "gr.groupName": "Groupe {n}",
+  "gr.familyName": "Famille {n}",
+  "gr.splitDone": "{n} objets créés, textures partagées",
+  "gr.splitNothing": "Rien à découper : aucun maillage ne porte de groupes"
 }

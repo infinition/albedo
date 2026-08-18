@@ -3968,6 +3968,7 @@ async function toggleGroups() {
     // already on the meshes go through the wire patch and learn the uniforms.
     channels,
     showPane,
+    markDirty,
     onOpenChange: (on) => {
       setPressed($("btn-groups"), on);
       if (on) {

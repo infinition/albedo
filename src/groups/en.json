@@ -41,5 +41,11 @@
   "gr.families": "Families",
   "gr.famOff": "off",
   "gr.tooMany": "too many parts",
-  "gr.statFamilies": "Families"
+  "gr.statFamilies": "Families",
+  "gr.split": "Split",
+  "gr.unsplit": "Undo split",
+  "gr.groupName": "Group {n}",
+  "gr.familyName": "Family {n}",
+  "gr.splitDone": "{n} objects created, textures shared",
+  "gr.splitNothing": "Nothing to split: no mesh carries groups"
 }
