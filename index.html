@@ -1041,6 +1041,20 @@
             <button id="cam-frame" class="seg" type="button" data-i18n-title="pane.recentreTitle" data-i18n="pane.recentreShot" title="Recadrer sur le modèle">Recadrer</button>
             <button id="cam-reset-roll" class="seg" type="button" data-i18n-title="pane.uprightTitle" data-i18n="pane.upright" title="Remettre l'horizon droit">Redresser</button>
           </div>
+          <!--
+            How fast the camera travels in fly mode — the multiplier, not the
+            pace. The pace itself is measured from the model, which is what makes
+            one handle position mean the same thing on a bolt and on a terrain.
+            Logarithmic, because the useful range spans four orders of magnitude
+            and a linear one would spend nine tenths of its travel above ×10.
+            The mouse wheel is the same setting, and moves this slider with it.
+          -->
+          <label class="field">
+            <span><span data-i18n="pane.flySpeed">Vitesse de vol</span>
+              <span id="fly-speed-value" class="mono">×1.0</span></span>
+            <input type="range" id="fly-speed" min="-2" max="2" step="0.02" value="0" />
+          </label>
+          <p class="hint" data-i18n="pane.flySpeedHint">En vol, la molette règle la même vitesse</p>
           <p class="hint" data-i18n="pane.camHint">Maj + glisser tourne la lumière, Ctrl + glisser règle le champ</p>
         </section>
 
@@ -1275,12 +1289,12 @@
           <details id="dev-tuning">
             <summary data-i18n="pane.settings">Réglages</summary>
             <label class="field"><span data-i18n="pane.padSens">Sensibilité manette</span>
-              <input type="range" id="pad-sens" min="0.2" max="3" step="0.05" value="1" /></label>
+              <input type="range" id="pad-sens" min="0.1" max="8" step="0.05" value="1" /></label>
             <label class="field"><span data-i18n="pane.padDead">Zone morte manette</span>
               <input type="range" id="pad-dead" min="0" max="0.4" step="0.01" value="0.14" /></label>
             <label class="check"><input type="checkbox" id="pad-inverty" /><span data-i18n="pane.padInvert">Inverser l'axe Y</span></label>
             <label class="field"><span data-i18n="pane.smTranslation">Translation SpaceMouse</span>
-              <input type="range" id="sm-trans" min="0.1" max="4" step="0.05" value="1" /></label>
+              <input type="range" id="sm-trans" min="0.05" max="12" step="0.05" value="1" /></label>
             <label class="field"><span data-i18n="pane.smRotation">Rotation SpaceMouse</span>
               <input type="range" id="sm-rot" min="0.1" max="4" step="0.05" value="1" /></label>
             <p class="hint" data-i18n="pane.smHint">Chaque axe : écouté ou non, sa vitesse, et son sens</p>

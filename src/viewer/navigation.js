@@ -23,6 +23,15 @@ const FLY_KEYS = {
 };
 
 const isKey = (role, code) => FLY_KEYS[role].includes(code);
+/**
+ * How far the travel multiplier may be pushed either way.
+ *
+ * Wide on purpose, and the same pair for the wheel and the slider so the two
+ * cannot stop at different places. A walk through a house and a flight over a
+ * terrain are three orders of magnitude apart, and the model-derived pace only
+ * ever lands near one of them.
+ */
+const FLY_SCALE = { min: 0.01, max: 100 };
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const HALF_PI = Math.PI / 2 - 0.001;
 /** Up is up, whatever the camera is looking at. */
@@ -90,12 +99,14 @@ export const ACTIONS = {
 };
 
 export class Navigation {
-  constructor(viewer, { onAction, onDevice, onMode, onFov, onEnvRotate, onLightRotate } = {}) {
+  constructor(viewer, { onAction, onDevice, onMode, onFov, onSpeed, onEnvRotate, onLightRotate } = {}) {
     this.viewer = viewer;
     this.onAction = onAction || (() => {});
     this.onDevice = onDevice || (() => {});
     /** Fired while the lens is being opened or closed by a drag. */
     this.onFov = onFov || (() => {});
+    /** Fired when the wheel changes the travel multiplier, so the panel agrees. */
+    this.onSpeed = onSpeed || (() => {});
     /** Fired while the environment is being turned by a drag. */
     this.onEnvRotate = onEnvRotate || (() => {});
     /** Fired while a light is being swung by a drag. */
@@ -108,7 +119,17 @@ export class Navigation {
      */
     this.pointer = null;
     this.mode = "orbit";
-    this.speed = 1; // world units per second, rescaled per model
+    /*
+     * Travel is two numbers, not one, and that is the whole of this change.
+     *
+     * `speed` was a single figure in world units per second, recomputed from the
+     * model's size on every load. A slider bound to it would have had no stable
+     * scale — the same handle position meaning a crawl on a building and a
+     * bolt on a bolt — and whatever the wheel had been set to was thrown away by
+     * the next file. So the measured pace stays here, and what the user decides
+     * is a multiplier that survives both the model and the session.
+     */
+    this.baseSpeed = 1; // world units per second, measured from the model
     this.pressed = new Set();
     this.look = { x: 0, y: 0, roll: 0 };
     this.gamepadIndex = null;
@@ -120,6 +141,9 @@ export class Navigation {
 
     /** Everything a user may need to correct without touching the code. */
     this.settings = {
+      // Not under `pad` or `space`: the keys, the stick and the cap all travel
+      // at this pace, and three multipliers for one idea is how they drift.
+      flySpeed: 1,
       pad: { sensitivity: 1, deadzone: 0.14, invertY: false },
       space: {
         translation: 1,
@@ -202,7 +226,7 @@ export class Navigation {
         if (this.mode !== "fly") return;
         // in fly mode the wheel sets travel speed, not zoom
         e.preventDefault();
-        this.speed = clamp(this.speed * (e.deltaY < 0 ? 1.15 : 1 / 1.15), 1e-4, 1e6);
+        this.setFlySpeed(this.settings.flySpeed * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
       },
       { passive: false }
     );
@@ -293,7 +317,26 @@ export class Navigation {
   /** Speed follows the model: a building and a bolt need different steps. */
   calibrate(box) {
     const size = box.getSize(new THREE.Vector3());
-    this.speed = Math.max(size.length() / 6, 1e-4);
+    this.baseSpeed = Math.max(size.length() / 6, 1e-4);
+  }
+
+  /**
+   * Set the travel multiplier, from the wheel or from the panel.
+   *
+   * One way in for both, so the slider follows a wheel notch and the wheel
+   * starts from where the slider was left. `announce` is what tells the panel;
+   * the panel itself passes false, having no need to be told what it just said.
+   */
+  setFlySpeed(scale, announce = true) {
+    const next = clamp(Number(scale) || 1, FLY_SCALE.min, FLY_SCALE.max);
+    this.settings.flySpeed = next;
+    if (announce) this.onSpeed(next);
+    return next;
+  }
+
+  /** What a step actually costs: the model's pace, times what the user asked. */
+  get speed() {
+    return this.baseSpeed * this.settings.flySpeed;
   }
 
   /**

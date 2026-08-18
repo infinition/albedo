@@ -970,6 +970,12 @@ const nav = new Navigation(viewer, {
     }
     prefs.set("fov", deg);
   },
+  // The wheel is the other handle on the travel pace, and the panel must agree
+  onSpeed: (scale) => {
+    paintFlySpeed(scale);
+    toast(t("toast.flySpeed").replace("{scale}", flySpeedLabel(scale)));
+    prefs.set("devices", deviceSnapshot());
+  },
   // Shift and drag turns the environment when the environment is the light
   onEnvRotate: (deg) => {
     $("env-rotation").value = String(deg);
@@ -3485,10 +3491,42 @@ function applyPrefs() {
   selectDecorItem({ type: "light", id: viewer.lights[0]?.id || 1 }, { showHelper: false });
 }
 
+/**
+ * How the travel multiplier reads, at any size.
+ *
+ * It spans four orders of magnitude, so a fixed number of decimals is wrong at
+ * one end or the other: ×0.01 needs two and ×100 needs none.
+ */
+function flySpeedLabel(scale) {
+  return `×${scale >= 10 ? Math.round(scale) : scale.toFixed(scale < 1 ? 2 : 1)}`;
+}
+
+/**
+ * Put the travel multiplier on the slider, which is logarithmic.
+ *
+ * The handle carries the exponent and the setting is ten to it, because the
+ * useful range runs from a crawl to a hundred times the model's own pace and a
+ * linear handle would spend nine tenths of its travel above ten.
+ */
+function paintFlySpeed(scale) {
+  const el = $("fly-speed");
+  if (el) el.value = String(Math.log10(scale));
+  const out = $("fly-speed-value");
+  if (out) out.textContent = flySpeedLabel(scale);
+}
+
+$("fly-speed")?.addEventListener("input", (e) => {
+  // False: this handle has no need to be told what it just said.
+  const scale = nav.setFlySpeed(10 ** Number(e.target.value), false);
+  $("fly-speed-value").textContent = flySpeedLabel(scale);
+  prefs.set("devices", deviceSnapshot());
+});
+
 /** The tuning of a device outlives the session that found it. */
 function deviceSnapshot() {
   const s = nav.settings;
   return {
+    flySpeed: s.flySpeed,
     padSensitivity: s.pad.sensitivity,
     padDeadzone: s.pad.deadzone,
     padInvertY: s.pad.invertY,
@@ -3504,6 +3542,8 @@ function deviceSnapshot() {
 function restoreDevices() {
   const d = prefs.get("devices") || {};
   const s = nav.settings;
+  if (d.flySpeed !== undefined) nav.setFlySpeed(d.flySpeed, false);
+  paintFlySpeed(s.flySpeed);
   if (d.padSensitivity !== undefined) s.pad.sensitivity = d.padSensitivity;
   if (d.padDeadzone !== undefined) s.pad.deadzone = d.padDeadzone;
   if (d.padInvertY !== undefined) s.pad.invertY = d.padInvertY;
