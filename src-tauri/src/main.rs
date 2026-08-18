@@ -177,7 +177,8 @@ fn save_prefs(data: String) -> Result<(), String> {
 
 const MODEL_EXTS: &[&str] = &[
     "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf", "3ds", "usdz",
-    "wrl", "vrml", "vox", "amf", "pcd", "xyz", "nif", "kf", "kfa",
+    "usd", "usda", "usdc", "wrl", "vrml", "vox", "amf", "pcd", "xyz", "nif",
+    "kf", "kfa",
 ];
 
 /// Path handed over by the shell ("Open with…"), if any.

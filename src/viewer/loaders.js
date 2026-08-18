@@ -3,7 +3,7 @@ import { t } from "../i18n/index.js";
 
 export const SUPPORTED = [
   "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf",
-  "3ds", "usdz", "usd", "usda", "wrl", "vrml", "vox", "amf", "pcd", "xyz",
+  "3ds", "usdz", "usd", "usda", "usdc", "wrl", "vrml", "vox", "amf", "pcd", "xyz",
   "nif", "kf", "kfa",
 ];
 

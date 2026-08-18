@@ -1,6 +1,6 @@
 [package]
 name = "albedo"
-version = "0.1.0"
+version = "1.3.0"
 description = "Local 3D asset viewer"
 authors = ["Fabien Polly"]
 edition = "2021"
