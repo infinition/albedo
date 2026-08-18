@@ -232,8 +232,8 @@ export function makeWireUniforms() {
      * while you work, which is the whole reason mode 3 exists.
      */
     uGroupView: { value: 0 },
-    /** A group to isolate, or -1 for none. Everything else goes grey. */
-    uGroupSolo: { value: -1 },
+    /** True once anything is picked, which is when the rest goes grey. */
+    uGroupMarked: { value: 0 },
     /**
      * Superface id to group id, as a texture.
      *
@@ -257,10 +257,10 @@ export function makeWireUniforms() {
  */
 function emptyLut() {
   const tex = new THREE.DataTexture(
-    new Float32Array(1),
+    new Float32Array(2),
     1,
     1,
-    THREE.RedFormat,
+    THREE.RGFormat,
     THREE.FloatType
   );
   tex.minFilter = THREE.NearestFilter;
@@ -280,10 +280,11 @@ function emptyLut() {
  * The texture is reused whenever its shape has not changed, which is every
  * slider move: only the pixels are rewritten.
  */
-export function setGroupLut(uniforms, labels) {
+export function setGroupLut(uniforms, labels, marks = null) {
   const n = labels?.length || 0;
   if (!n) {
     uniforms.uGroupLutSize.value.set(0, 0);
+    uniforms.uGroupMarked.value = 0;
     return;
   }
   const w = Math.min(2048, n);
@@ -292,20 +293,31 @@ export function setGroupLut(uniforms, labels) {
   let tex = uniforms.uGroupLut.value;
   if (!tex || tex.image.width !== w || tex.image.height !== h) {
     tex?.dispose?.();
+    // Two channels rather than a second texture: which group a superface is in
+    // and whether that group is picked are asked at the same moment, of the same
+    // index, and one fetch answers both.
     tex = new THREE.DataTexture(
-      new Float32Array(w * h),
+      new Float32Array(w * h * 2),
       w,
       h,
-      THREE.RedFormat,
+      THREE.RGFormat,
       THREE.FloatType
     );
     tex.minFilter = THREE.NearestFilter;
     tex.magFilter = THREE.NearestFilter;
     uniforms.uGroupLut.value = tex;
   }
-  tex.image.data.set(labels);
+  const data = tex.image.data;
+  let any = 0;
+  for (let i = 0; i < n; i++) {
+    data[i * 2] = labels[i];
+    const mark = marks ? marks[i] : 0;
+    data[i * 2 + 1] = mark;
+    any |= mark;
+  }
   tex.needsUpdate = true;
   uniforms.uGroupLutSize.value.set(w, h);
+  uniforms.uGroupMarked.value = any ? 1 : 0;
 }
 
 /**
@@ -441,7 +453,7 @@ uniform float uView;
 uniform float uDevScale;
 uniform float uXray;
 uniform float uGroupView;
-uniform float uGroupSolo;
+uniform float uGroupMarked;
 uniform sampler2D uGroupLut;
 uniform vec2 uGroupLutSize;
 varying vec3 vBary;
@@ -465,12 +477,13 @@ varying vec3 vRtNormal;
  * that has to survive the lookup so the border test below can treat a
  * silhouette as an outline rather than as a group called minus one.
  */
-float groupOf(float superId) {
-  if (superId < 0.0 || uGroupLutSize.x < 1.0) return -1.0;
+vec2 groupAt(float superId) {
+  if (superId < 0.0 || uGroupLutSize.x < 1.0) return vec2(-1.0, 0.0);
   int w = int(uGroupLutSize.x);
   int i = int(superId + 0.5);
-  return texelFetch(uGroupLut, ivec2(i - (i / w) * w, i / w), 0).r;
+  return texelFetch(uGroupLut, ivec2(i - (i / w) * w, i / w), 0).rg;
 }
+float groupOf(float superId) { return groupAt(superId).r; }
 
 /*
  * A colour per chart, from the id alone.
@@ -590,10 +603,15 @@ if (uGroupView > 0.5 && uGroupLutSize.x >= 1.0 && vGroup >= 0.0) {
   float gedge = 1.0 - min(min(ga.x, ga.y), ga.z);
   gl_FragColor.rgb = mix(gl_FragColor.rgb, uWireColor, gedge * 0.9);
 
-  // Isolating one group greys the rest rather than hiding them, so the part you
-  // are looking at keeps the silhouette that says where it sits on the model.
-  if (uGroupSolo >= 0.0 && abs(g - uGroupSolo) > 0.5) {
-    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42), 0.8) * 0.45;
+  /*
+   * Picked groups keep their colour; the rest go grey rather than invisible.
+   *
+   * Hiding them would take away the silhouette that says where the picked part
+   * sits on the model, which is most of what somebody is judging when they pick
+   * it. Greying leaves the shape and removes the claim.
+   */
+  if (uGroupMarked > 0.5 && groupAt(vGroup).g < 0.5) {
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42), 0.82) * 0.42;
   }
 }
 

@@ -47,5 +47,10 @@
   "gr.groupName": "Group {n}",
   "gr.familyName": "Family {n}",
   "gr.splitDone": "{n} objects created, textures shared",
-  "gr.splitNothing": "Nothing to split: no mesh carries groups"
+  "gr.splitNothing": "Nothing to split: no mesh carries groups",
+  "gr.picked": "{n} picked",
+  "gr.invert": "Invert the selection",
+  "gr.clearPick": "Deselect everything",
+  "gr.splitPicked": "Split the selection",
+  "gr.restName": "Rest"
 }

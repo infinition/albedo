@@ -103,6 +103,13 @@ export function createGroups({
     <button class="seg" type="button" data-view="3" data-i18n="gr.viewEdges">Contours</button>
   </div>
 
+  <span class="gr-note" data-el="pickNote" hidden></span>
+  <button class="tb-i" type="button" data-el="invert" data-i18n-title="gr.invert" title="Inverser la sélection" hidden>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h8l-2-2M13 10H5l2 2"/></svg>
+  </button>
+  <button class="tb-i" type="button" data-el="clearPick" data-i18n-title="gr.clearPick" title="Tout désélectionner" hidden>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+  </button>
   <button class="wide" type="button" data-el="split" data-i18n="gr.split" hidden>Découper</button>
   <button class="wide" type="button" data-el="unsplit" data-i18n="gr.unsplit" hidden>Annuler la découpe</button>
   <span class="gr-note" data-el="note"></span>
@@ -242,6 +249,34 @@ export function createGroups({
     node.addEventListener("input", paintValues);
   }
   paintValues();
+
+  /*
+   * A setting changes, the result follows.
+   *
+   * On `change` rather than `input`, so a slider re-runs once when it is let go
+   * instead of on every pixel of the drag: the engine is fast but it is not
+   * free, and a hundred runs on the way to a value nobody wanted is a hundred
+   * runs. The checkboxes fire `change` on the click, which is the same moment.
+   *
+   * A run already going is left alone and the request is remembered, because
+   * two engines writing the same sidecars is a race with no winner.
+   */
+  let pending = 0;
+  let missed = false;
+
+  function retune() {
+    if (!data || !cached || !tauri) return;
+    if (running) {
+      missed = true;
+      return;
+    }
+    clearTimeout(pending);
+    pending = setTimeout(() => run({ reuse: true }), 180);
+  }
+
+  for (const node of host.querySelectorAll(".gr-menu input")) {
+    node.addEventListener("change", retune);
+  }
 
   el.menuToggle?.addEventListener("click", () => {
     const on = el.menu.hidden;
@@ -478,7 +513,20 @@ export function createGroups({
       shown = new Float32Array(label.length);
       for (let s = 0; s < label.length; s++) shown[s] = fam.of[label[s]];
     }
-    wire.setGroupLut(shown);
+    /*
+     * The pick travels in the lookup table beside the group id.
+     *
+     * Picked groups are named, not superfaces, so a cut that renumbers
+     * everything would throw the selection away. It is dropped deliberately
+     * instead, below, whenever the partition changes under it — keeping ids
+     * that mean something else now is worse than losing them.
+     */
+    let marks = null;
+    if (picked.size) {
+      marks = new Uint8Array(shown.length);
+      for (let s = 0; s < shown.length; s++) marks[s] = picked.has(shown[s]) ? 1 : 0;
+    }
+    wire.setGroupLut(shown, marks);
     // Kept, because the split cuts along whatever is *being shown* rather than
     // along some other partition the person never saw.
     data.shown = shown;
@@ -502,12 +550,93 @@ export function createGroups({
     viewer.invalidate?.();
   }
 
+  /*
+   * Which groups have been picked, by group id at the level being shown.
+   *
+   * By id and not by superface, which means a cut that renumbers everything
+   * invalidates it. Dropped on purpose when that happens rather than carried:
+   * ids that mean something else now are worse than no ids at all, and silently
+   * keeping five of them pointing at whatever landed on those numbers is the
+   * kind of wrong nobody would ever suspect.
+   */
+  const picked = new Set();
+
+  function paintPick() {
+    const any = picked.size > 0;
+    el.pickNote.hidden = !any;
+    el.pickNote.textContent = any
+      ? t("gr.picked").replace("{n}", num(picked.size))
+      : "";
+    el.invert.hidden = !any;
+    el.clearPick.hidden = !any;
+    el.split.textContent = any ? t("gr.splitPicked") : t("gr.split");
+  }
+
   const recut = () => applyCut(groupsAt(parseInt(el.count.value, 10)));
+
+  /** Forget the selection, because the numbers it holds no longer mean anything. */
+  function dropPick() {
+    if (!picked.size) return;
+    picked.clear();
+    paintPick();
+  }
+
+  /**
+   * A click in the viewport landed on a triangle. Work out which group.
+   *
+   * `faceIndex` has been on every hit this application produces since the
+   * beginning and was read by nothing. The group is taken from the geometry
+   * itself rather than from a parallel array kept in step with it, so it stays
+   * right through any reordering.
+   */
+  function pickFace(hit, additive) {
+    if (!data || !open || wireU.uGroupView.value < 0.5) return false;
+    const attribute = hit?.object?.geometry?.attributes?.aGroup;
+    if (!attribute || hit.faceIndex === undefined) return false;
+    const superface = attribute.getX(hit.faceIndex * 3);
+    if (!(superface >= 0)) return false;
+    const group = data.shown?.[superface];
+    if (group === undefined) return false;
+
+    if (!additive) {
+      const alone = picked.size === 1 && picked.has(group);
+      picked.clear();
+      if (!alone) picked.add(group);
+    } else if (picked.has(group)) {
+      picked.delete(group);
+    } else {
+      picked.add(group);
+    }
+    paintPick();
+    recut();
+    return true;
+  }
+
+  el.invert?.addEventListener("click", () => {
+    const total = data?.groups ?? 0;
+    const flipped = new Set();
+    for (let g = 0; g < total; g++) if (!picked.has(g)) flipped.add(g);
+    picked.clear();
+    for (const g of flipped) picked.add(g);
+    paintPick();
+    recut();
+  });
+  el.clearPick?.addEventListener("click", () => {
+    dropPick();
+    recut();
+  });
   // The slider counts groups, so it reads left to right as "fewer, more". The
   // merge order runs the other way, which is the cut's problem and not the
   // reader's.
-  el.count?.addEventListener("input", recut);
-  el.fam?.addEventListener("input", recut);
+  // Both of these renumber every group, so the selection stops meaning anything.
+  el.count?.addEventListener("input", () => {
+    dropPick();
+    recut();
+  });
+  el.fam?.addEventListener("input", () => {
+    dropPick();
+    recut();
+  });
 
   function setView(next) {
     view = next;
@@ -573,6 +702,7 @@ export function createGroups({
     // pointing at meshes that were replaced before it is no longer an undo.
     cut = null;
     el.unsplit.hidden = true;
+    dropPick();
     data = {
       report,
       superCount: report.superfaces,
@@ -605,12 +735,27 @@ export function createGroups({
     setView(view || 1);
   }
 
-  async function run() {
+  /*
+   * The exported model, kept between runs.
+   *
+   * Every setting in the menu changes how the engine *reads* the mesh and none
+   * of them change the mesh, so the file it reads is the same file. Exporting is
+   * also by far the expensive half — tens of megabytes through three's exporter
+   * and out to disk — while the engine itself is hundredths of a second on a
+   * small model and a few on a large one.
+   *
+   * Keeping it is what turns the weights from something you commit to before a
+   * run into something you turn while looking at the result. Dropped the moment
+   * the scene stops matching it: a split, a new model, a mode that forgot.
+   */
+  let cached = null;
+
+  async function run({ reuse = false } = {}) {
     if (!tauri) {
       toast?.(t("gr.needsApp"), 4000);
       return;
     }
-    const meshes = sourceMeshes();
+    const meshes = reuse && cached ? cached.meshes : sourceMeshes();
     if (!meshes.length) {
       toast?.(t("gr.nothing"), 3000);
       return;
@@ -619,24 +764,30 @@ export function createGroups({
     running = true;
     onBusy?.(true);
     el.run.textContent = t("gr.cancel");
-    say(t("gr.exporting"), 0);
+    say(reuse ? t("gr.working") : t("gr.exporting"), 0);
 
     try {
-      const dirs = await tauri.core.invoke("segment_workdir");
+      const dirs =
+        reuse && cached
+          ? { input: cached.input, base: cached.base }
+          : await tauri.core.invoke("segment_workdir");
 
-      const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
-      const { withoutWireAttributes } = await import("../viewer/wire.js");
-      const glb = await withoutWireAttributes(viewer.root, () =>
-        new GLTFExporter().parseAsync(viewer.root, {
-          binary: true,
-          includeCustomExtensions: true,
-          // The default, said out loud because `sourceMeshes` above depends on
-          // it and the two must not drift apart.
-          onlyVisible: true,
-        })
-      );
-      const { writeFile } = await import("@tauri-apps/plugin-fs");
-      await writeFile(dirs.input, new Uint8Array(glb));
+      if (!reuse || !cached) {
+        const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+        const { withoutWireAttributes } = await import("../viewer/wire.js");
+        const glb = await withoutWireAttributes(viewer.root, () =>
+          new GLTFExporter().parseAsync(viewer.root, {
+            binary: true,
+            includeCustomExtensions: true,
+            // The default, said out loud because `sourceMeshes` above depends on
+            // it and the two must not drift apart.
+            onlyVisible: true,
+          })
+        );
+        const { writeFile } = await import("@tauri-apps/plugin-fs");
+        await writeFile(dirs.input, new Uint8Array(glb));
+        cached = { input: dirs.input, base: dirs.base, meshes };
+      }
 
       stop = await tauri.event.listen("segment://progress", (e) => {
         say(t("gr.working"), e.payload || 0);
@@ -689,6 +840,12 @@ export function createGroups({
       running = false;
       onBusy?.(false);
       el.run.textContent = t("gr.run");
+      // A setting moved while this was in flight. Serve it now, once, rather
+      // than queueing every intermediate value the slider passed through.
+      if (missed) {
+        missed = false;
+        retune();
+      }
     }
   }
 
@@ -724,11 +881,28 @@ export function createGroups({
     const { splitByGroup } = await import("./split.js");
 
     const label = data.showingFamilies ? "gr.familyName" : "gr.groupName";
+
+    /*
+     * A selection is expressed as a relabelling, not as a second code path.
+     *
+     * Everything unpicked collapses onto one shared id, so the split produces a
+     * mesh per picked group plus a single remainder — which is what "keep these
+     * parts" means — and `splitByGroup` never learns that selection exists.
+     */
+    let labelOfSuper = data.shown;
+    const rest = data.groups;
+    if (picked.size) {
+      labelOfSuper = new Float32Array(data.shown.length);
+      for (let i = 0; i < data.shown.length; i++) {
+        labelOfSuper[i] = picked.has(data.shown[i]) ? data.shown[i] : rest;
+      }
+    }
+
     const result = splitByGroup({
       root: viewer.root,
       meshes,
-      labelOfSuper: data.shown,
-      name: (n) => t(label).replace("{n}", String(n + 1)),
+      labelOfSuper,
+      name: (n) => (n === rest && picked.size ? t("gr.restName") : t(label).replace("{n}", String(n + 1))),
     });
 
     if (!result.created.length) {
@@ -736,6 +910,8 @@ export function createGroups({
       return;
     }
     cut = result;
+    // The scene no longer matches the file that was exported from it.
+    cached = null;
 
     /*
      * The overlay goes off, and that is the point rather than tidiness.
@@ -824,6 +1000,8 @@ export function createGroups({
     /** Display a segmentation this mode did not compute. See `adopt`. */
     adopt,
     sourceMeshes,
+    /** A viewport click. Returns true when it was a group, and was handled. */
+    pick: pickFace,
     /**
      * The result belongs to a document, not to the mode.
      *
@@ -858,6 +1036,8 @@ export function createGroups({
     /** The model changed underneath: whatever was segmented is not this. */
     forget() {
       data = null;
+      cached = null;
+      dropPick();
       wireU.uGroupView.value = 0;
       wireU.uGroupLutSize.value.set(0, 0);
       import("../viewer/wire.js").then((m) => m.clearGroupAttributes(viewer.root));

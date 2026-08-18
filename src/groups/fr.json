@@ -47,5 +47,10 @@
   "gr.groupName": "Groupe {n}",
   "gr.familyName": "Famille {n}",
   "gr.splitDone": "{n} objets créés, textures partagées",
-  "gr.splitNothing": "Rien à découper : aucun maillage ne porte de groupes"
+  "gr.splitNothing": "Rien à découper : aucun maillage ne porte de groupes",
+  "gr.picked": "{n} retenus",
+  "gr.invert": "Inverser la sélection",
+  "gr.clearPick": "Tout désélectionner",
+  "gr.splitPicked": "Découper la sélection",
+  "gr.restName": "Reste"
 }

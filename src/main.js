@@ -2303,7 +2303,10 @@ async function wakeWire() {
         // One group id per superface, as a small texture. Groupes calls this on
         // every move of its slider, which is why it is a lookup rather than a
         // vertex attribute: see `setGroupLut`.
-        setGroupLut: (labels) => m.setGroupLut(uniforms, labels),
+        // Both arguments, and the second one matters: it carries which groups
+        // are picked. A facade that quietly takes fewer parameters than it is
+        // called with is a wire that looks connected.
+        setGroupLut: (labels, marks) => m.setGroupLut(uniforms, labels, marks),
         setSide: m.setSide,
       };
       wire.setColour(!$("opt-wire-dark").checked);
@@ -5451,6 +5454,17 @@ window.addEventListener("keyup", (e) => {
       selectMaterial(null);
       return;
     }
+    /*
+     * While the Groupes overlay is up, a click picks a group and not a material.
+     *
+     * One insertion rather than a restructuring: the mode answers false whenever
+     * it is shut, has nothing segmented, or the triangle under the pointer
+     * belongs to no group, and the ordinary material path below runs untouched.
+     * `faceIndex` has been on every hit since the beginning and was read by
+     * nothing until now.
+     */
+    if (groups?.pick?.(hit, e.ctrlKey || e.metaKey)) return;
+
     const material = materialOfHit(hit);
     selectMaterial(material ? material.uuid : null);
     revealBar();
