@@ -50,6 +50,8 @@ paintLangButton();
  * much later.
  */
 let retopo = null;
+/** The Groupes mode, declared and wired the same way and for the same reason. */
+let groups = null;
 const app = $("app");
 
 // Declared here rather than beside the edit mode they belong to, and this is
@@ -144,6 +146,7 @@ function makeDocument({ title = "", path = null, preview = false } = {}) {
     history: { past: [], future: [], limit: 80 },
     selection: [],
     retopo: null,
+    groups: null,
   };
   documents.push(doc);
   return doc;
@@ -374,6 +377,7 @@ function parkActive() {
   activeDoc.selection = [...selection.ids].map((id) => [id, selection.kindOf(id)]);
   activeDoc.selectedPart = selectedPart;
   activeDoc.retopo = retopo?.saveState?.() ?? activeDoc.retopo;
+  activeDoc.groups = groups?.saveState?.() ?? activeDoc.groups;
 }
 
 /** Put a document back in the viewer and point every panel at it. */
@@ -390,6 +394,7 @@ function adoptDocument(doc) {
     : null;
   selection.set(doc.selection || []);
   retopo?.loadState?.(doc.retopo);
+  groups?.loadState?.(doc.groups);
   void restoreViewState(doc.viewState);
 
   // Everything that reads the scene has to be told it changed, because nothing
@@ -1141,6 +1146,10 @@ async function open(url, label, { findTextures, resolveSibling } = {}) {
   history.past.length = 0;
   history.future.length = 0;
   pendingPose = null;
+  // A segmentation is a partition of one particular model's triangles. Carrying
+  // it into the next one would paint this model with the last one's answer, and
+  // the ids would land on whatever triangles happen to sit at those indices.
+  groups?.forget?.();
   setEditMode(null);
   try {
     const { object, animations, info } = await loadModel(url, {
@@ -1560,7 +1569,7 @@ function selectMaterial(uuid, add = false) {
 }
 
 /** Panes that already answer a question about what is selected. */
-const SELECTION_PANES = new Set(["matter", "scene", "retopo", "object"]);
+const SELECTION_PANES = new Set(["matter", "scene", "retopo", "groups", "object"]);
 
 /**
  * Everything that has to be repainted when the selection moves.
@@ -2291,6 +2300,10 @@ async function wakeWire() {
         // the per vertex deviation all come out of the engine.
         apply: (object, mask, charts, dev) =>
           m.applyWire(object, uniforms, mask, charts, dev),
+        // One group id per superface, as a small texture. Groupes calls this on
+        // every move of its slider, which is why it is a lookup rather than a
+        // vertex attribute: see `setGroupLut`.
+        setGroupLut: (labels) => m.setGroupLut(uniforms, labels),
         setSide: m.setSide,
       };
       wire.setColour(!$("opt-wire-dark").checked);
@@ -2822,9 +2835,9 @@ function showPane(name, remember = true) {
   for (const pane of document.querySelectorAll(".pane")) {
     pane.classList.toggle("active", pane.dataset.pane === name);
   }
-  // Retopo is not remembered: reopening the application into a mode's tab while
-  // the mode itself is shut would show controls that drive nothing.
-  if (remember && name !== "retopo") prefs.set("pane", name);
+  // A mode's own pane is not remembered: reopening the application into one
+  // while the mode itself is shut would show controls that drive nothing.
+  if (remember && name !== "retopo" && name !== "groups") prefs.set("pane", name);
 }
 for (const tab of document.querySelectorAll(".tab")) {
   tab.addEventListener("click", () => showPane(tab.dataset.pane));
@@ -3743,13 +3756,22 @@ void shellReady.then(async () => {
 if (import.meta.env && import.meta.env.DEV) {
   window.__albedo = {
     viewer, channels, nav, open, applyChannel, get prefs() { return prefs; },
-    selection, showPane, toggleRetopo, openPath, markDirty, clearDirty,
+    selection, showPane, toggleRetopo, toggleGroups, openPath, markDirty, clearDirty,
     importPart, newDocument, closeDocument, switchTo, documents,
     get dirty() {
       return sceneDirty;
     },
     get retopo() {
       return retopo;
+    },
+    // The shared overlay uniforms, so a click test can drive the group display
+    // without going through a mode that needs the shell to be running.
+    get wire() {
+      return wire;
+    },
+    wakeWire,
+    get groups() {
+      return groups;
     },
     get tree() {
       return outliner;
@@ -3920,6 +3942,47 @@ $("btn-retopo").addEventListener("click", () => {
   // came for, so the tab stops being one you were only looking through.
   promoteDocument();
   toggleRetopo();
+});
+
+/**
+ * The Groupes mode, on the same lazy pattern as Retopo and the library.
+ *
+ * The overlay comes first for the same reason it does there: the group colours,
+ * the tint and the outlines are all the one patched shader the wireframe uses,
+ * so the mode cannot be built against a set of uniforms nobody else holds.
+ */
+async function toggleGroups() {
+  if (groups) {
+    groups.toggle();
+    return;
+  }
+  const w = await wakeWire();
+  const { createGroups } = await import("./groups/index.js");
+  groups = createGroups({
+    wire: w,
+    tauri,
+    viewer,
+    onBusy: setBusy,
+    toast,
+    // It re-hands the materials after writing its attributes, so the ones
+    // already on the meshes go through the wire patch and learn the uniforms.
+    channels,
+    showPane,
+    onOpenChange: (on) => {
+      setPressed($("btn-groups"), on);
+      if (on) {
+        hud.toggleInspector(true);
+        showPane("groups");
+      } else if (currentPane() === "groups") {
+        showPane(migratePane(prefs.get("pane")));
+      }
+    },
+  });
+  groups.show();
+}
+$("btn-groups").addEventListener("click", () => {
+  promoteDocument();
+  toggleGroups();
 });
 
 

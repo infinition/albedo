@@ -80,6 +80,11 @@
           <button id="btn-retopo" class="icon" type="button" data-i18n-title="ui.retopo" title="Retopo (R)" aria-pressed="false">
             <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
           </button>
+          <!-- One shape cut into pieces along a line that is not a straight one:
+               the whole point is that the parts are found rather than imposed. -->
+          <button id="btn-groups" class="icon" type="button" data-i18n-title="ui.groups" title="Groupes" aria-pressed="false">
+            <svg viewBox="0 0 24 24"><path d="M4 6a8 8 0 0 1 16 0v12a8 8 0 0 1-16 0z" /><path d="M4 11c3 2 5-2 8 0s5 2 8 0" /></svg>
+          </button>
           <span class="ov-sep"></span>
           <button id="btn-open-file" class="icon" type="button" data-i18n-title="ui.openFile" title="Ouvrir un fichier (Ctrl+O)">
             <svg viewBox="0 0 24 24"><path d="M3 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v1"/><path d="M3.4 18.6l2.2-7.2h16l-2.2 7.2a1 1 0 0 1-1 .7H4.4a1 1 0 0 1-1-.7z"/></svg>
@@ -355,6 +360,9 @@
           <button class="tab" type="button" data-pane="retopo" data-i18n-title="tab.retopo" data-i18n-aria="tab.retopo" title="Retopo" aria-label="Retopo" hidden>
             <svg viewBox="0 0 24 24"><path d="M12 3l9 5.5v7L12 21l-9-5.5v-7z" /><path d="M12 3v18M3 8.5l18 7M21 8.5l-18 7" /></svg>
           </button>
+          <button class="tab" type="button" data-pane="groups" data-i18n-title="tab.groups" data-i18n-aria="tab.groups" title="Groupes" aria-label="Groupes" hidden>
+            <svg viewBox="0 0 24 24"><path d="M4 6a8 8 0 0 1 16 0v12a8 8 0 0 1-16 0z" /><path d="M4 11c3 2 5-2 8 0s5 2 8 0" /></svg>
+          </button>
           <button class="tab" type="button" data-pane="decor" data-i18n-title="tab.decor" data-i18n-aria="tab.decor" title="Décor" aria-label="Décor">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="4" /><path d="M3 19h18M6 15l3-3 3 3" /></svg>
           </button>
@@ -502,6 +510,9 @@
 
         <!-- Filled by the Retopo module on its first open, and never before. -->
         <div class="pane" data-pane="retopo" id="pane-retopo"></div>
+
+        <!-- Likewise the Groupes module. -->
+        <div class="pane" data-pane="groups" id="pane-groups"></div>
 
         <div class="pane active" data-pane="view">
         <section>

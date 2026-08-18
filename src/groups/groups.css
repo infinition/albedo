@@ -1,0 +1,235 @@
+/*
+ * The Groupes mode.
+ *
+ * Same three scopes as every other mode in this application, and no `@media`
+ * rule anywhere: `#groups` is its own container, so the questions below are
+ * asked of this box rather than of the window, which stopped being the same
+ * thing when the library learned to take half the screen.
+ *
+ * The shapes are deliberately the ones Retopo already uses — an action bar
+ * centred on the viewport, a settings menu that unfolds upward from an arrow at
+ * its left, a two pixel progress rail along its bottom edge. A second mode that
+ * invented its own furniture would make the application look assembled rather
+ * than designed, and the person using it would have to learn the same layout
+ * twice.
+ */
+
+#groups {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+
+  container-type: inline-size;
+  container-name: groups;
+
+  --gr-skin: color-mix(in srgb, var(--panel, #16181c) 92%, transparent);
+  --gr-blur: blur(8px);
+}
+#groups.open { opacity: 1; }
+
+/*
+ * Only the box that is painted takes pointer events back. The host spans the
+ * viewport, and granting it events would lay an invisible rectangle over the
+ * model and eat every click meant for it.
+ */
+#groups.open .gr-bar { pointer-events: auto; }
+
+/* With the library open the viewport is the strip it leaves on the right, so
+   the chrome follows it there rather than drawing across the grid. */
+body.peeking #groups { left: calc(100% - var(--peek, 460px)); }
+
+/* The scrubber gets out from under the action bar, by the bar's own height. */
+body.groups-open #timeline {
+  bottom: calc(var(--gap) + var(--gr-bar-h, 54px) + 10px);
+}
+
+/* --- the action bar ------------------------------------------------------ */
+
+.gr-bar {
+  position: absolute;
+  left: 50%;
+  bottom: var(--gap, 14px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 11px;
+  border-radius: 10px;
+  background: var(--gr-skin);
+  backdrop-filter: var(--gr-blur);
+  border: 1px solid var(--line, #2a2e35);
+  max-width: calc(100vw - 2 * var(--gap, 14px));
+}
+/*
+ * No `flex-wrap` here, and that is not an omission.
+ *
+ * The bar is absolutely positioned, so it is shrink-to-fit: its width comes
+ * from its contents. Letting it wrap makes those contents willing to be
+ * min-content wide, so the box collapses to the width of its narrowest item and
+ * stacks everything into a fourteen pixel column. The narrow case is answered
+ * by the container query at the bottom of this file instead, which takes room
+ * away from the labels rather than from the bar.
+ */
+.gr-bar button {
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.gr-bar .tb-i { min-height: 30px; width: 30px; padding: 0; }
+
+.gr-note {
+  font-size: 11px;
+  color: var(--dim, #8b929c);
+  white-space: nowrap;
+}
+
+/*
+ * The slider, which is the mode.
+ *
+ * Wide on purpose: it is scrubbed rather than aimed, and a hundred pixels of
+ * travel across ten thousand possible group counts turns every position into a
+ * guess. It shrinks before anything else when the bar runs out of room, because
+ * a narrow slider still works and a wrapped bar covers the model.
+ */
+.gr-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+.gr-slider input[type="range"] {
+  width: clamp(120px, 22cqw, 260px);
+  min-width: 0;
+}
+.gr-num {
+  color: var(--muted, #8b929c);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5ch;
+  text-align: right;
+}
+
+.gr-views .seg { white-space: nowrap; }
+
+.gr-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 0 0 10px 10px;
+  pointer-events: none;
+}
+.gr-progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent, #7cc4ff);
+  transition: width 0.15s ease;
+}
+
+/* --- the settings menu --------------------------------------------------- */
+
+.gr-menu-toggle[aria-pressed="true"] { color: var(--accent); }
+.gr-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 250px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 11px;
+  background: var(--gr-skin);
+  backdrop-filter: var(--gr-blur);
+  border: 1px solid var(--line, #2a2e35);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.gr-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; margin-top: 8px; }
+.gr-field > span { display: flex; justify-content: space-between; gap: 8px; }
+.gr-menu input[type="range"] { width: 100%; min-width: 0; box-sizing: border-box; }
+
+.gr-check { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 6px; }
+
+.gr-sub {
+  margin: 12px 0 2px;
+  font-size: 11px;
+  color: var(--fg, #e6e9ef);
+  opacity: 0.75;
+}
+.gr-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted, #8b929c);
+}
+
+/* --- the pane, inside the shared panel ----------------------------------- */
+
+#pane-groups input[type="range"] { width: 100%; min-width: 0; box-sizing: border-box; }
+
+.gr-stats { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px; }
+.gr-stats > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+/* Zebra, because a column of figures is read across and the eye needs a rail to
+   come back to. */
+.gr-stats > div:nth-child(odd) {
+  background: color-mix(in srgb, var(--line, #2a2e35) 26%, transparent);
+}
+.gr-stats dt { color: var(--dim, #8b929c); margin: 0; }
+.gr-stats dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg, #e6e9ef);
+  white-space: nowrap;
+}
+
+/*
+ * The two warnings.
+ *
+ * Both describe a result that is not wrong so much as blind, and neither is
+ * visible in the viewport: a model with no colour texture segments perfectly
+ * well and simply cannot see half of what it was asked to look at. Saying so is
+ * the difference between a puzzling result and an explained one.
+ */
+.gr-warn {
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--fg, #e6e9ef);
+  background: color-mix(in srgb, #ffb454 14%, transparent);
+  border: 1px solid color-mix(in srgb, #ffb454 30%, transparent);
+}
+
+/*
+ * Narrow: the bar keeps the slider and loses the words around it.
+ *
+ * The view buttons are the first to go icon-free-and-short because their state
+ * is also readable from the model itself, which the group count is not.
+ */
+@container groups (max-width: 720px) {
+  .gr-bar { gap: 6px; padding: 6px 6px 9px; }
+  .gr-bar button { padding: 0 10px; }
+  .gr-slider > span:first-child { display: none; }
+}

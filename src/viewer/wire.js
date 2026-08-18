@@ -318,17 +318,24 @@ export function setGroupLut(uniforms, labels) {
  * geometry in the scene, and a segmentation arriving afterwards would then be
  * skipped and draw nothing.
  *
- * `superOfFace` is one id per triangle across the whole traversed object, in the
- * same traversal order `prepareWire` counts in. `nbrOfFace` is three per
- * triangle: the superface across the edge from corner `k` to `k + 1`, and
- * `0xffffffff` where the mesh has an open border.
+ * It takes a **list of meshes** rather than a root to traverse, and that is the
+ * one thing in here that has to be exact. The ids are one flat array in the
+ * order the engine read them, which is the order they were written to the GLB,
+ * and the exporter writes with `onlyVisible`. A traversal here would happily
+ * count a hidden mesh the exporter skipped, and every id after it would land on
+ * the wrong triangle — a segmentation that looks like a segmentation and is
+ * shifted by however many triangles were hidden. The caller collects the list
+ * once and uses the same one for both halves.
+ *
+ * `superOfFace` is one id per triangle across the whole list. `nbrOfFace` is
+ * three per triangle: the superface across the edge from corner `k` to `k + 1`,
+ * and `0xffffffff` where the mesh has an open border.
  */
-export function ensureGroupAttributes(object, superOfFace, nbrOfFace) {
+export function ensureGroupAttributes(meshes, superOfFace, nbrOfFace) {
   let tri = 0;
-  object.traverse((n) => {
-    if (!n.isMesh && !n.isSkinnedMesh) return;
-    const g = n.geometry;
-    if (!g?.attributes?.position) return;
+  for (const n of meshes) {
+    const g = n?.geometry;
+    if (!g?.attributes?.position) continue;
 
     const count = g.attributes.position.count;
     const group = new Float32Array(count);
@@ -351,8 +358,33 @@ export function ensureGroupAttributes(object, superOfFace, nbrOfFace) {
     g.setAttribute("aGroup", new THREE.BufferAttribute(group, 1));
     g.setAttribute("aNbr", new THREE.BufferAttribute(nbr, 3));
     tri += count / 3;
-  });
+  }
   return tri;
+}
+
+/**
+ * Forget a segmentation, so nothing claims one that no longer exists.
+ *
+ * Written back to -1 rather than deleted, and the difference matters. A missing
+ * attribute is not absent as far as the shader is concerned: WebGL feeds a
+ * disabled attribute the generic value, which is zero, and zero is a perfectly
+ * good superface id. Deleting these would therefore paint the whole model in
+ * group zero's colour rather than in none — the same plausible lie that the
+ * fill in `prepareWire` exists to prevent, arrived at from the other direction.
+ */
+export function clearGroupAttributes(root) {
+  root?.traverse?.((n) => {
+    const g = n.geometry;
+    const group = g?.attributes?.aGroup;
+    if (!group) return;
+    group.array.fill(-1);
+    group.needsUpdate = true;
+    const nbr = g.attributes.aNbr;
+    if (nbr) {
+      nbr.array.fill(-1);
+      nbr.needsUpdate = true;
+    }
+  });
 }
 
 /**
@@ -420,13 +452,13 @@ varying vec3 vRtNormal;
 /*
  * Which group a superface currently belongs to.
  *
- * `texelFetch` rather than a normalised sample: the table is data, not an
+ * texelFetch rather than a normalised sample: the table is data, not an
  * image, and asking for texel 4097 of 20000 through UV coordinates means
  * getting the arithmetic exactly right at every resize or reading a neighbour's
  * value, which is a bug that looks like a segmentation flickering between two
  * plausible answers.
  *
- * Negative in means negative out. `aNbr` uses -1 for "the mesh ends here", and
+ * Negative in means negative out. aNbr uses -1 for "the mesh ends here", and
  * that has to survive the lookup so the border test below can treat a
  * silhouette as an outline rather than as a group called minus one.
  */
@@ -521,14 +553,14 @@ if (uView > 0.5) {
  * The groups.
  *
  * Three pictures and one outline, and the outline is drawn in all of them. It
- * is derived rather than stored: `vNbr` says which superface sits across each
+ * is derived rather than stored: vNbr says which superface sits across each
  * of the three edges, both sides go through the same lookup table, and an edge
  * whose two sides land on different groups is a border. That is why moving the
  * slider costs one small texture upload and no geometry work at all — the
  * borders re-draw themselves because the answer they read changed.
  *
- * `vBary.x` vanishes on the edge between corners 1 and 2, `y` on 2 to 0 and `z`
- * on 0 to 1, while `aNbr[k]` is the neighbour across corner `k` to `k + 1`. So
+ * vBary.x vanishes on the edge between corners 1 and 2, y on 2 to 0 and z on
+ * 0 to 1, while aNbr[k] is the neighbour across corner k to k + 1. So
  * the three cross over as 1, 2, 0 rather than staying in order, exactly as the
  * quad mask below does and for exactly the same reason.
  */

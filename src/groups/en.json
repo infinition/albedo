@@ -1,0 +1,48 @@
+{
+  "gr.run": "Segment",
+  "gr.cancel": "Cancel",
+  "gr.close": "Close",
+  "gr.groups": "Groups",
+  "gr.menuTitle": "Segmentation settings",
+
+  "gr.view": "Display",
+  "gr.viewOff": "None",
+  "gr.viewFlat": "Flat",
+  "gr.viewTint": "Tint",
+  "gr.viewEdges": "Outlines",
+
+  "gr.weights": "What tells two parts apart",
+  "gr.wColour": "Colour",
+  "gr.wConcave": "Hollows",
+  "gr.wConvex": "Ridges",
+  "gr.wNormal": "Facing",
+
+  "gr.barriers": "What a group never crosses",
+  "gr.bMaterial": "The material",
+  "gr.bIslands": "UV seams",
+  "gr.islandsHint": "On a generated atlas the islands are cut for packing, not for meaning.",
+
+  "gr.premerge": "Pre-merge",
+  "gr.sColour": "Colour tolerance",
+  "gr.sAngle": "Angle",
+
+  "gr.paneTitle": "Groups",
+  "gr.paneEmpty": "Nothing has been segmented yet.",
+  "gr.statGroups": "Groups",
+  "gr.statRange": "Range",
+  "gr.statTriangles": "Triangles",
+  "gr.statSuperfaces": "Superfaces",
+  "gr.statShells": "Shells",
+  "gr.statTime": "Time",
+
+  "gr.warnColour": "No material carries a base colour texture, so colour cannot say anything the material does not.",
+  "gr.warnManifold": "{n} non-manifold edges: folds are approximate there.",
+
+  "gr.exporting": "Exporting…",
+  "gr.working": "Analysing…",
+  "gr.cancelled": "Cancelled",
+  "gr.failed": "Segmentation failed",
+  "gr.nothing": "Nothing visible to segment",
+  "gr.needsApp": "Segmentation needs the application, not the browser",
+  "gr.mismatch": "The mesh sent has {a} triangles and the engine read {b}: the result would be shifted."
+}
