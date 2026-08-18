@@ -883,10 +883,19 @@ body.inspector #inspector {
 body.inspector #stage { right: var(--panel-reserve); }
 body.inspector .ov-br { opacity: 0; }
 
-/* The top right corner holds nothing now. Every button that lived there is in
-   the left cluster, which is what lets a panel own the right edge outright
-   instead of starting forty eight pixels down to dodge them. */
-.ov-tr:empty { display: none; }
+/*
+ * The top right corner holds nothing now. Every button that lived there is in
+ * the left cluster, which is what lets a panel own the right edge outright
+ * instead of starting forty eight pixels down to dodge them.
+ *
+ * `:has(*)` rather than `:empty`, and that is not a preference. `:empty` means
+ * no child nodes *at all*, whitespace included, so the newline and eight spaces
+ * the markup was indented with counted as content: the rule never matched, and
+ * the empty plate drew itself in the corner as a ten pixel dot — border, blur
+ * and shadow around nothing. Asking whether it holds an element instead is the
+ * question that was meant, and it cannot be broken by reformatting the markup.
+ */
+.ov-tr:not(:has(*)) { display: none; }
 
 /* --- the view toolbar ----------------------------------------------------
  *
