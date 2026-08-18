@@ -9,3 +9,4 @@ shell-thumbnails/target/
 .claude/
 .idea/
 .vscode/
+src-tauri/crates/*/Cargo.lock
