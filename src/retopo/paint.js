@@ -658,6 +658,14 @@ export function createPainting({ viewer, wireUniforms }) {
   /** +1 adds, −1 takes away. The eraser end of a pen flips it for you. */
   let polarity = 1;
 
+  /**
+   * Mirror every stroke across the model's own middle.
+   *
+   * Off by default, because it is wrong on anything that is not symmetric and
+   * silently doubles work when it is on by surprise.
+   */
+  const symmetry = { on: false, axis: "x" };
+
   const brush = {
     /** As a share of the model's radius, so it means the same on any model. */
     size: 0.06,
@@ -988,6 +996,8 @@ export function createPainting({ viewer, wireUniforms }) {
    * would stay hanging in the air the first time the model is turned.
    */
   let liveGuide = null;
+  /** The same curve on the far side of the mirror, drawn at the same time. */
+  let liveTwin = null;
 
   const GUIDE_COLOUR = { crease: 0xffb020, flow: 0x30c8ff };
 
@@ -1171,7 +1181,21 @@ export function createPainting({ viewer, wireUniforms }) {
       -((e.clientY - r.top) / r.height) * 2 + 1
     );
     ray.setFromCamera(_ndc, viewer.camera);
+    return pickRay(ray.ray.origin, ray.ray.direction);
+  }
 
+  /**
+   * The same pick, from a ray somebody else built.
+   *
+   * Split out for symmetry, which is a *ray* mirrored rather than a hit
+   * mirrored. Reflecting the point the pen landed on and looking for the nearest
+   * surface there sounds equivalent and is not: on anything thin — a fin, an
+   * ear, the far wall of a cylinder — the nearest surface to the mirrored point
+   * is as often the wrong side as the right one, and the paint lands inside the
+   * model. Mirroring the ray asks the same question from the other side, and
+   * gets the same kind of answer.
+   */
+  function pickRay(origin, direction) {
     let best = null;
     let bestDistance = Infinity;
 
@@ -1183,8 +1207,8 @@ export function createPainting({ viewer, wireUniforms }) {
       // The ray goes into the mesh's space rather than the mesh's triangles
       // coming out into the world: one matrix against a hundred thousand.
       _inv.copy(o.matrixWorld).invert();
-      _o.copy(ray.ray.origin).applyMatrix4(_inv);
-      _d.copy(ray.ray.direction).transformDirection(_inv);
+      _o.copy(origin).applyMatrix4(_inv);
+      _d.copy(direction).transformDirection(_inv);
 
       const hit = bvhRaycast(bvh, _o.x, _o.y, _o.z, _d.x, _d.y, _d.z);
       if (!hit) return;
@@ -1192,7 +1216,7 @@ export function createPainting({ viewer, wireUniforms }) {
       _p.copy(_d).multiplyScalar(hit.t).add(_o).applyMatrix4(o.matrixWorld);
       // Compared in world units, because `hit.t` is in each mesh's own scale and
       // two meshes at different scales cannot be ranked by it.
-      const distance = ray.ray.origin.distanceTo(_p);
+      const distance = origin.distanceTo(_p);
       if (distance >= bestDistance) return;
 
       const a = bvh.corners[hit.tri * 3];
@@ -1235,6 +1259,51 @@ export function createPainting({ viewer, wireUniforms }) {
     return Math.max(topo.edge * 1.5, topo.radius * size) * unit;
   }
 
+  const _mo = new THREE.Vector3();
+  const _md = new THREE.Vector3();
+  const _box = new THREE.Box3();
+  const _centre = new THREE.Vector3();
+  const _rootInv = new THREE.Matrix4();
+
+  /**
+   * The same ray, seen from the other side of the model.
+   *
+   * **In the model's own space, not the world's.** The orientation buttons turn
+   * `viewer.root`, and a mirror across a world axis would therefore swing away
+   * from the model's own symmetry the moment anybody turned it a quarter turn —
+   * the plane has to belong to the thing being painted, not to the room.
+   *
+   * The plane passes through the middle of the model rather than through the
+   * origin. Plenty of assets are authored centred and plenty are not, and one
+   * exported with its feet at the origin would otherwise mirror to somewhere off
+   * in space, which reads as symmetry simply not working.
+   *
+   * @returns {[THREE.Vector3, THREE.Vector3]|null} origin and direction, or null
+   *   when there is nothing to mirror about
+   */
+  function mirrorRay(origin, direction) {
+    if (!symmetry.on) return null;
+    const root = viewer.root;
+    root.updateMatrixWorld();
+    _box.setFromObject(root);
+    if (_box.isEmpty()) return null;
+    _box.getCenter(_centre);
+
+    const axis = symmetry.axis;
+    _rootInv.copy(root.matrixWorld).invert();
+    // Into the model's space, where the axis means what the person means by it.
+    _mo.copy(origin).applyMatrix4(_rootInv);
+    _md.copy(direction).transformDirection(_rootInv);
+    const mid = _centre.clone().applyMatrix4(_rootInv)[axis];
+
+    _mo[axis] = 2 * mid - _mo[axis];
+    _md[axis] = -_md[axis];
+
+    _mo.applyMatrix4(root.matrixWorld);
+    _md.transformDirection(root.matrixWorld);
+    return [_mo, _md];
+  }
+
   /**
    * Build the welded topology and the hierarchy before they are needed.
    *
@@ -1264,6 +1333,25 @@ export function createPainting({ viewer, wireUniforms }) {
         bvhOf(topologyOf(o.geometry), o, viewer);
       });
     }, 0);
+  }
+
+  /**
+   * What the pointer is over on the far side of the mirror, if anything.
+   *
+   * Nothing is a perfectly ordinary answer, and not an error: half the strokes
+   * on a symmetric model run along the middle, where the mirrored ray leaves by
+   * the same hole it came in. The stroke simply paints once there.
+   */
+  function pickMirror(e) {
+    if (!symmetry.on) return null;
+    const r = canvas.getBoundingClientRect();
+    _ndc.set(
+      ((e.clientX - r.left) / r.width) * 2 - 1,
+      -((e.clientY - r.top) / r.height) * 2 + 1
+    );
+    ray.setFromCamera(_ndc, viewer.camera);
+    const m = mirrorRay(ray.ray.origin, ray.ray.direction);
+    return m ? pickRay(m[0], m[1]) : null;
   }
 
   function moveCursor(hit, pressure) {
@@ -1328,12 +1416,43 @@ export function createPainting({ viewer, wireUniforms }) {
       ) {
         liveGuide.points.push([local.x, local.y, local.z]);
         if (liveGuide.points.length >= 2) drawGuide(liveGuide);
+
+        /*
+         * The mirrored curve is traced from its own hits, not by reflecting the
+         * points of this one.
+         *
+         * Reflecting the coordinates would be one line and would put the curve
+         * *through* the surface wherever the model is not perfectly symmetric —
+         * which is most scanned or sculpted assets. Following the mirrored ray
+         * keeps the twin on the surface it is drawn on, which is the only place
+         * a guide means anything.
+         */
+        const twin = pickMirror(e);
+        if (twin) {
+          if (!liveTwin) {
+            liveTwin = {
+              mesh: twin.object,
+              kind: guideKind,
+              points: [],
+              object: null,
+              radiusScale: brush.size,
+              strength: brush.strength,
+            };
+          }
+          if (twin.object === liveTwin.mesh) {
+            const p = twin.object.worldToLocal(twin.point.clone());
+            liveTwin.points.push([p.x, p.y, p.z]);
+            if (liveTwin.points.length >= 2) drawGuide(liveTwin);
+          }
+        }
         viewer.invalidate?.();
       }
       return;
     }
 
     stamp(hit, pressure);
+    const twin = pickMirror(e);
+    if (twin) stamp(twin, pressure);
 
     /*
      * Fill in the gap since the last sample.
@@ -1361,12 +1480,17 @@ export function createPainting({ viewer, wireUniforms }) {
       const steps = Math.min(8, Math.floor(gap / stepPx));
       for (let i = 1; i < steps; i++) {
         const t = i / steps;
-        const midHit = pickSurface({
+        const between = {
           clientX: lastScreen.x + (e.clientX - lastScreen.x) * t,
           clientY: lastScreen.y + (e.clientY - lastScreen.y) * t,
           pointerType: e.pointerType,
-        });
+        };
+        const midHit = pickSurface(between);
         if (midHit) stamp(midHit, pressure);
+        // The mirror applies to the filled-in dabs too, or a fast stroke comes
+        // out solid on one side and dotted on the other.
+        const midTwin = pickMirror(between);
+        if (midTwin) stamp(midTwin, pressure);
       }
     }
     if (!lastScreen) lastScreen = { x: 0, y: 0 };
@@ -1471,21 +1595,31 @@ export function createPainting({ viewer, wireUniforms }) {
     capture(e.pointerId, false);
     if (viewer.controls) viewer.controls.enabled = true;
 
-    if (tool === "guide" && liveGuide) {
-      const topo = topologyOf(liveGuide.mesh.geometry);
-      liveGuide.points = simplify(liveGuide.points, topo.edge * 0.4);
-      if (liveGuide.points.length >= 2) {
-        drawGuide(liveGuide);
-        guides.push(liveGuide);
-        undoStack.push({ guide: liveGuide });
+    if (tool === "guide" && (liveGuide || liveTwin)) {
+      const kept = [];
+      for (const curve of [liveGuide, liveTwin]) {
+        if (!curve) continue;
+        const topo = topologyOf(curve.mesh.geometry);
+        curve.points = simplify(curve.points, topo.edge * 0.4);
+        if (curve.points.length >= 2) {
+          drawGuide(curve);
+          guides.push(curve);
+          kept.push(curve);
+        } else {
+          // A tap rather than a stroke. Nothing to keep, and nothing to leave
+          // hanging in the scene either.
+          curve.object?.parent?.remove(curve.object);
+        }
+      }
+      if (kept.length) {
+        // One entry for the pair, so one undo takes back one gesture rather
+        // than leaving half a symmetric guide behind.
+        undoStack.push({ guides: kept });
         redoStack.length = 0;
         changed();
-      } else {
-        // A tap rather than a stroke. Nothing to keep, and nothing to leave
-        // hanging in the scene either.
-        liveGuide.object?.parent?.remove(liveGuide.object);
       }
       liveGuide = null;
+      liveTwin = null;
       return;
     }
     endStroke();
@@ -1701,6 +1835,13 @@ export function createPainting({ viewer, wireUniforms }) {
       refreshUniforms();
       changed();
     },
+    get symmetry() {
+      return symmetry;
+    },
+    setSymmetry(patch) {
+      Object.assign(symmetry, patch);
+      onChange?.();
+    },
     setGuideKind(next) {
       guideKind = next === "flow" ? "flow" : "crease";
       onChange?.();
@@ -1733,10 +1874,12 @@ export function createPainting({ viewer, wireUniforms }) {
     undo() {
       const entry = undoStack.pop();
       if (!entry) return false;
-      if (entry.guide) {
-        const i = guides.indexOf(entry.guide);
-        if (i >= 0) guides.splice(i, 1);
-        entry.guide.object?.parent?.remove(entry.guide.object);
+      if (entry.guides) {
+        for (const g of entry.guides) {
+          const i = guides.indexOf(g);
+          if (i >= 0) guides.splice(i, 1);
+          g.object?.parent?.remove(g.object);
+        }
         redoStack.push(entry);
         changed();
         return true;
@@ -1747,10 +1890,11 @@ export function createPainting({ viewer, wireUniforms }) {
     redo() {
       const entry = redoStack.pop();
       if (!entry) return false;
-      if (entry.guide) {
-        guides.push(entry.guide);
-        drawGuide(entry.guide);
-        if (entry.guide.object) entry.guide.mesh.add(entry.guide.object);
+      if (entry.guides) {
+        for (const g of entry.guides) {
+          guides.push(g);
+          drawGuide(g);
+        }
         undoStack.push(entry);
         changed();
         return true;

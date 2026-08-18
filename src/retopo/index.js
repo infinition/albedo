@@ -183,6 +183,19 @@ const SHELL = `
       <label class="rt-check"><input type="checkbox" data-el="pPressureSize" checked /><span data-i18n="rt.pressureSize">La pression change la taille</span></label>
       <label class="rt-check"><input type="checkbox" data-el="pPressureStrength" checked /><span data-i18n="rt.pressureStrength">La pression change la force</span></label>
 
+      <p class="rt-sub" data-i18n="rt.symmetry">Symétrie</p>
+      <div class="rt-menu-row" role="group" data-i18n-aria="rt.symmetry" aria-label="Symétrie">
+        <button class="seg active" type="button" data-sym="" data-i18n="rt.symOff">Aucune</button>
+        <button class="seg" type="button" data-sym="x">X</button>
+        <button class="seg" type="button" data-sym="y">Y</button>
+        <button class="seg" type="button" data-sym="z">Z</button>
+      </div>
+      <p class="rt-hint" data-i18n="rt.symHint">Le plan passe par le milieu du modèle et suit ses axes à
+        lui, pas ceux de la pièce : tourner le modèle ne fait pas dériver la
+        symétrie. Le trait miroir est retracé depuis sa propre surface plutôt
+        que recopié, donc il reste posé même sur un modèle qui n'est pas
+        parfaitement symétrique.</p>
+
       <p class="rt-sub" data-i18n="rt.guideKind">Guide</p>
       <div class="segment" role="group" data-i18n-aria="rt.guideKind" aria-label="Guide">
         <button class="seg active" type="button" data-guide="crease" data-i18n="rt.guideCrease">Pli</button>
@@ -1727,6 +1740,10 @@ export function createRetopo({
     for (const b of el.menu.querySelectorAll("[data-guide]")) {
       b.classList.toggle("active", b.dataset.guide === painting.guideKind);
     }
+    const sym = painting.symmetry;
+    for (const b of el.menu.querySelectorAll("[data-sym]")) {
+      b.classList.toggle("active", b.dataset.sym === (sym.on ? sym.axis : ""));
+    }
     setPressed(el.paintView, painting.view);
     el.paintUndo.disabled = !painting.canUndo;
     el.paintRedo.disabled = !painting.canRedo;
@@ -1772,6 +1789,13 @@ export function createRetopo({
       // two to get the camera back.
       painting.setTool(painting.tool === next ? null : next);
       if (painting.tool) showPane?.("retopo");
+      syncPaint();
+    });
+  }
+  for (const b of el.menu.querySelectorAll("[data-sym]")) {
+    b.addEventListener("click", () => {
+      const axis = b.dataset.sym;
+      painting.setSymmetry({ on: !!axis, axis: axis || painting.symmetry.axis });
       syncPaint();
     });
   }
