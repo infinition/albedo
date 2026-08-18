@@ -197,6 +197,13 @@ export const ICONS = {
      <circle cx="13.6" cy="3.2" r="1" fill="#ffb020" stroke="none"/>`
   ),
 
+  /** Clone: a stamp, and the mark it copies from. */
+  brushClone: wrap(
+    `<circle cx="5" cy="5" r="2.2" stroke="#7cc4ff" stroke-dasharray="1.4 1.2"/>
+     <path d="M7.4 13.4h6.2v-1.6a3.1 3.1 0 0 0-6.2 0z" stroke="#7cc4ff"/>
+     <path d="M10.5 10.2V8.4" stroke="#7cc4ff"/>`
+  ),
+
   /** Show the painting, or stop showing it: an eye over a swatch. */
   paintView: wrap(
     `<path d="M1.6 8s2.4-3.8 6.4-3.8S14.4 8 14.4 8s-2.4 3.8-6.4 3.8S1.6 8 1.6 8z"/>

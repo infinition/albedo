@@ -358,6 +358,8 @@ const BAR_PAINT = `
               data-i18n-title="rt.toolRegion" title="Zone : la seule partie que ce calcul a le droit de modifier"></button>
       <button class="tb-i" type="button" data-tool="guide" data-icon="brushGuide"
               data-i18n-title="rt.toolGuide" title="Guide : tracer un pli ou un sens de boucles sur la surface"></button>
+      <button class="tb-i" type="button" data-tool="clone" data-icon="brushClone"
+              data-i18n-title="rt.toolClone" title="Tampon : Alt-clic pour poser la source, puis peindre pour recopier"></button>
     </div>
     <button class="tb-i tb-t" type="button" data-el="paintView" data-icon="paintView" aria-pressed="true"
             data-i18n-title="rt.paintViewTitle" title="Montrer ce qui est peint"></button>
@@ -1772,6 +1774,12 @@ export function createRetopo({
     el.paintCounts.innerHTML = rows.length
       ? rows.map(([k, n]) => `<div><dt>${k}</dt><dd>${fr(n)}</dd></div>`).join("")
       : "";
+    if (painting.tool === "clone") {
+      el.paintHint.textContent = painting.cloneReady
+        ? t("rt.cloneReady")
+        : t("rt.cloneNeedsSource");
+      return;
+    }
     el.paintHint.textContent = !rows.length
       ? t("rt.paintNothing")
       : !el.pUse.checked
@@ -1781,6 +1789,16 @@ export function createRetopo({
           : t("rt.paintReady");
   }
   painting.onChange = syncPaint;
+  /*
+   * The two refusals the clone has, said in words rather than by doing nothing.
+   *
+   * A brush that ignores the pen is the least debuggable thing an interface can
+   * do, and both of these are ordinary states rather than faults: nobody has
+   * picked a source yet, or this mesh has no texture to retouch because it has
+   * never been baked.
+   */
+  painting.onNeedSource = () => say2(t("rt.cloneNeedsSource"));
+  painting.onNeedTexture = () => say2(t("rt.cloneNeedsTexture"));
 
   for (const b of toolButtons) {
     b.addEventListener("click", () => {

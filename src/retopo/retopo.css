@@ -515,3 +515,4 @@ body.inspector #retopo .rt-bar {
 #viewbar [data-tool="freeze"].active { color: #b98cff; }
 #viewbar [data-tool="region"].active { color: #4ade80; }
 #viewbar [data-tool="guide"].active { color: #ffb020; }
+#viewbar [data-tool="clone"].active { color: #7cc4ff; }

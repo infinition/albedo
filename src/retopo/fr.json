@@ -201,5 +201,9 @@
   "rt.texelsPatched": "Texels retouchés",
   "rt.symmetry": "Symétrie",
   "rt.symOff": "Aucune",
-  "rt.symHint": "Le plan passe par le milieu du modèle et suit ses axes à lui, pas ceux de la pièce : tourner le modèle ne fait pas dériver la symétrie. Le trait miroir est retracé depuis sa propre surface plutôt que recopié, donc il reste posé même sur un modèle qui n'est pas parfaitement symétrique."
+  "rt.symHint": "Le plan passe par le milieu du modèle et suit ses axes à lui, pas ceux de la pièce : tourner le modèle ne fait pas dériver la symétrie. Le trait miroir est retracé depuis sa propre surface plutôt que recopié, donc il reste posé même sur un modèle qui n'est pas parfaitement symétrique.",
+  "rt.toolClone": "Tampon : Alt-clic pour poser la source, puis peindre pour recopier la texture par-dessus un défaut",
+  "rt.cloneNeedsSource": "Alt-clic quelque part sur le modèle pour dire d'où copier, puis peins.",
+  "rt.cloneNeedsTexture": "Ce maillage n'a pas de texture à retoucher : il faut un bake d'abord.",
+  "rt.cloneReady": "Source posée. Chaque trait recommence à copier depuis elle. Le tampon ne touche que la couleur de base."
 }

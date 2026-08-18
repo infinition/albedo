@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import * as texturePaint from "./texture.js";
 
 /**
  * Painting on the model, so the retopology can be told where to care.
@@ -268,6 +269,9 @@ function topologyOf(geometry) {
     /** A welded point back to the render vertices that share it, as CSR. */
     renderStart: null,
     renderList: null,
+    /** A welded point to the triangles that touch it, as CSR. */
+    triStart: null,
+    triList: null,
     /** Median edge length, for deciding how close a sample has to be. */
     edge: 0,
   };
@@ -686,6 +690,9 @@ export function createPainting({ viewer, wireUniforms }) {
   const redoStack = [];
 
   let onChange = null;
+  /** Said by the host, which owns the words: no source yet, or no texture. */
+  let onNeedSource = null;
+  let onNeedTexture = null;
   const changed = () => {
     viewer.invalidate?.();
     onChange?.();
@@ -849,6 +856,8 @@ export function createPainting({ viewer, wireUniforms }) {
   function beginStroke() {
     strokeEdits = new Map();
     strokeReach = new Map();
+    cloneOffset = null;
+    cloneTouched.clear();
   }
 
   /**
@@ -937,6 +946,247 @@ export function createPainting({ viewer, wireUniforms }) {
     painted.add(mesh);
   }
 
+  /**
+   * A welded point back to the triangles that touch it.
+   *
+   * Built like the render map beside it, and for the same reason: the clone
+   * brush knows which *points* are under it, and has to rasterise the triangles
+   * those points belong to.
+   */
+  function triMapOf(topo) {
+    if (topo.triStart) return topo;
+    const degree = new Uint32Array(topo.count + 1);
+    for (let t = 0; t < topo.triCount; t++) {
+      for (let k = 0; k < 3; k++) degree[topo.tri[t * 3 + k]]++;
+    }
+    const start = new Uint32Array(topo.count + 1);
+    let running = 0;
+    for (let i = 0; i < topo.count; i++) {
+      start[i] = running;
+      running += degree[i];
+    }
+    start[topo.count] = running;
+    const list = new Uint32Array(running);
+    const fill = start.slice(0, topo.count);
+    for (let t = 0; t < topo.triCount; t++) {
+      for (let k = 0; k < 3; k++) list[fill[topo.tri[t * 3 + k]]++] = t;
+    }
+    topo.triStart = start;
+    topo.triList = list;
+    return topo;
+  }
+
+  /** Where the clone reads from: a point on the surface, and its coordinates. */
+  let cloneSource = null;
+  /** Set on the first dab of a stroke: how far, in texture space, to reach. */
+  let cloneOffset = null;
+  /** The marker showing where the source sits. */
+  const sourceMark = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0x4ade80, toneMapped: false, depthTest: false })
+  );
+  sourceMark.visible = false;
+  sourceMark.renderOrder = 1000;
+  sourceMark.raycast = () => {};
+  sourceMark.name = "clone-source";
+  viewer.scene.add(sourceMark);
+
+  /** Where the clone reads from, and the little sphere that says so. */
+  function setCloneSource(hit) {
+    const uv = uvAt(hit);
+    if (!uv) {
+      onNeedTexture?.();
+      return;
+    }
+    cloneSource = { mesh: hit.object, uv, point: hit.point.clone() };
+    cloneOffset = null;
+    sourceMark.position.copy(hit.point);
+    sourceMark.scale.setScalar(Math.max(1e-4, brushRadius(hit.object) * 0.12));
+    sourceMark.visible = true;
+    changed();
+  }
+
+  /** The one material the clone may write into, for a given hit. */
+  function albedoMaterialOf(mesh) {
+    const m = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    return m?.map ? m : null;
+  }
+
+  /** Texture coordinate under a hit, interpolated across the triangle. */
+  function uvAt(hit) {
+    const uv = hit.object.geometry.attributes.uv;
+    if (!uv) return null;
+    const { a, b, c } = hit.face;
+    const { u, v } = hit.bary;
+    const w = 1 - u - v;
+    return [
+      uv.getX(a) * w + uv.getX(b) * u + uv.getX(c) * v,
+      uv.getY(a) * w + uv.getY(b) * u + uv.getY(c) * v,
+    ];
+  }
+
+  /**
+   * Put down one dab of cloned texture.
+   *
+   * The footprint is found on the *surface* and then rasterised into the
+   * texture, never the other way round. A round brush in texture space is not a
+   * round brush on the model — the atlas stretches, and the same disc covers a
+   * thumbnail of surface on a dense island and a hand's width on a sparse one.
+   * Walking the mesh first and rasterising second is what makes the mark the
+   * size it looks.
+   */
+  function cloneStamp(hit, pressure) {
+    if (!cloneSource) return;
+    const mesh = hit.object;
+    const material = albedoMaterialOf(mesh);
+    if (!material) return;
+    const state = texturePaint.editable(material);
+    if (!state || !state.baseline) return;
+
+    const uvAttr = mesh.geometry.attributes.uv;
+    if (!uvAttr) return;
+    const here = uvAt(hit);
+    if (!here) return;
+    if (!cloneOffset) {
+      // Measured once per stroke, from where the pen went down: a stroke starts
+      // copying at the source and carries that displacement along with it, which
+      // is what makes covering a blemish predictable.
+      cloneOffset = [cloneSource.uv[0] - here[0], cloneSource.uv[1] - here[1]];
+    }
+
+    const topo = triMapOf(topologyOf(mesh.geometry));
+    /*
+     * The hierarchy is asked for the triangles' corners and positions, and both
+     * matter for a reason the other brushes never meet.
+     *
+     * **Corners**, because a welded point is several render vertices wherever a
+     * seam runs through it, and they do not share a texture coordinate — that
+     * disagreement *is* the seam. Taking any one of them gives a triangle whose
+     * coordinates come from both sides of the cut, which in texture space is not
+     * a triangle at all, and the dab lands nowhere.
+     *
+     * **Positions**, because on a skinned mesh the buffer holds the bind pose
+     * while the pen is touching the posed surface. Measuring the brush falloff
+     * from one against the other puts every texel further away than it is, and
+     * the whole footprint falls outside the radius.
+     */
+    const bvh = bvhOf(topo, mesh, viewer);
+    mesh.getWorldScale(_scale);
+    const unit = Math.max(1e-6, (_scale.x + _scale.y + _scale.z) / 3);
+    const size = brush.size * (brush.pressureSize ? 0.35 + 0.65 * pressure : 1);
+    const radius = Math.max(topo.edge * 1.5, topo.radius * size);
+    const flow = brush.strength * (brush.pressureStrength ? 0.15 + 0.85 * pressure : 1);
+
+    const centre = mesh.worldToLocal(hit.point.clone());
+    const seeds = [topo.weldOf[hit.face.a], topo.weldOf[hit.face.b], topo.weldOf[hit.face.c]];
+    const reached = walkSurface(topo, seeds, radius);
+    if (!reached.length) return;
+
+    // Every triangle touching a point the brush reached, once.
+    const faces = new Set();
+    for (const [v] of reached) {
+      for (let i = topo.triStart[v]; i < topo.triStart[v + 1]; i++) faces.add(topo.triList[i]);
+    }
+
+    const { width: tw, height: th, flipY } = { ...state, flipY: state.texture.flipY };
+    const toY = (v) => (flipY ? 1 - v : v) * th;
+
+    // The rectangle of texels this dab can possibly touch, so the canvas is read
+    // and written once over a brush-sized patch rather than a map-sized one.
+    let lo = [Infinity, Infinity];
+    let hi = [-Infinity, -Infinity];
+    const corners = [];
+    for (const t of faces) {
+      const r = [bvh.corners[t * 3], bvh.corners[t * 3 + 1], bvh.corners[t * 3 + 2]];
+      const uv = r.map((i) => [uvAttr.getX(i), uvAttr.getY(i)]);
+      corners.push({ r, uv });
+      for (const [u, v] of uv) {
+        lo[0] = Math.min(lo[0], u * tw);
+        lo[1] = Math.min(lo[1], toY(v));
+        hi[0] = Math.max(hi[0], u * tw);
+        hi[1] = Math.max(hi[1], toY(v));
+      }
+    }
+    const x0 = Math.max(0, Math.floor(lo[0]) - 1);
+    const y0 = Math.max(0, Math.floor(lo[1]) - 1);
+    const x1 = Math.min(tw, Math.ceil(hi[0]) + 1);
+    const y1 = Math.min(th, Math.ceil(hi[1]) + 1);
+    if (x1 <= x0 || y1 <= y0) return;
+
+    const patch = state.ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
+    const out = patch.data;
+    const src = [0, 0, 0, 0];
+    const pos = bvh.position;
+    const st = bvh.stride;
+    const pa = new THREE.Vector3();
+    const pb = new THREE.Vector3();
+    const pc = new THREE.Vector3();
+    const at = new THREE.Vector3();
+    let painted = 0;
+
+    for (const { r, uv } of corners) {
+      const [ua, ub, uc] = uv;
+      const den = (ub[1] - uc[1]) * (ua[0] - uc[0]) + (uc[0] - ub[0]) * (ua[1] - uc[1]);
+      if (Math.abs(den) < 1e-12) continue;
+      pa.set(pos[r[0] * st], pos[r[0] * st + 1], pos[r[0] * st + 2]);
+      pb.set(pos[r[1] * st], pos[r[1] * st + 1], pos[r[1] * st + 2]);
+      pc.set(pos[r[2] * st], pos[r[2] * st + 1], pos[r[2] * st + 2]);
+
+      const bx0 = Math.max(x0, Math.floor(Math.min(ua[0], ub[0], uc[0]) * tw) - 1);
+      const bx1 = Math.min(x1, Math.ceil(Math.max(ua[0], ub[0], uc[0]) * tw) + 1);
+      const by0 = Math.max(y0, Math.floor(Math.min(toY(ua[1]), toY(ub[1]), toY(uc[1]))) - 1);
+      const by1 = Math.min(y1, Math.ceil(Math.max(toY(ua[1]), toY(ub[1]), toY(uc[1]))) + 1);
+
+      for (let y = by0; y < by1; y++) {
+        for (let x = bx0; x < bx1; x++) {
+          const u = (x + 0.5) / tw;
+          const vRow = (y + 0.5) / th;
+          const v = flipY ? 1 - vRow : vRow;
+          // Barycentric in texture space: which part of this triangle is here.
+          const l0 = ((ub[1] - uc[1]) * (u - uc[0]) + (uc[0] - ub[0]) * (v - uc[1])) / den;
+          const l1 = ((uc[1] - ua[1]) * (u - uc[0]) + (ua[0] - uc[0]) * (v - uc[1])) / den;
+          const l2 = 1 - l0 - l1;
+          if (l0 < -1e-4 || l1 < -1e-4 || l2 < -1e-4) continue;
+
+          // The same weights on the positions: where this texel is on the model.
+          at.set(
+            pa.x * l0 + pb.x * l1 + pc.x * l2,
+            pa.y * l0 + pb.y * l1 + pc.y * l2,
+            pa.z * l0 + pb.z * l1 + pc.z * l2
+          );
+          const w = falloffAt(at.distanceTo(centre) / radius, brush.hardness) * flow;
+          if (w <= 0.002) continue;
+
+          /*
+           * Read from the picture as it stood before the stroke.
+           *
+           * Sampling the live canvas is how a clone brush eats its own tail: a
+           * stroke that crosses its own source copies what it has just painted,
+           * and the pattern smears into a streak within one gesture.
+           */
+          texturePaint.sample(state.baseline, u + cloneOffset[0], v + cloneOffset[1], flipY, src);
+          const o = ((y - y0) * (x1 - x0) + (x - x0)) * 4;
+          for (let k = 0; k < 4; k++) {
+            out[o + k] = Math.round(out[o + k] + (src[k] - out[o + k]) * w);
+          }
+          painted++;
+        }
+      }
+    }
+
+    if (!painted) return;
+    state.ctx.putImageData(patch, x0, y0);
+    state.texture.needsUpdate = true;
+    cloneTouched.add(material);
+    cloneEdited.add(material);
+    viewer.invalidate?.();
+  }
+
+  /** Materials this stroke has written into, so one undo puts them all back. */
+  const cloneTouched = new Set();
+  /** Every material the clone has ever written into, for the wipe. */
+  const cloneEdited = new Set();
+
   function endStroke() {
     /*
      * The last dabs reach the shader here, rather than waiting for a frame.
@@ -947,6 +1197,31 @@ export function createPainting({ viewer, wireUniforms }) {
      * of a stroke painted in the data and missing from the picture.
      */
     flushPaint();
+
+    /*
+     * A clone stroke is undone as pixels, not as values.
+     *
+     * The other brushes record numbers on welded points and can put back exactly
+     * what they replaced. This one has written into an image, and the honest way
+     * back is the image as it stood when the pen went down — which is already in
+     * hand, because the clone had to read from it anyway to avoid sampling its
+     * own output.
+     */
+    if (cloneTouched.size) {
+      const shots = [];
+      for (const material of cloneTouched) {
+        const state = material.userData.albedoPaint;
+        if (!state) continue;
+        shots.push({ material, before: texturePaint.endStroke(state), after: texturePaint.snapshot(state) });
+      }
+      cloneTouched.clear();
+      if (shots.length) {
+        undoStack.push({ pixels: shots });
+        redoStack.length = 0;
+        changed();
+      }
+    }
+
     if (!strokeEdits || !strokeEdits.size) {
       strokeEdits = strokeReach = null;
       return;
@@ -1133,6 +1408,7 @@ export function createPainting({ viewer, wireUniforms }) {
     freeze: 0xb98cff,
     region: 0x4ade80,
     guide: 0xffb020,
+    clone: 0x7cc4ff,
   };
 
   /** Scratch for picking, so a pointer move at pen rate allocates nothing. */
@@ -1240,6 +1516,10 @@ export function createPainting({ viewer, wireUniforms }) {
         distance,
         point: _p.clone(),
         face: { a, b, c, normal: _n.clone() },
+        // Möller–Trumbore hands these back for free, and the clone brush needs
+        // them: a texture coordinate at the point the pen is over is the whole
+        // question it asks. `u` weights the second corner and `v` the third.
+        bary: { u: hit.u, v: hit.v },
       };
     });
 
@@ -1450,9 +1730,10 @@ export function createPainting({ viewer, wireUniforms }) {
       return;
     }
 
-    stamp(hit, pressure);
+    const dab = tool === "clone" ? cloneStamp : stamp;
+    dab(hit, pressure);
     const twin = pickMirror(e);
-    if (twin) stamp(twin, pressure);
+    if (twin) dab(twin, pressure);
 
     /*
      * Fill in the gap since the last sample.
@@ -1486,11 +1767,11 @@ export function createPainting({ viewer, wireUniforms }) {
           pointerType: e.pointerType,
         };
         const midHit = pickSurface(between);
-        if (midHit) stamp(midHit, pressure);
+        if (midHit) dab(midHit, pressure);
         // The mirror applies to the filled-in dabs too, or a fast stroke comes
         // out solid on one side and dotted on the other.
         const midTwin = pickMirror(between);
-        if (midTwin) stamp(midTwin, pressure);
+        if (midTwin) dab(midTwin, pressure);
       }
     }
     if (!lastScreen) lastScreen = { x: 0, y: 0 };
@@ -1555,6 +1836,37 @@ export function createPainting({ viewer, wireUniforms }) {
     // way round" — which is what they mean in every application that has a
     // brush, so it is not a shortcut to be learnt here.
     polarity = e.buttons & 32 || e.altKey || e.ctrlKey ? -1 : 1;
+
+    if (tool === "clone") {
+      /*
+       * Alt picks the source, because Alt picks the source in every application
+       * that has ever had a clone stamp. Nothing here is worth teaching somebody
+       * a different key for.
+       */
+      if (e.altKey || e.ctrlKey || e.buttons & 32) {
+        setCloneSource(hit);
+        drawing = false;
+        if (viewer.controls) viewer.controls.enabled = true;
+        return;
+      }
+      if (!cloneSource) {
+        // Nothing to copy from. Said out loud by the caller, which owns the
+        // words; here it is simply not a stroke.
+        drawing = false;
+        if (viewer.controls) viewer.controls.enabled = true;
+        onNeedSource?.();
+        return;
+      }
+      const material = albedoMaterialOf(hit.object);
+      const state = material && texturePaint.editable(material);
+      if (!state) {
+        drawing = false;
+        if (viewer.controls) viewer.controls.enabled = true;
+        onNeedTexture?.();
+        return;
+      }
+      texturePaint.beginStroke(state);
+    }
     // The camera lets go for the duration. Same mechanism the light and lens
     // drags in `navigation.js` use, so there is one way this is done.
     if (viewer.controls) viewer.controls.enabled = false;
@@ -1825,6 +2137,7 @@ export function createPainting({ viewer, wireUniforms }) {
       // gone the moment there is no brush.
       canvas.style.cursor = tool ? "crosshair" : "";
       canvas.style.touchAction = tool ? "none" : "";
+      sourceMark.visible = tool === "clone" && !!cloneSource;
       if (!tool) {
         cursor.visible = false;
         if (viewer.controls) viewer.controls.enabled = true;
@@ -1884,6 +2197,15 @@ export function createPainting({ viewer, wireUniforms }) {
         changed();
         return true;
       }
+      if (entry.pixels) {
+        for (const shot of entry.pixels) {
+          const state = shot.material.userData.albedoPaint;
+          if (state) texturePaint.restore(state, shot.before);
+        }
+        redoStack.push(entry);
+        changed();
+        return true;
+      }
       redoStack.push(applyEdits(entry));
       return true;
     },
@@ -1894,6 +2216,15 @@ export function createPainting({ viewer, wireUniforms }) {
         for (const g of entry.guides) {
           guides.push(g);
           drawGuide(g);
+        }
+        undoStack.push(entry);
+        changed();
+        return true;
+      }
+      if (entry.pixels) {
+        for (const shot of entry.pixels) {
+          const state = shot.material.userData.albedoPaint;
+          if (state) texturePaint.restore(state, shot.after);
         }
         undoStack.push(entry);
         changed();
@@ -1927,6 +2258,25 @@ export function createPainting({ viewer, wireUniforms }) {
         }
         syncAttribute(mesh);
       }
+      /*
+       * The wipe means everything, cloned pixels included.
+       *
+       * They are a different kind of edit — an image rather than a value on a
+       * point — and it would be defensible to leave them. It would also be a
+       * button labelled "erase everything" that leaves something, which is the
+       * kind of small lie nobody forgives twice. The map goes back to the one the
+       * bake produced, and the canvas is dropped rather than kept holding an
+       * identical copy of it.
+       */
+      if (what === "all") {
+        for (const material of cloneEdited) texturePaint.discard(material);
+        cloneEdited.clear();
+        cloneTouched.clear();
+        cloneSource = null;
+        cloneOffset = null;
+        sourceMark.visible = false;
+      }
+
       // The history described a painting that no longer exists.
       undoStack.length = 0;
       redoStack.length = 0;
@@ -1971,10 +2321,16 @@ export function createPainting({ viewer, wireUniforms }) {
       };
     },
 
-    /** Is there anything at all for the engine to read? */
+    /**
+     * Is there anything at all to wipe?
+     *
+     * Cloned pixels count, even though the engine never reads them: this answer
+     * drives the wipe button, and a button greyed out over a model somebody has
+     * just painted on is a button that lies about the state of their work.
+     */
     get empty() {
       const s = api.stats();
-      return !s.density && !s.freeze && !s.region && !s.guides;
+      return !s.density && !s.freeze && !s.region && !s.guides && !cloneEdited.size;
     },
 
     /** Every mesh that carries something, so the run knows which to hand over. */
@@ -2059,6 +2415,21 @@ export function createPainting({ viewer, wireUniforms }) {
     set onChange(cb) {
       onChange = cb;
     },
+    set onNeedSource(cb) {
+      onNeedSource = cb;
+    },
+    set onNeedTexture(cb) {
+      onNeedTexture = cb;
+    },
+    get cloneReady() {
+      return !!cloneSource;
+    },
+    clearCloneSource() {
+      cloneSource = null;
+      cloneOffset = null;
+      sourceMark.visible = false;
+      changed();
+    },
 
     dispose() {
       canvas.removeEventListener("pointerdown", onPointerDown, opts);
@@ -2070,6 +2441,9 @@ export function createPainting({ viewer, wireUniforms }) {
       cursor.geometry.dispose();
       cursor.material.dispose();
       cursor.parent?.remove(cursor);
+      sourceMark.geometry.dispose();
+      sourceMark.material.dispose();
+      sourceMark.parent?.remove(sourceMark);
       api.clear("all");
       canvas.style.cursor = "";
       canvas.style.touchAction = "";

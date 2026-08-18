@@ -201,5 +201,9 @@
   "rt.texelsPatched": "Texels retouched",
   "rt.symmetry": "Symmetry",
   "rt.symOff": "None",
-  "rt.symHint": "The plane runs through the middle of the model and follows its own axes, not the room's: turning the model does not make the symmetry drift. The mirrored stroke is traced from its own surface rather than copied, so it stays on the model even where the model is not perfectly symmetric."
+  "rt.symHint": "The plane runs through the middle of the model and follows its own axes, not the room's: turning the model does not make the symmetry drift. The mirrored stroke is traced from its own surface rather than copied, so it stays on the model even where the model is not perfectly symmetric.",
+  "rt.toolClone": "Clone: Alt-click to set the source, then paint to copy the texture over a defect",
+  "rt.cloneNeedsSource": "Alt-click somewhere on the model to say where to copy from, then paint.",
+  "rt.cloneNeedsTexture": "This mesh has no texture to retouch: it needs a bake first.",
+  "rt.cloneReady": "Source set. Every stroke starts copying from it again. The clone only touches base colour."
 }
