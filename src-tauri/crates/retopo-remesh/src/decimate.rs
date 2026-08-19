@@ -444,8 +444,8 @@ impl<'a> Decimator<'a> {
          * `4^(d * influence)`: paint +1 and this edge costs four times what it
          * did, so it is collapsed four times later; paint -1 and it costs a
          * quarter and goes first. Exponential rather than linear because the two
-         * halves have to be symmetric — a brush that makes things twice as dear
-         * and only half as cheap is a brush whose eraser does not undo it — and
+         * halves have to be symmetric, a brush that makes things twice as dear
+         * and only half as cheap is a brush whose eraser does not undo it, and
          * because a multiplier of zero, which a linear map reaches, would mean
          * "free" rather than "cheap" and pull the whole heap out of order.
          */
@@ -1140,7 +1140,7 @@ mod tests {
         for p in &frozen {
             assert!(survives(&out, *p), "a frozen point at {p} was collapsed away");
         }
-        // And the run still did its job on the half it was allowed to touch —
+        // And the run still did its job on the half it was allowed to touch,
         // while stopping short of the budget, which is the honest outcome when
         // half the model has been declared off limits.
         let free = decimate(

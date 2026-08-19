@@ -242,8 +242,8 @@ pub struct RemeshReport {
     //
     // Reported rather than left to be inferred from the picture. A brush whose
     // effect you can only judge by eye is a brush you cannot tell from one that
-    // silently did nothing, and the failure mode that matters here — a sidecar
-    // whose points do not land on this mesh — produces exactly that: a run that
+    // silently did nothing, and the failure mode that matters here, a sidecar
+    // whose points do not land on this mesh, produces exactly that: a run that
     // looks ordinary and ignored everything you drew.
     /// Painted points in the sidecar.
     pub paint_samples: usize,
@@ -329,8 +329,8 @@ pub fn remesh_file(
      * What was painted on this mesh, if anything.
      *
      * Read from a sidecar beside the *input*, not the output: it describes the
-     * model going in. Absent is the ordinary case and not an error — most runs
-     * have no painting — but a sidecar that exists and cannot be read is, because
+     * model going in. Absent is the ordinary case and not an error, most runs
+     * have no painting, but a sidecar that exists and cannot be read is, because
      * a brush that silently does nothing is indistinguishable from a brush that
      * is broken.
      *
@@ -1287,7 +1287,7 @@ pub async fn retopo_decimate(
          * The painting's own settings, forwarded like everything else.
          *
          * The painting itself is not passed: the child finds it beside the input
-         * file on its own. That is the point of the sidecar — a hundred thousand
+         * file on its own. That is the point of the sidecar, a hundred thousand
          * painted points would not fit on a command line, and this is the same
          * arrangement `.quads`, `.dev` and `.charts` already use on the way back.
          */

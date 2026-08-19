@@ -197,7 +197,7 @@
   "rt.keepUv": "Garder les UV du résultat",
   "rt.patchBake": "Ne recuire que la zone peinte",
   "rt.feather": "Fondu au bord",
-  "rt.patchHint": "Peins la zone à refaire, change ce qu'il faut — la cage d'abord — et relance le bake : le reste de la texture ne bouge pas d'un octet. Ça n'a de sens que sur un résultat déjà cuit, et ça se lit dans le bilan : « Texels retouchés ».",
+  "rt.patchHint": "Peins la zone à refaire, change ce qu'il faut, la cage d'abord, et relance le bake : le reste de la texture ne bouge pas d'un octet. Ça n'a de sens que sur un résultat déjà cuit, et ça se lit dans le bilan : « Texels retouchés ».",
   "rt.texelsPatched": "Texels retouchés",
   "rt.symmetry": "Symétrie",
   "rt.symOff": "Aucune",

@@ -107,7 +107,7 @@ pub fn isotropic(
     let source = Bvh::build(mesh);
     let mut d = Dyn::from_mesh(mesh);
     /*
-     * The band the edge lengths converge into — and, when something was painted,
+     * The band the edge lengths converge into, and, when something was painted,
      * only the *middle* of it. `local` below multiplies both ends by the same
      * factor, so the ratio between the long and the short limit is preserved
      * wherever you stand on the model: what the brush moves is the size of the
@@ -284,8 +284,8 @@ impl Dyn {
          * `HashMap` in std uses a hasher seeded per instance, so
          * `into_iter().collect()` handed the passes below a *different* edge
          * order every time this function was called. Split, collapse and flip
-         * are all greedy and order dependent — whichever edge is visited first
-         * changes what its neighbours are still allowed to do — so the same
+         * are all greedy and order dependent, whichever edge is visited first
+         * changes what its neighbours are still allowed to do, so the same
          * model at the same settings came out with a different triangle count
          * on every run. Measured on a 48x32 sphere at a 3000 triangle target:
          * 846 one run, 856 the next, from identical inputs.

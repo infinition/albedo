@@ -86,14 +86,14 @@ pub struct Atlas {
 ///
 /// **A bake regenerates the UV layout every time, and that is the thing that
 /// makes a second bake useless as a correction.** Change a cage distance and
-/// re-run, and what comes back is not a fixed version of the texture you had —
+/// re-run, and what comes back is not a fixed version of the texture you had,
 /// it is a different texture, with the islands somewhere else. Nothing can be
 /// compared against the previous result, nothing can be patched into it, and any
 /// work done downstream of the first bake is thrown away.
 ///
 /// So: when a mesh already has coordinates worth keeping, keep them. The bake
-/// then answers a question it could not answer before — "shoot these rays again,
-/// into the picture I already have" — and that is what makes a partial re-bake
+/// then answers a question it could not answer before, "shoot these rays again,
+/// into the picture I already have", and that is what makes a partial re-bake
 /// possible at all.
 ///
 /// # Charts, for free
@@ -102,7 +102,7 @@ pub struct Atlas {
 /// triangle belongs to, and it does not have to be guessed: **unwrapping is
 /// exactly the act of splitting vertices at chart borders.** Two triangles in a
 /// laid-out mesh share a render vertex if and only if they are in the same
-/// island — the seam is the duplication. So the charts fall out of a union-find
+/// island, the seam is the duplication. So the charts fall out of a union-find
 /// over the triangles' own corners, with no geometry and no angle threshold
 /// involved.
 ///
@@ -139,8 +139,8 @@ pub fn from_uvs(mesh: &Mesh) -> Option<Atlas> {
         chart_of_tri.push(*label.entry(root).or_insert(next));
     }
 
-    // Utilisation is reported the same way `unwrap` reports it — the share of
-    // the square the charts actually cover — so the two paths can be compared in
+    // Utilisation is reported the same way `unwrap` reports it, the share of
+    // the square the charts actually cover, so the two paths can be compared in
     // the same column of the same report.
     let mut uv_area = 0.0f32;
     let mut world_area = 0.0f32;
@@ -881,7 +881,7 @@ mod tests {
     #[test]
     fn an_existing_layout_is_taken_as_it_stands() {
         // Unwrap once, then read the result back: the second atlas has to be the
-        // first one, because that is the whole promise — a re-bake that does not
+        // first one, because that is the whole promise, a re-bake that does not
         // move anything.
         let mesh = box_mesh();
         let made = unwrap(&mesh, &AtlasOptions::default());
@@ -897,7 +897,7 @@ mod tests {
 
     #[test]
     fn a_mesh_that_was_never_unwrapped_is_refused() {
-        // No coordinates at all, and coordinates that are all zero — which is how
+        // No coordinates at all, and coordinates that are all zero, which is how
         // several exporters write "there is no unwrap here". Both have to be told
         // apart from a real layout rather than rasterised onto one texel.
         let mut bare = box_mesh();

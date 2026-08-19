@@ -7,8 +7,8 @@
 //! and no cost function can know it. All of that is knowledge the person looking
 //! at the model already has, and until now there was nowhere to put it.
 //!
-//! This module is the place. The interface paints it — density, freeze, the
-//! region to work in, and guide curves along the edges that matter — and writes
+//! This module is the place. The interface paints it, density, freeze, the
+//! region to work in, and guide curves along the edges that matter, and writes
 //! it beside the GLB as one sidecar file. Everything downstream reads it through
 //! [`PaintField`].
 //!
@@ -19,7 +19,7 @@
 //! three.js, and between the two there is an exporter that may split a primitive
 //! per material, a reader that concatenates primitives, a weld pass, and a
 //! degenerate-triangle cull. Any one of those shifts the numbering, and a
-//! shifted paint mask is not an error — it is a *plausible* mask, applied to the
+//! shifted paint mask is not an error, it is a *plausible* mask, applied to the
 //! wrong places, which is the worst shape a bug can take in a tool whose output
 //! you judge by eye.
 //!
@@ -31,7 +31,7 @@
 //!
 //! It also buys something the index encoding could never give: the field is
 //! *spatial*, so it can be asked about a point that is not a vertex at all. That
-//! is what lets the isotropic remesher — which creates vertices as it runs —
+//! is what lets the isotropic remesher, which creates vertices as it runs,
 //! honour a density painted on the original.
 
 use std::collections::HashMap;
@@ -47,8 +47,8 @@ const MAGIC: &[u8; 8] = b"ALBPNT01";
 /// A guide the person drew along the surface.
 #[derive(Clone, Debug)]
 pub struct Guide {
-    /// 0 — a crease: hold this line, the result must still have an edge here.
-    /// 1 — a flow: edges along this direction are worth keeping, edges across it
+    /// 0, a crease: hold this line, the result must still have an edge here.
+    /// 1, a flow: edges along this direction are worth keeping, edges across it
     ///     are the ones to spend.
     pub kind: u32,
     /// How far from the curve the guide reaches, in model units.
@@ -405,7 +405,7 @@ impl PaintField {
     /// **The plain queries look one match radius away, and one match radius is a
     /// quarter of an edge of the mesh that was painted.** That is exactly right
     /// when the question is "was *this vertex* painted", and useless when it is
-    /// "is this place inside the painted region" — which is what the bake asks,
+    /// "is this place inside the painted region", which is what the bake asks,
     /// about a low poly whose vertices are nowhere near the ones the brush
     /// touched. Asked at the wrong scale, a region painted over a whole ear
     /// answers "outside" for every triangle of the low poly covering it, and the
@@ -584,7 +584,7 @@ mod tests {
      * the two halves of the feature, written in two languages against one
      * paragraph of documentation, still agree. It was produced by driving
      * `src/retopo/paint.js` with real pointer events over a 2x2 plane placed at
-     * x = 0.5 — a region dab and one crease guide — and captured as it came out.
+     * x = 0.5, a region dab and one crease guide, and captured as it came out.
      *
      * If a future change to either side breaks the layout, this fails here
      * rather than in a run that silently ignores everything the artist drew.

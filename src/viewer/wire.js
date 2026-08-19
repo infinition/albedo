@@ -220,7 +220,7 @@ export function makeWireUniforms() {
      * Its own uniform rather than being read off the attribute, because the
      * question is about the whole model: with a region painted, everything
      * outside it is greyed, including meshes that carry no attribute at all and
-     * would otherwise read as zero — which is the correct answer here, and only
+     * would otherwise read as zero, which is the correct answer here, and only
      * because this flag says a region exists to be outside of.
      */
     uPaintRegion: { value: 0 },
@@ -392,7 +392,7 @@ if (uXray > 0.5) {
  * the pair you actually work with: the tint says where, the wire says how dense.
  */
 if (uPaint > 0.5) {
-  // Outside a region that was painted: greyed and darkened. Not hidden — you
+  // Outside a region that was painted: greyed and darkened. Not hidden, you
   // still have to see the shape you are not working on to judge the boundary.
   if (uPaintRegion > 0.5 && vPaint.z < 0.5) {
     float grey = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));

@@ -481,7 +481,7 @@ body.inspector #retopo .rt-bar {
  * A list of label-and-number rows rather than a sentence, for the same reason
  * the run's report is: painting is the one part of this mode with no preview
  * button, so the only proof a brush reached the model is the number it moved.
- * The list is empty until something has been painted — an empty row of zeros
+ * The list is empty until something has been painted, an empty row of zeros
  * says the same thing as no row at all, and takes space to say it.
  */
 .rt-paint-counts {

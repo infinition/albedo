@@ -165,15 +165,15 @@ const SHELL = `
       -->
       <p class="rt-sub" data-i18n="rt.brush">Pinceau</p>
       <label class="rt-field">
-        <span><span data-i18n="rt.brushSize">Taille</span> <span class="rt-num" data-el="pSizeValue">—</span></span>
+        <span><span data-i18n="rt.brushSize">Taille</span> <span class="rt-num" data-el="pSizeValue">, </span></span>
         <input type="range" data-el="pSize" min="0.5" max="35" step="0.5" value="6" />
       </label>
       <label class="rt-field">
-        <span><span data-i18n="rt.brushStrength">Force</span> <span class="rt-num" data-el="pStrengthValue">—</span></span>
+        <span><span data-i18n="rt.brushStrength">Force</span> <span class="rt-num" data-el="pStrengthValue">, </span></span>
         <input type="range" data-el="pStrength" min="0.05" max="1" step="0.05" value="0.6" />
       </label>
       <label class="rt-field">
-        <span><span data-i18n="rt.brushHardness">Dureté</span> <span class="rt-num" data-el="pHardnessValue">—</span></span>
+        <span><span data-i18n="rt.brushHardness">Dureté</span> <span class="rt-num" data-el="pHardnessValue">, </span></span>
         <input type="range" data-el="pHardness" min="0" max="1" step="0.05" value="0.25" />
       </label>
       <p class="rt-hint" data-i18n="rt.brushHint">Maj + molette change la taille sans quitter le modèle
@@ -208,11 +208,11 @@ const SHELL = `
 
       <p class="rt-sub" data-i18n="rt.influence">Ce que le moteur en fait</p>
       <label class="rt-field">
-        <span><span data-i18n="rt.densityInfluence">Poids de la densité</span> <span class="rt-num" data-el="pDensityValue">—</span></span>
+        <span><span data-i18n="rt.densityInfluence">Poids de la densité</span> <span class="rt-num" data-el="pDensityValue">, </span></span>
         <input type="range" data-el="pDensity" min="0" max="1" step="0.05" value="0.75" />
       </label>
       <label class="rt-field">
-        <span><span data-i18n="rt.flowInfluence">Poids du flux</span> <span class="rt-num" data-el="pFlowValue">—</span></span>
+        <span><span data-i18n="rt.flowInfluence">Poids du flux</span> <span class="rt-num" data-el="pFlowValue">, </span></span>
         <input type="range" data-el="pFlow" min="0" max="1" step="0.05" value="0.5" />
       </label>
       <label class="rt-check"><input type="checkbox" data-el="pUse" checked /><span data-i18n="rt.usePaint">Lire la peinture au prochain calcul</span></label>
@@ -271,11 +271,11 @@ const SHELL = `
       <label class="rt-check"><input type="checkbox" data-el="mKeepUv" /><span data-i18n="rt.keepUv">Garder les UV du résultat</span></label>
       <label class="rt-check"><input type="checkbox" data-el="mPatch" /><span data-i18n="rt.patchBake">Ne recuire que la zone peinte</span></label>
       <label class="rt-field">
-        <span><span data-i18n="rt.feather">Fondu au bord</span> <span class="rt-num" data-el="mFeatherValue">—</span></span>
+        <span><span data-i18n="rt.feather">Fondu au bord</span> <span class="rt-num" data-el="mFeatherValue">, </span></span>
         <input type="range" data-el="mFeather" min="0" max="64" step="1" value="8" />
       </label>
-      <p class="rt-hint" data-i18n="rt.patchHint">Peins la zone à refaire, change ce qu'il faut — la cage
-        d'abord — et relance le bake : le reste de la texture ne bouge pas d'un
+      <p class="rt-hint" data-i18n="rt.patchHint">Peins la zone à refaire, change ce qu'il faut, la cage
+        d'abord, et relance le bake : le reste de la texture ne bouge pas d'un
         octet. Ça n'a de sens que sur un résultat déjà cuit, et ça se lit dans le
         bilan : « Texels retouchés ».</p>
     </div>
@@ -339,7 +339,7 @@ const BAR_SCENE = `
  * A group of its own beside Scène, because it answers a different question from
  * every other group in the bar: not "how am I looking at this" but "what am I
  * telling the engine about it". The tools are a radio plate for the same reason
- * the A/B modes are — only one hand is on the pen at a time — and the first
+ * the A/B modes are, only one hand is on the pen at a time, and the first
  * position is *no brush*, which is what makes the pointer the camera's again
  * without hunting for the tool you last used to switch it off.
  */
@@ -1877,8 +1877,8 @@ export function createRetopo({
    * because that is what Ctrl+Z means everywhere and nobody is going to hunt for
    * a button in a bar while looking at a mark they just made by accident.
    *
-   * Registered on the document because the canvas does not take focus — clicking
-   * it paints — so a key listener on it would never fire. Scoped to the mode
+   * Registered on the document because the canvas does not take focus, clicking
+   * it paints, so a key listener on it would never fire. Scoped to the mode
    * being open, and to *this* undo: the run history has its own buttons and its
    * own meaning, and a key that sometimes takes back a brush stroke and
    * sometimes a twenty second decimation would be worse than no key at all.
@@ -2021,8 +2021,8 @@ export function createRetopo({
    * What turns a bake into a retouch, and why it is not in `bakeRequest`.
    *
    * These two only mean something to a *second* bake. A first one has no layout
-   * worth keeping — the coordinates the low poly arrives with are the source's,
-   * not an atlas — and no picture to patch into, so carrying them into the run
+   * worth keeping, the coordinates the low poly arrives with are the source's,
+   * not an atlas, and no picture to patch into, so carrying them into the run
    * button would offer a correction of something that does not exist yet.
    */
   const patchRequest = () => ({
@@ -2345,8 +2345,8 @@ export function createRetopo({
      * Two reasons, either one enough. The sidecar goes *beside the input*, so
      * taking this path would write a `.paint` file into the person's own asset
      * folder next to their model. And the painted points are in the coordinates
-     * of the scene as it stands — turned by the orientation buttons, moved by
-     * the handles — which is what an export writes and is not what the file on
+     * of the scene as it stands, turned by the orientation buttons, moved by
+     * the handles, which is what an export writes and is not what the file on
      * disk contains.
      */
     const paintBytes = usePaint() ? painting.sidecarFor(mesh) : null;
@@ -2394,7 +2394,7 @@ export function createRetopo({
      * Same arrangement the results already use for the quad mask, the deviation
      * and the chart ids: glTF has nowhere to put any of them, and inventing a
      * custom vertex semantic is what made the engine refuse whole files once
-     * already — see the note above about `_ABARY`.
+     * already, see the note above about `_ABARY`.
      */
     if (paintBytes) await writeFile(`${path}.paint`, paintBytes);
     return path;
@@ -2454,7 +2454,7 @@ export function createRetopo({
      * painted the only detail on the table is the region's own: everything else
      * is locked and cannot be spent. Asking the engine for ten percent of a
      * whole head while only the face may be touched is a target it cannot reach
-     * — it grinds through every remaining candidate and gives up — and the
+     * it grinds through every remaining candidate and gives up, and the
      * result then looks like a slider that stopped working.
      *
      * So the percentage is spent inside the region and the rest is counted as
@@ -2699,7 +2699,7 @@ export function createRetopo({
          * Not reused from the run that made this pair: it would be the region as
          * it was *before* anyone had seen the result, which is the one moment
          * nobody has an opinion about where the bake went wrong. Cheap enough to
-         * redo — a few thousand points — and it is the difference between
+         * redo, a few thousand points, and it is the difference between
          * retouching what you just painted and retouching what you painted ten
          * minutes ago.
          */

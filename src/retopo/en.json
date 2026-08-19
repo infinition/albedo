@@ -197,7 +197,7 @@
   "rt.keepUv": "Keep the result's UVs",
   "rt.patchBake": "Only re-bake the painted region",
   "rt.feather": "Edge fade",
-  "rt.patchHint": "Paint the area to redo, change what needs changing — the cage first — and bake again: the rest of the texture does not move a byte. It only means something on a result that has already been baked, and the report says so: “Texels retouched”.",
+  "rt.patchHint": "Paint the area to redo, change what needs changing, the cage first, and bake again: the rest of the texture does not move a byte. It only means something on a result that has already been baked, and the report says so: “Texels retouched”.",
   "rt.texelsPatched": "Texels retouched",
   "rt.symmetry": "Symmetry",
   "rt.symOff": "None",

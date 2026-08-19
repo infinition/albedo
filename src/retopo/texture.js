@@ -6,7 +6,7 @@ import * as THREE from "three";
  * The maps that come back from a bake arrive as ordinary textures: an image
  * decoded by the loader, uploaded once, and read-only from then on. Correcting a
  * defect in one means getting at those pixels, changing a few thousand of them,
- * and getting the result back onto the card — none of which a `THREE.Texture`
+ * and getting the result back onto the card, none of which a `THREE.Texture`
  * over an `ImageBitmap` offers.
  *
  * So the first stroke swaps the map for a canvas holding the same pixels. From
@@ -161,7 +161,7 @@ export function restore(state, image) {
  * Give the material its original map back and forget the canvas.
  *
  * Used when a painting is wiped: the point of a wipe is that nothing is left,
- * and a canvas holding a copy of the same pixels is not nothing — it is a second
+ * and a canvas holding a copy of the same pixels is not nothing, it is a second
  * texture on the card and a different object in the exported file.
  */
 export function discard(material) {

@@ -67,9 +67,9 @@ pub struct BakeOptions {
 /// A bake confined to what was painted.
 ///
 /// **The reason this exists is the cage, and the cage is per-model today.** A
-/// bake failure is almost always local — rays too short to reach an ear that
+/// bake failure is almost always local, rays too short to reach an ear that
 /// pokes out of the low poly, or long enough to cross a gap and cook the wrong
-/// surface — and the only cure available was to change the distance for the
+/// surface, and the only cure available was to change the distance for the
 /// whole model and re-shoot every texel. That trades the fault you can see for a
 /// fault somewhere else, and costs a minute each time you try.
 ///
@@ -84,7 +84,7 @@ pub struct PatchOptions {
     ///
     /// Not decoration. Two bakes with different cages disagree by a little
     /// *everywhere*, not only where the first one was wrong, so a patch dropped
-    /// in with a hard edge shows as a rectangle of slightly different shading —
+    /// in with a hard edge shows as a rectangle of slightly different shading,
     /// and shows worse at every mip level, where the two sides average together.
     pub feather: u32,
 }
@@ -251,7 +251,7 @@ pub fn bake(
      * `previous` is what the low poly is carrying, which for a mesh that came out
      * of this function is exactly the maps it wrote last time. A channel the
      * previous bake did not produce comes back empty, and a channel this run is
-     * not producing keeps whatever it had — so switching occlusion on for a patch
+     * not producing keeps whatever it had, so switching occlusion on for a patch
      * gives occlusion in the patch and nothing elsewhere, which is honest and
      * visible rather than silently half-done.
      */
@@ -387,7 +387,7 @@ fn existing_maps(low: &Mesh, res: u32) -> Maps {
         return Maps::default();
     };
     // Only maps at the resolution this run is writing are usable. A patch cannot
-    // change the atlas size — the layout would still line up, since coordinates
+    // change the atlas size, the layout would still line up, since coordinates
     // are normalised, but every texel of the old picture would have to be
     // resampled, and a resampled texture is not the one the rest of the model
     // was judged against.
@@ -449,7 +449,7 @@ fn triangles_in_region(atlas: &atlas::Atlas, field: &retopo_core::PaintField) ->
             let c = atlas.positions[f[2] as usize];
             // The centre and the corners. A triangle straddling the border of the
             // region counts as inside, so the patch reaches the edge of what was
-            // painted rather than stopping a triangle short of it — the feather
+            // painted rather than stopping a triangle short of it, the feather
             // below is what softens that boundary, not a ragged mask.
             let centre = (a + b + c) / 3.0;
             field.in_region_within(centre, reach)
@@ -1677,8 +1677,8 @@ mod tests {
     #[test]
     fn a_patch_leaves_everything_outside_the_region_byte_for_byte() {
         // The promise a patch makes. Re-bake half the model with a cage four
-        // times longer — a setting that changes the result everywhere it is
-        // applied — and the other half has to come back untouched.
+        // times longer, a setting that changes the result everywhere it is
+        // applied, and the other half has to come back untouched.
         let (low, high) = patch_pair();
         let mut opts = BakeOptions { bake_normal: false, ..Default::default() };
         opts.atlas.resolution = 64;
@@ -1797,8 +1797,8 @@ mod tests {
 
     #[test]
     fn the_feather_only_fades_where_the_patch_meets_the_old_bake() {
-        // A weight of zero at the border, one deep inside, and — the part worth
-        // testing — one all the way to the edge of an island, where there is no
+        // A weight of zero at the border, one deep inside, and, the part worth
+        // testing, one all the way to the edge of an island, where there is no
         // previous result to fade into.
         let res = 32u32;
         let mut coverage: Vec<Option<Cover>> = vec![None; (res * res) as usize];

@@ -4,7 +4,7 @@ import * as texturePaint from "./texture.js";
 /**
  * Painting on the model, so the retopology can be told where to care.
  *
- * The rest of this mode asks one question — how many triangles — and applies the
+ * The rest of this mode asks one question, how many triangles, and applies the
  * answer everywhere. That is the right shape for a first pass and the wrong
  * shape for the work that follows it. The face needs its detail and the back of
  * the skull does not. The bolt heads have to survive and the plate they sit on
@@ -14,13 +14,13 @@ import * as texturePaint from "./texture.js";
  *
  * So: four brushes and a pen.
  *
- * - **Densité** — where triangles are worth spending, from −1 to +1. Neutral
+ * - **Densité** where triangles are worth spending, from −1 to +1. Neutral
  *   everywhere by default, which is the identity: an unpainted model decimates
  *   exactly as it always did.
- * - **Geler** — never touch this. Hard, not a preference.
- * - **Zone** — the only part of the model this run may modify at all. Paint the
+ * - **Geler** never touch this. Hard, not a preference.
+ * - **Zone** the only part of the model this run may modify at all. Paint the
  *   face, run, and the hands come back untouched, vertex for vertex.
- * - **Guides** — curves drawn along the surface. A *pli* is a promise that the
+ * - **Guides** curves drawn along the surface. A *pli* is a promise that the
  *   result still has an edge there; a *flux* says which way the loops should
  *   run, so the edges along it are kept and the ones across it are spent.
  *
@@ -118,7 +118,7 @@ class Heap {
  * stamp. Keyed on the geometry object rather than on the mesh: `prepareWire`
  * replaces a geometry with a non-indexed copy the first time the wireframe is
  * switched on, and a cache keyed on the mesh would then be describing a buffer
- * that is no longer there — silently, with every index off by however much the
+ * that is no longer there, silently, with every index off by however much the
  * expansion shifted things.
  */
 const CACHE = new WeakMap();
@@ -149,7 +149,7 @@ function topologyOf(geometry) {
    * vertex mesh that is a million short-lived strings before a single stroke has
    * been drawn, and the pause before the brush answers is what people feel. The
    * quantised coordinates are integers, so they can be mixed into one number and
-   * the buckets compared exactly — the hash only has to find the candidates, the
+   * the buckets compared exactly, the hash only has to find the candidates, the
    * comparison decides.
    */
   const buckets = new Map();
@@ -344,12 +344,12 @@ function walkSurface(topo, seeds, radius) {
  *
  * **This exists because three's own raycast is linear, and a brush asks the
  * question forty times a second.** Measured here, on a thirty one thousand
- * triangle model — a small one — `Raycaster.intersectObject` cost eighteen
+ * triangle model, a small one, `Raycaster.intersectObject` cost eighteen
  * milliseconds a call. The brush asks it for every pointer move, for every
  * coalesced sample behind that move, and again for each step of the fill-in
  * between two samples, so one flick of the pen asked it a hundred times: the
- * paint arrived a second after the hand. The stamp itself — the geodesic walk
- * and the attribute write — measured about one millisecond, so everything else
+ * paint arrived a second after the hand. The stamp itself, the geodesic walk
+ * and the attribute write, measured about one millisecond, so everything else
  * was already fast enough and none of it was the problem.
  *
  * Median split over centroids, eight triangles a leaf, flat typed arrays. Not
@@ -450,15 +450,15 @@ function buildBvh(topo, geometry, posed = null) {
     /*
      * Longest axis, split at the middle of the box, partitioned in place.
      *
-     * This was a sort per node — `Array.from(subarray).sort(comparator)` — which
+     * This was a sort per node, `Array.from(subarray).sort(comparator)`, which
      * is a fresh JavaScript array and a comparator call per pair at every level
      * of the tree. It is also more than the question needs: a split does not
      * care about the order within each half, only which half each triangle is
      * in, and that is one linear pass.
      *
      * The spatial midpoint rather than the median count, because it is what
-     * makes the boxes tight; when it degenerates — every centroid on one side,
-     * which a flat cap or a lathe of coplanar triangles really does produce —
+     * makes the boxes tight; when it degenerates, every centroid on one side,
+     * which a flat cap or a lathe of coplanar triangles really does produce,
      * the halfway index is the fallback, and the tree stays balanced instead of
      * turning into a list.
      */
@@ -496,7 +496,7 @@ function buildBvh(topo, geometry, posed = null) {
  *
  * A `SkinnedMesh` keeps its bind pose in the buffer and lets the GPU move it, so
  * a hierarchy built over `position` describes a shape that is not on screen. The
- * brush would then land somewhere the surface used to be — worse than slow,
+ * brush would then land somewhere the surface used to be, worse than slow,
  * because it looks like it worked.
  *
  * This was the whole of the performance complaint, and it was hiding: skinned
@@ -506,8 +506,8 @@ function buildBvh(topo, geometry, posed = null) {
  * milliseconds a move.
  *
  * The pose is a key rather than a subscription: rebuilt when the animation has
- * moved since the last look, and on a model that is not playing — which is every
- * model anyone paints on — computed exactly once.
+ * moved since the last look, and on a model that is not playing, which is every
+ * model anyone paints on, computed exactly once.
  */
 function poseKey(mesh, viewer) {
   if (!mesh.isSkinnedMesh) return 0;
@@ -742,8 +742,8 @@ export function createPainting({ viewer, wireUniforms }) {
   /**
    * Welded points whose value has moved since the last frame, per mesh.
    *
-   * Painting used to rewrite the whole vertex buffer after every dab — three
-   * floats per render vertex, then a full upload to the GPU — and a stroke is
+   * Painting used to rewrite the whole vertex buffer after every dab, three
+   * floats per render vertex, then a full upload to the GPU, and a stroke is
    * hundreds of dabs. Now a dab only records which points it touched, and one
    * pass a frame writes those and nothing else.
    */
@@ -787,7 +787,7 @@ export function createPainting({ viewer, wireUniforms }) {
   /**
    * Rewrite one mesh's whole attribute.
    *
-   * Only for the wholesale changes — an undo, a wipe, a document coming back —
+   * Only for the wholesale changes, an undo, a wipe, a document coming back,
    * where "which points moved" is "all of them" and tracking them individually
    * would cost more than the pass it saves.
    */
@@ -839,7 +839,7 @@ export function createPainting({ viewer, wireUniforms }) {
    * has the same shape: state that belongs to *looking at* the model, held on
    * the model rather than on the surface that offers it.
    *
-   * The painting itself is untouched — it is work, and closing a panel is not a
+   * The painting itself is untouched, it is work, and closing a panel is not a
    * reason to throw work away. It comes back, drawn, when the mode does.
    */
   let attached = true;
@@ -890,7 +890,7 @@ export function createPainting({ viewer, wireUniforms }) {
 
     // The brush is a size on the model, and the model has a scale. The walk
     // below runs in the geometry's own units, so a mesh scaled to a tenth must
-    // not get a brush ten times too big — which is what happens whenever a model
+    // not get a brush ten times too big, which is what happens whenever a model
     // arrives in centimetres and the importer normalises it.
     mesh.getWorldScale(_scale);
     const unit = Math.max(1e-6, (_scale.x + _scale.y + _scale.z) / 3);
@@ -1030,7 +1030,7 @@ export function createPainting({ viewer, wireUniforms }) {
    *
    * The footprint is found on the *surface* and then rasterised into the
    * texture, never the other way round. A round brush in texture space is not a
-   * round brush on the model — the atlas stretches, and the same disc covers a
+   * round brush on the model, the atlas stretches, and the same disc covers a
    * thumbnail of surface on a dense island and a hand's width on a sparse one.
    * Walking the mesh first and rasterising second is what makes the mark the
    * size it looks.
@@ -1060,7 +1060,7 @@ export function createPainting({ viewer, wireUniforms }) {
      * matter for a reason the other brushes never meet.
      *
      * **Corners**, because a welded point is several render vertices wherever a
-     * seam runs through it, and they do not share a texture coordinate — that
+     * seam runs through it, and they do not share a texture coordinate, that
      * disagreement *is* the seam. Taking any one of them gives a triangle whose
      * coordinates come from both sides of the cut, which in texture space is not
      * a triangle at all, and the dab lands nowhere.
@@ -1192,8 +1192,8 @@ export function createPainting({ viewer, wireUniforms }) {
      * The last dabs reach the shader here, rather than waiting for a frame.
      *
      * Painting batches its attribute writes into one pass per animation frame,
-     * which is what makes a stroke cheap. A frame that never comes — a window
-     * put behind another one, a tab in the background — would then leave the end
+     * which is what makes a stroke cheap. A frame that never comes, a window
+     * put behind another one, a tab in the background, would then leave the end
      * of a stroke painted in the data and missing from the picture.
      */
     flushPaint();
@@ -1203,7 +1203,7 @@ export function createPainting({ viewer, wireUniforms }) {
      *
      * The other brushes record numbers on welded points and can put back exactly
      * what they replaced. This one has written into an image, and the honest way
-     * back is the image as it stood when the pen went down — which is already in
+     * back is the image as it stood when the pen went down, which is already in
      * hand, because the clone had to read from it anyway to avoid sampling its
      * own output.
      */
@@ -1448,7 +1448,7 @@ export function createPainting({ viewer, wireUniforms }) {
    * Through this module's own hierarchy rather than `Raycaster.intersectObject`,
    * which walks every triangle of every mesh: see `buildBvh` for the measurement
    * that made this necessary. Skinned meshes go through it too, over their posed
-   * vertices — see `bvhOf`.
+   * vertices, see `bvhOf`.
    */
   function pickSurface(e) {
     const r = canvas.getBoundingClientRect();
@@ -1465,8 +1465,8 @@ export function createPainting({ viewer, wireUniforms }) {
    *
    * Split out for symmetry, which is a *ray* mirrored rather than a hit
    * mirrored. Reflecting the point the pen landed on and looking for the nearest
-   * surface there sounds equivalent and is not: on anything thin — a fin, an
-   * ear, the far wall of a cylinder — the nearest surface to the mirrored point
+   * surface there sounds equivalent and is not: on anything thin, a fin, an
+   * ear, the far wall of a cylinder, the nearest surface to the mirrored point
    * is as often the wrong side as the right one, and the paint lands inside the
    * model. Mirroring the ray asks the same question from the other side, and
    * gets the same kind of answer.
@@ -1550,7 +1550,7 @@ export function createPainting({ viewer, wireUniforms }) {
    *
    * **In the model's own space, not the world's.** The orientation buttons turn
    * `viewer.root`, and a mirror across a world axis would therefore swing away
-   * from the model's own symmetry the moment anybody turned it a quarter turn —
+   * from the model's own symmetry the moment anybody turned it a quarter turn,
    * the plane has to belong to the thing being painted, not to the room.
    *
    * The plane passes through the middle of the model rather than through the
@@ -1592,7 +1592,7 @@ export function createPainting({ viewer, wireUniforms }) {
    * milliseconds, and it scales with the mesh, so a real asset spends seconds
    * there. What that looks like from the outside is a pen that does nothing for
    * a moment and then dumps a blob of paint where the hand has already moved on
-   * from — the worst possible moment to make somebody wait, because it is the
+   * from, the worst possible moment to make somebody wait, because it is the
    * moment they are judging whether the tool works.
    *
    * The same work done when the *brush is chosen* costs exactly as much and is
@@ -1602,7 +1602,7 @@ export function createPainting({ viewer, wireUniforms }) {
    *
    * A timeout and not `requestAnimationFrame`: frames stop being delivered to a
    * window that is not on screen, and a warm-up that only happens when somebody
-   * is already looking is a warm-up that skips exactly the case it exists for —
+   * is already looking is a warm-up that skips exactly the case it exists for,
    * the brush picked up on one monitor while the model is on the other.
    */
   function warm() {
@@ -1702,7 +1702,7 @@ export function createPainting({ viewer, wireUniforms }) {
          * points of this one.
          *
          * Reflecting the coordinates would be one line and would put the curve
-         * *through* the surface wherever the model is not perfectly symmetric —
+         * *through* the surface wherever the model is not perfectly symmetric,
          * which is most scanned or sculpted assets. Following the mirrored ray
          * keeps the twin on the surface it is drawn on, which is the only place
          * a guide means anything.
@@ -1750,7 +1750,7 @@ export function createPainting({ viewer, wireUniforms }) {
        * A step of two thirds of the brush, and never more than eight of them.
        *
        * The spacing has to come from the brush rather than from a fixed number
-       * of pixels — the whole point is that consecutive dabs overlap — and the
+       * of pixels, the whole point is that consecutive dabs overlap, and the
        * cap has to be low. It was twenty four, which meant one flick of the pen
        * asked for two dozen extra picks *per coalesced sample*, hundreds in a
        * frame. Eight covers any gap a hand can leave between two samples at pen
@@ -1792,7 +1792,7 @@ export function createPainting({ viewer, wireUniforms }) {
    * Take or give back the pointer, and survive being refused.
    *
    * `setPointerCapture` throws `NotFoundError` whenever the id is not an active
-   * pointer — a synthetic event, a pen the browser has already released, a
+   * pointer, a synthetic event, a pen the browser has already released, a
    * pointer some other element captured first. Unguarded, that exception aborts
    * the listener *before* the stroke starts, and what the person sees is a brush
    * that does nothing at all, intermittently, with no error anywhere they would
@@ -1833,7 +1833,7 @@ export function createPainting({ viewer, wireUniforms }) {
     drawing = true;
     lastScreen = null;
     // The barrel button on a stylus, and the eraser end, both mean "the other
-    // way round" — which is what they mean in every application that has a
+    // way round", which is what they mean in every application that has a
     // brush, so it is not a shortcut to be learnt here.
     polarity = e.buttons & 32 || e.altKey || e.ctrlKey ? -1 : 1;
 
@@ -1881,7 +1881,7 @@ export function createPainting({ viewer, wireUniforms }) {
     if (e.pointerType === "pen") lastPen = performance.now();
     if (!drawing) {
       // Not drawing: this is only the ring following the pointer, and it must
-      // not eat the event — the camera is still the pointer's business.
+      // not eat the event, the camera is still the pointer's business.
       sample(e);
       return;
     }
@@ -2030,8 +2030,8 @@ export function createPainting({ viewer, wireUniforms }) {
      * How close a mesh vertex has to be to a sample to *be* that sample.
      *
      * A quarter of a median edge. Wide enough to absorb the float round trip
-     * through the GLB — the exporter writes single precision, and the world
-     * transform is applied on both sides in a different order — and narrow
+     * through the GLB, the exporter writes single precision, and the world
+     * transform is applied on both sides in a different order, and narrow
      * enough that a point can never claim its neighbour's paint.
      */
     const scale = new THREE.Vector3();
@@ -2261,8 +2261,8 @@ export function createPainting({ viewer, wireUniforms }) {
       /*
        * The wipe means everything, cloned pixels included.
        *
-       * They are a different kind of edit — an image rather than a value on a
-       * point — and it would be defensible to leave them. It would also be a
+       * They are a different kind of edit, an image rather than a value on a
+       * point, and it would be defensible to leave them. It would also be a
        * button labelled "erase everything" that leaves something, which is the
        * kind of small lie nobody forgives twice. The map goes back to the one the
        * bake produced, and the canvas is dropped rather than kept holding an
@@ -2367,7 +2367,7 @@ export function createPainting({ viewer, wireUniforms }) {
      *
      * Only the bookkeeping travels. The values themselves live on the geometry,
      * through the cache at the top of this file, so a parked document that still
-     * holds its objects still holds its paint — and one whose objects have been
+     * holds its objects still holds its paint, and one whose objects have been
      * released takes its paint with them, which is the right answer and costs
      * nothing to arrange.
      */
