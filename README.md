@@ -4,7 +4,7 @@
 
 # Albedo
 
-A local 3D asset viewer for Windows. Open a model, look at it properly, and inspect what it is actually made of. No account, no upload, no network round trip.
+A local 3D asset viewer for Windows. Open a model, look at it properly, and inspect what it is actually made of. No account, no upload, no network round trip. 
 
 Built with three.js inside a Tauri shell. The entire application is a 5.5 MB executable with nothing to install alongside it, and that figure now includes a retopology engine and a texture baker.
 
