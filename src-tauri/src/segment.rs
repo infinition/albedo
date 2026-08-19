@@ -8,9 +8,9 @@
 //! travels as a file rather than as a JSON array of numbers.
 //!
 //! What is different is the shape of the answer. Retopology hands back a mesh.
-//! Segmentation hands back four flat arrays about the mesh you already have —
+//! Segmentation hands back four flat arrays about the mesh you already have,
 //! which superface each triangle is in, which superfaces sit across its three
-//! edges, the merge order, and what each merge cost — and the interface turns
+//! edges, the merge order, and what each merge cost, and the interface turns
 //! those into every level of the hierarchy without asking again.
 //!
 //! **They are written as raw little-endian binary, not as JSON.** The existing
@@ -62,15 +62,80 @@ fn write_f32(path: &Path, values: &[f32]) -> Result<(), String> {
     std::fs::write(path, out).map_err(|e| format!("écriture de {} : {e}", path.display()))
 }
 
+/// Read a part label per triangle, as some other tool wrote it.
+///
+/// **This is the whole neural bridge.** PartField, P3-SAM and SAMesh all end at
+/// the same place, one integer per face and nothing else, so that is the only
+/// thing this has to understand, and understanding it is enough for the slider,
+/// the families, the split and the map to work on their answers without any of
+/// them learning where the answer came from.
+///
+/// Two spellings accepted, because those tools write both: a JSON array of
+/// numbers, which is what a Python demo dumps in one line, and raw
+/// little-endian `u32`, which is what `numpy.ndarray.tofile` produces.
+///
+/// The labels are in the *file's* numbering, so they go through the same
+/// renumbering the reader applied when it dropped degenerate faces. A label
+/// array of the wrong length is refused by name rather than trusted: it can only
+/// mean it describes a different mesh.
+fn read_labels(path: &Path, mesh: &retopo_core::Mesh) -> Result<Vec<u32>, String> {
+    let raw = std::fs::read(path).map_err(|e| format!("lecture de {}: {e}", path.display()))?;
+
+    let parsed: Vec<u32> = match serde_json::from_slice::<Vec<i64>>(&raw) {
+        Ok(list) => list.into_iter().map(|v| v.max(0) as u32).collect(),
+        Err(_) => {
+            if raw.len() % 4 != 0 || raw.is_empty() {
+                return Err(format!(
+                    "{} n'est ni un tableau JSON ni une suite d'entiers 32 bits",
+                    path.display()
+                ));
+            }
+            raw.chunks_exact(4)
+                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect()
+        }
+    };
+
+    // How many triangles the file had, which is what the labels are counted in.
+    let in_file = if mesh.from_source.is_empty() {
+        mesh.triangle_count()
+    } else {
+        mesh.from_source.len()
+    };
+    if parsed.len() != in_file {
+        return Err(format!(
+            "ce fichier d'étiquettes en compte {} alors que le modèle a {} triangles : il décrit un autre maillage",
+            parsed.len(),
+            in_file
+        ));
+    }
+
+    if mesh.from_source.is_empty() {
+        return Ok(parsed);
+    }
+    let mut out = vec![0u32; mesh.triangle_count()];
+    for (old, &new) in mesh.from_source.iter().enumerate() {
+        if new != u32::MAX {
+            out[new as usize] = parsed[old];
+        }
+    }
+    Ok(out)
+}
+
 /// Segment one file and leave the four sidecars beside `base`.
 pub fn segment_file(
     input: &Path,
     base: &Path,
     opts: &SegmentOptions,
+    labels: Option<&Path>,
     progress: &mut dyn FnMut(f32),
 ) -> Result<SegmentReport, String> {
     let mesh = glb::load_path(input).map_err(|e| format!("{e:#}"))?;
-    let result = retopo_segment::segment(&mesh, opts, progress);
+    let labels = match labels {
+        Some(path) => Some(read_labels(path, &mesh)?),
+        None => None,
+    };
+    let result = retopo_segment::segment_with(&mesh, opts, labels.as_deref(), progress);
     let d = &result.dendrogram;
 
     /*
@@ -81,9 +146,9 @@ pub fn segment_file(
      * break the BVH's surface area heuristic and turn quadric errors into NaN.
      * That is the right thing to do and it silently renumbers every triangle
      * after the first one dropped. A caller laying these ids back onto the mesh
-     * it exported would be off by that many from there on — a segmentation that
-     * renders perfectly and is wrong. Measured in practice: a 900,328 triangle
-     * column arrived at the engine as 900,290.
+     * it exported would be off by that many from there on, a segmentation that
+     * renders perfectly and is wrong. Measured in practice: a 900, 328 triangle
+     * column arrived at the engine as 900, 290.
      *
      * Dropped triangles get `u32::MAX`, which the viewer already reads as "no
      * group" and leaves alone. A zero-area triangle has nothing to paint anyway.
@@ -175,6 +240,7 @@ pub async fn segment_run(
     input: String,
     base: String,
     request: SegmentOptions,
+    labels: Option<String>,
 ) -> Result<SegmentReport, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
@@ -203,6 +269,9 @@ pub async fn segment_run(
         }
         if !request.barriers.shell {
             cmd.arg("--free-shells");
+        }
+        if let Some(path) = labels.filter(|p| !p.is_empty()) {
+            cmd.arg("--labels").arg(path);
         }
         crate::retopo::drive(&app, cmd, "segment://progress", &RUNNING, &CANCELLED)
     })
@@ -282,6 +351,13 @@ albedo segment <modèle.glb> [options]
   --superface-angle <a>   pli sous lequel la pré-fusion ne voit pas d'arête,
                           en degrés (défaut 3)
 
+  --labels <fichier>  partir d'étiquettes produites ailleurs, une par triangle,
+                      en tableau JSON ou en entiers 32 bits bruts. C'est par là
+                      qu'arrive un résultat de PartField, P3-SAM ou SAMesh : il
+                      devient une barrière, donc le découpage ne réunit jamais
+                      deux parts qu'il a séparées, et tout le reste continue de
+                      s'appliquer par-dessus.
+
   --machine          progression et rapport en lignes lisibles par la machine
 ";
 
@@ -300,6 +376,7 @@ pub fn cli_main() -> Option<i32> {
     let mut base: Option<String> = None;
     let mut groups: Option<usize> = None;
     let mut opts = SegmentOptions::default();
+    let mut labels: Option<PathBuf> = None;
     let mut machine = false;
 
     let mut i = 1;
@@ -350,6 +427,10 @@ pub fn cli_main() -> Option<i32> {
                 opts.barriers.shell = false;
                 i += 1;
             }
+            "--labels" => {
+                labels = take(i).map(PathBuf::from);
+                i += 2;
+            }
             "--machine" => {
                 machine = true;
                 i += 1;
@@ -388,7 +469,7 @@ pub fn cli_main() -> Option<i32> {
         }
     };
 
-    match segment_file(&input, &base, &opts, &mut progress) {
+    match segment_file(&input, &base, &opts, labels.as_deref(), &mut progress) {
         Ok(r) => {
             if machine {
                 println!("report {}", serde_json::to_string(&r).unwrap_or_default());
@@ -422,6 +503,9 @@ pub fn cli_main() -> Option<i32> {
                         "attention : {} arête(s) non manifold, les plis y sont approximatifs",
                         r.non_manifold_edges
                     );
+                }
+                if r.labels > 0 {
+                    println!("étiquettes importées : {} parts", r.labels);
                 }
                 println!("coupe demandée : {k} groupes");
             }

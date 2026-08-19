@@ -65,5 +65,11 @@
   "gr.mapDone": "{n} groups written",
   "gr.mapNothing": "Nothing to draw: the model has no UVs",
   "gr.mapDoneMany": "{n} groups, {k} maps (one per atlas)",
-  "gr.mapOverlap": "{n} groups share UV space with others and do not appear separately: a map cannot give the same texels two colours. Use the split for those."
+  "gr.mapOverlap": "{n} groups share UV space with others and do not appear separately: a map cannot give the same texels two colours. Use the split for those.",
+  "gr.nnTitle": "Imported labels",
+  "gr.nnPick": "Choose a file…",
+  "gr.nnDrop": "Remove",
+  "gr.nnFilter": "Per-face labels",
+  "gr.nnHint": "One label per triangle, produced by PartField, P3-SAM or SAMesh. It becomes a barrier: the split will never join two parts it separates, and everything else still applies on top.",
+  "gr.statLabels": "Labels"
 }

@@ -65,5 +65,11 @@
   "gr.mapDone": "{n} groupes écrits",
   "gr.mapNothing": "Rien à dessiner : le modèle n'a pas d'UV",
   "gr.mapDoneMany": "{n} groupes, {k} cartes (une par atlas)",
-  "gr.mapOverlap": "{n} groupes partagent leur espace UV avec d'autres et n'apparaissent pas séparément : une carte ne peut pas donner deux couleurs aux mêmes texels. Utilisez la découpe pour ceux-là."
+  "gr.mapOverlap": "{n} groupes partagent leur espace UV avec d'autres et n'apparaissent pas séparément : une carte ne peut pas donner deux couleurs aux mêmes texels. Utilisez la découpe pour ceux-là.",
+  "gr.nnTitle": "Étiquettes importées",
+  "gr.nnPick": "Choisir un fichier…",
+  "gr.nnDrop": "Retirer",
+  "gr.nnFilter": "Étiquettes par face",
+  "gr.nnHint": "Une étiquette par triangle, produite par PartField, P3-SAM ou SAMesh. Elle devient une barrière : le découpage ne réunira jamais deux parts qu'elle sépare, et tout le reste continue de s'appliquer par-dessus.",
+  "gr.statLabels": "Étiquettes"
 }

@@ -165,8 +165,8 @@ fn refuse_unreadable_images(root: &serde_json::Value) -> Result<()> {
 /// Give every texture the core `source` it is missing, borrowing it from
 /// whichever extension declared one instead.
 ///
-/// A texture is allowed to carry its image only under an extension —
-/// `EXT_texture_webp` and `KHR_texture_basisu` both do this — and a strict
+/// A texture is allowed to carry its image only under an extension,
+/// `EXT_texture_webp` and `KHR_texture_basisu` both do this, and a strict
 /// reader then rejects the whole document with "textures[0].source: Missing
 /// data". Clearing `extensionsRequired`, which is all this module used to do,
 /// makes that *worse* rather than better: the reader stops being told why the

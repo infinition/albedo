@@ -335,7 +335,7 @@ export function setGroupLut(uniforms, labels, marks = null) {
  * order the engine read them, which is the order they were written to the GLB,
  * and the exporter writes with `onlyVisible`. A traversal here would happily
  * count a hidden mesh the exporter skipped, and every id after it would land on
- * the wrong triangle — a segmentation that looks like a segmentation and is
+ * the wrong triangle, a segmentation that looks like a segmentation and is
  * shifted by however many triangles were hidden. The caller collects the list
  * once and uses the same one for both halves.
  *
@@ -384,7 +384,7 @@ export function ensureGroupAttributes(meshes, superOfFace, nbrOfFace) {
  * attribute is not absent as far as the shader is concerned: WebGL feeds a
  * disabled attribute the generic value, which is zero, and zero is a perfectly
  * good superface id. Deleting these would therefore paint the whole model in
- * group zero's colour rather than in none — the same plausible lie that the
+ * group zero's colour rather than in none, the same plausible lie that the
  * fill in `prepareWire` exists to prevent, arrived at from the other direction.
  */
 export function clearGroupAttributes(root) {
@@ -572,7 +572,7 @@ if (uView > 0.5) {
  * is derived rather than stored: vNbr says which superface sits across each
  * of the three edges, both sides go through the same lookup table, and an edge
  * whose two sides land on different groups is a border. That is why moving the
- * slider costs one small texture upload and no geometry work at all — the
+ * slider costs one small texture upload and no geometry work at all, the
  * borders re-draw themselves because the answer they read changed.
  *
  * vBary.x vanishes on the edge between corners 1 and 2, y on 2 to 0 and z on

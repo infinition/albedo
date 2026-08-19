@@ -6,7 +6,7 @@
  * asked of this box rather than of the window, which stopped being the same
  * thing when the library learned to take half the screen.
  *
- * The shapes are deliberately the ones Retopo already uses — an action bar
+ * The shapes are deliberately the ones Retopo already uses, an action bar
  * centred on the viewport, a settings menu that unfolds upward from an arrow at
  * its left, a two pixel progress rail along its bottom edge. A second mode that
  * invented its own furniture would make the application look assembled rather
@@ -233,3 +233,6 @@ body.groups-open #timeline {
   .gr-bar button { padding: 0 10px; }
   .gr-slider > span:first-child { display: none; }
 }
+
+/* The imported-label note, which is a path and can be long. */
+.gr-nn { margin: 4px 0 0; word-break: break-all; }

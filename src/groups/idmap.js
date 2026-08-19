@@ -115,7 +115,7 @@ function bleedOutwards(px, size, steps) {
  *
  * **Off by default, and that is not timidity.** The main use of an ID map is
  * selecting a part by its colour in the tool downstream, and a blurred map has a
- * band of blended pixels along every border that belongs to no group at all — so
+ * band of blended pixels along every border that belongs to no group at all, so
  * the selection picks up a fringe of nothing around everything. Hard edges are
  * not a limitation of this map, they are the feature.
  *
@@ -191,7 +191,7 @@ export function paintGroupMap({ meshes, labelOfSuper, size = 2048, bleed = 8, sm
      *
      * three carries `KHR_texture_transform` on the *texture* rather than on the
      * geometry, so raw UVs and the atlas they address are not the same space
-     * whenever an exporter used it — and quantising exporters use it constantly,
+     * whenever an exporter used it, and quantising exporters use it constantly,
      * with the real range hidden in the scale. A map drawn without it lands one
      * sixteenth of the way across the image and looks like a bug in the
      * segmentation.
@@ -233,8 +233,8 @@ export function paintGroupMap({ meshes, labelOfSuper, size = 2048, bleed = 8, sm
    * smears or blurs them.
    *
    * This is not a statistic, it is the map's one honest failure mode. Plenty of
-   * models reuse UV space — symmetric halves, repeated trim, anything built to
-   * save texture memory — and two parts sharing the same texels cannot both own
+   * models reuse UV space, symmetric halves, repeated trim, anything built to
+   * save texture memory, and two parts sharing the same texels cannot both own
    * them, so the later one simply overwrites the earlier. Measured on a game
    * asset: 86 groups painted 30 colours, identically at 512 and 2048 texels, so
    * neither resolution nor clipping was ever involved.
@@ -269,12 +269,12 @@ export function paintGroupMap({ meshes, labelOfSuper, size = 2048, bleed = 8, sm
  *
  * Every texture is addressed by coordinates in the same `0..1` square, so a
  * model with three materials has three *different* images all claiming it. Drawn
- * into one picture they overwrite each other and the last one wins — measured on
+ * into one picture they overwrite each other and the last one wins, measured on
  * a three-material model, where 134 groups produced a map holding 59 colours,
  * identically at 512 and at 2048 texels. Resolution was never the problem;
  * asking one image to be three was.
  *
- * On the input this mode exists for — one mesh, one material, one atlas — this
+ * On the input this mode exists for, one mesh, one material, one atlas, this
  * returns a single map and the whole question never arises.
  */
 export function paintGroupMaps({ meshes, labelOfSuper, size, bleed, smooth }) {

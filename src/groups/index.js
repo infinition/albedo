@@ -14,7 +14,7 @@ register({ fr: grFr, en: grEn });
 /**
  * The Groupes mode.
  *
- * Answers one question — which parts is this model made of — for the input that
+ * Answers one question, which parts is this model made of, for the input that
  * has nobody else to ask: a mesh out of Hunyuan3D or Meshy, one shell, one
  * material, one atlas, with nothing in the file admitting it has parts at all.
  *
@@ -42,7 +42,7 @@ register({ fr: grFr, en: grEn });
  *
  * ## What it does not do yet
  *
- * Editing a group by hand — clicking one to select it, merging two, painting a
+ * Editing a group by hand, clicking one to select it, merging two, painting a
  * boundary. All of it is built on what is here, a stable per-triangle id and a
  * partition that can be read back, and none of it changes the shape of this.
  */
@@ -74,7 +74,7 @@ export function createGroups({
   <label class="gr-slider" data-el="countWrap" hidden>
     <span data-i18n="gr.groups">Groupes</span>
     <input type="range" data-el="count" min="0" max="1000" step="1" value="0" />
-    <span class="gr-num" data-el="countValue">—</span>
+    <span class="gr-num" data-el="countValue">, </span>
   </label>
 
   <!--
@@ -85,15 +85,15 @@ export function createGroups({
     so no amount of merging will ever put them together. That is topology, not
     a setting, which is why the first slider has a floor it cannot go below.
 
-    Grouping things that look alike is the other question — the one somebody
+    Grouping things that look alike is the other question, the one somebody
     asks when they want one rock material rather than two hundred rock objects
-    — and it is asked here, in the same colour units as the pre-merge tolerance
+, and it is asked here, in the same colour units as the pre-merge tolerance
     so the two numbers mean the same thing.
   -->
   <label class="gr-slider" data-el="famWrap" hidden>
     <span data-i18n="gr.families">Familles</span>
     <input type="range" data-el="fam" min="0" max="0.30" step="0.005" value="0" />
-    <span class="gr-num" data-el="famValue">—</span>
+    <span class="gr-num" data-el="famValue">, </span>
   </label>
 
   <div class="segment gr-views" role="group" data-i18n-aria="gr.view" aria-label="Affichage" data-el="views" hidden>
@@ -120,19 +120,19 @@ export function createGroups({
   <div class="gr-menu" data-el="menu" hidden>
     <p class="gr-sub" data-i18n="gr.weights">Ce qui sépare deux parts</p>
     <label class="gr-field">
-      <span><span data-i18n="gr.wColour">Couleur</span> <span class="gr-num" data-el="wColourValue">—</span></span>
+      <span><span data-i18n="gr.wColour">Couleur</span> <span class="gr-num" data-el="wColourValue">, </span></span>
       <input type="range" data-el="wColour" min="0" max="3" step="0.1" value="1.4" />
     </label>
     <label class="gr-field">
-      <span><span data-i18n="gr.wConcave">Creux</span> <span class="gr-num" data-el="wConcaveValue">—</span></span>
+      <span><span data-i18n="gr.wConcave">Creux</span> <span class="gr-num" data-el="wConcaveValue">, </span></span>
       <input type="range" data-el="wConcave" min="0" max="3" step="0.1" value="1" />
     </label>
     <label class="gr-field">
-      <span><span data-i18n="gr.wConvex">Arêtes</span> <span class="gr-num" data-el="wConvexValue">—</span></span>
+      <span><span data-i18n="gr.wConvex">Arêtes</span> <span class="gr-num" data-el="wConvexValue">, </span></span>
       <input type="range" data-el="wConvex" min="0" max="3" step="0.05" value="0.25" />
     </label>
     <label class="gr-field">
-      <span><span data-i18n="gr.wNormal">Orientation</span> <span class="gr-num" data-el="wNormalValue">—</span></span>
+      <span><span data-i18n="gr.wNormal">Orientation</span> <span class="gr-num" data-el="wNormalValue">, </span></span>
       <input type="range" data-el="wNormal" min="0" max="3" step="0.1" value="0.5" />
     </label>
 
@@ -141,28 +141,33 @@ export function createGroups({
     <label class="gr-check"><input type="checkbox" data-el="bIslands" /><span data-i18n="gr.bIslands">Les coutures UV</span></label>
     <p class="gr-hint" data-i18n="gr.islandsHint">Sur un atlas généré, les îlots sont découpés pour le rangement et pas pour le sens.</p>
 
+    <p class="gr-sub" data-i18n="gr.nnTitle">Étiquettes importées</p>
+    <button class="mini" type="button" data-el="pickLabels" data-i18n="gr.nnPick">Choisir un fichier…</button>
+    <p class="gr-note gr-nn" data-el="labelNote" hidden></p>
+    <p class="gr-hint" data-i18n="gr.nnHint">Une étiquette par triangle, produite par PartField, P3-SAM ou SAMesh. Elle devient une barrière : le découpage ne réunira jamais deux parts qu'elle sépare, et tout le reste continue de s'appliquer par-dessus.</p>
+
     <p class="gr-sub" data-i18n="gr.mapTitle">Carte d'identité</p>
     <label class="gr-field">
-      <span><span data-i18n="gr.mapSize">Taille</span> <span class="gr-num" data-el="mapSizeValue">—</span></span>
+      <span><span data-i18n="gr.mapSize">Taille</span> <span class="gr-num" data-el="mapSizeValue">, </span></span>
       <input type="range" data-el="mapSize" min="9" max="13" step="1" value="11" />
     </label>
     <label class="gr-field">
-      <span><span data-i18n="gr.mapBleed">Bavure</span> <span class="gr-num" data-el="mapBleedValue">—</span></span>
+      <span><span data-i18n="gr.mapBleed">Bavure</span> <span class="gr-num" data-el="mapBleedValue">, </span></span>
       <input type="range" data-el="mapBleed" min="0" max="32" step="1" value="8" />
     </label>
     <label class="gr-field">
-      <span><span data-i18n="gr.mapSmooth">Adoucir</span> <span class="gr-num" data-el="mapSmoothValue">—</span></span>
+      <span><span data-i18n="gr.mapSmooth">Adoucir</span> <span class="gr-num" data-el="mapSmoothValue">, </span></span>
       <input type="range" data-el="mapSmooth" min="0" max="8" step="1" value="0" />
     </label>
     <p class="gr-hint" data-i18n="gr.mapHint">Bords durs pour sélectionner une part par sa couleur, adoucis pour s'en servir comme masque de fondu.</p>
 
     <p class="gr-sub" data-i18n="gr.premerge">Pré-fusion</p>
     <label class="gr-field">
-      <span><span data-i18n="gr.sColour">Écart de couleur</span> <span class="gr-num" data-el="sColourValue">—</span></span>
+      <span><span data-i18n="gr.sColour">Écart de couleur</span> <span class="gr-num" data-el="sColourValue">, </span></span>
       <input type="range" data-el="sColour" min="0.005" max="0.08" step="0.005" value="0.03" />
     </label>
     <label class="gr-field">
-      <span><span data-i18n="gr.sAngle">Angle</span> <span class="gr-num" data-el="sAngleValue">—</span></span>
+      <span><span data-i18n="gr.sAngle">Angle</span> <span class="gr-num" data-el="sAngleValue">, </span></span>
       <input type="range" data-el="sAngle" min="1" max="25" step="1" value="6" />
     </label>
   </div>
@@ -174,13 +179,14 @@ export function createGroups({
   <h2 data-i18n="gr.paneTitle">Groupes</h2>
   <p class="hint" data-i18n="gr.paneEmpty" data-el="paneEmpty">Rien n'a encore été segmenté.</p>
   <dl class="gr-stats" data-el="stats" hidden>
-    <div><dt data-i18n="gr.statGroups">Groupes</dt><dd data-el="sGroups">—</dd></div>
-    <div><dt data-i18n="gr.statFamilies">Familles</dt><dd data-el="sFamilies">—</dd></div>
-    <div><dt data-i18n="gr.statRange">Étendue</dt><dd data-el="sRange">—</dd></div>
-    <div><dt data-i18n="gr.statTriangles">Triangles</dt><dd data-el="sTriangles">—</dd></div>
-    <div><dt data-i18n="gr.statSuperfaces">Superfaces</dt><dd data-el="sSuper">—</dd></div>
-    <div><dt data-i18n="gr.statShells">Coquilles</dt><dd data-el="sShells">—</dd></div>
-    <div><dt data-i18n="gr.statTime">Durée</dt><dd data-el="sTime">—</dd></div>
+    <div><dt data-i18n="gr.statGroups">Groupes</dt><dd data-el="sGroups">, </dd></div>
+    <div><dt data-i18n="gr.statFamilies">Familles</dt><dd data-el="sFamilies">, </dd></div>
+    <div><dt data-i18n="gr.statRange">Étendue</dt><dd data-el="sRange">, </dd></div>
+    <div><dt data-i18n="gr.statTriangles">Triangles</dt><dd data-el="sTriangles">, </dd></div>
+    <div><dt data-i18n="gr.statSuperfaces">Superfaces</dt><dd data-el="sSuper">, </dd></div>
+    <div><dt data-i18n="gr.statShells">Coquilles</dt><dd data-el="sShells">, </dd></div>
+    <div><dt data-i18n="gr.statLabels">Étiquettes</dt><dd data-el="sLabels">, </dd></div>
+    <div><dt data-i18n="gr.statTime">Durée</dt><dd data-el="sTime">, </dd></div>
   </dl>
   <p class="gr-warn" data-el="warnColour" hidden data-i18n="gr.warnColour">Aucun matériau ne porte de texture de couleur : la couleur ne peut rien dire de plus que le matériau.</p>
   <p class="gr-warn" data-el="warnManifold" hidden></p>
@@ -269,6 +275,7 @@ export function createGroups({
     node.addEventListener("input", paintValues);
   }
   paintValues();
+  paintLabels();
 
   /*
    * A setting changes, the result follows.
@@ -298,7 +305,7 @@ export function createGroups({
    * Only the settings the *engine* reads re-run it.
    *
    * The map's size, bleed and softening live in the same menu and change
-   * nothing about the segmentation — they describe a picture drawn from a result
+   * nothing about the segmentation, they describe a picture drawn from a result
    * that already exists. Wiring them to a re-run would spend seconds of engine
    * time producing an identical answer, which is the sort of waste that only
    * shows up on a large model and looks like the tool being slow.
@@ -323,7 +330,7 @@ export function createGroups({
    * Collected once and used twice: to decide what goes into the GLB, and to
    * decide which triangle each returned id belongs to. Those two have to be the
    * same list in the same order or every id after the first hidden mesh lands
-   * on the wrong triangle — a segmentation that looks entirely plausible and is
+   * on the wrong triangle, a segmentation that looks entirely plausible and is
    * shifted. `traverse` walks children in order, which is the order
    * `GLTFExporter` writes in, and `onlyVisible` is why the filter is here.
    */
@@ -408,15 +415,15 @@ export function createGroups({
    *
    * It was a plain linear range first, which is unusable on anything real: a
    * mesh with a hundred thousand superfaces spread over two hundred pixels puts
-   * five hundred groups under every pixel, so two groups, five and ten — the
-   * answers people are looking for — all sit inside the first pixel and cannot
+   * five hundred groups under every pixel, so two groups, five and ten, the
+   * answers people are looking for, all sit inside the first pixel and cannot
    * be reached at all.
    *
    * A logarithmic range fixes the ceiling and not the floor: it spends an even
    * share of the travel on each decade, so getting from one group to two still
    * takes a dozen presses of an arrow key. A ladder that grows by six percent
    * but never by less than one gives 1, 2, 3, … one rung at a time where the
-   * counts are small, and 40,000 → 42,400 where they are not. Around two hundred
+   * counts are small, and 40, 000 → 42, 400 where they are not. Around two hundred
    * rungs cover any mesh, and every one of them is a different answer.
    */
   let rungs = [1];
@@ -549,7 +556,7 @@ export function createGroups({
      *
      * Picked groups are named, not superfaces, so a cut that renumbers
      * everything would throw the selection away. It is dropped deliberately
-     * instead, below, whenever the partition changes under it — keeping ids
+     * instead, below, whenever the partition changes under it, keeping ids
      * that mean something else now is worse than losing them.
      */
     let marks = null;
@@ -568,7 +575,7 @@ export function createGroups({
     if (el.countValue) el.countValue.textContent = num(count);
     if (el.sGroups) el.sGroups.textContent = num(count);
     if (el.sFamilies) {
-      el.sFamilies.textContent = tol > 0 && comparable ? num(families) : "—";
+      el.sFamilies.textContent = tol > 0 && comparable ? num(families) : ", ";
     }
     if (el.famValue) {
       el.famValue.textContent = !comparable
@@ -705,7 +712,7 @@ export function createGroups({
      *
      * Nothing promises the bytes arrive at offset zero of their buffer, and a
      * `Uint32Array` built on an offset that is not a multiple of four throws
-     * rather than misreading — which is the good failure, but only if somebody
+     * rather than misreading, which is the good failure, but only if somebody
      * has thought about it. Copying when it happens costs one allocation on a
      * path that is usually not taken, and the alternative is a run that dies
      * after all the work is done.
@@ -772,8 +779,8 @@ export function createGroups({
    *
    * Every setting in the menu changes how the engine *reads* the mesh and none
    * of them change the mesh, so the file it reads is the same file. Exporting is
-   * also by far the expensive half — tens of megabytes through three's exporter
-   * and out to disk — while the engine itself is hundredths of a second on a
+   * also by far the expensive half, tens of megabytes through three's exporter
+   * and out to disk, while the engine itself is hundredths of a second on a
    * small model and a few on a large one.
    *
    * Keeping it is what turns the weights from something you commit to before a
@@ -781,6 +788,38 @@ export function createGroups({
    * the scene stops matching it: a split, a new model, a mode that forgot.
    */
   let cached = null;
+  /** A per-face label file somebody else produced, or null. See the CLI's --labels. */
+  let labels = null;
+
+  function paintLabels() {
+    if (!el.labelNote) return;
+    el.labelNote.hidden = !labels;
+    el.labelNote.textContent = labels ? labels.split(/[\/]/).pop() : "";
+    el.pickLabels.textContent = labels ? t("gr.nnDrop") : t("gr.nnPick");
+  }
+
+  el.pickLabels?.addEventListener("click", async () => {
+    if (labels) {
+      labels = null;
+      paintLabels();
+      retune();
+      return;
+    }
+    if (!tauri) {
+      toast?.(t("gr.needsApp"), 4000);
+      return;
+    }
+    const chosen = await tauri.dialog.open({
+      multiple: false,
+      filters: [{ name: t("gr.nnFilter"), extensions: ["json", "bin", "npy", "raw"] }],
+    });
+    if (!chosen) return;
+    labels = typeof chosen === "string" ? chosen : chosen?.path;
+    paintLabels();
+    // A run is what applies them, and the model is already exported, so this is
+    // the cheap half.
+    retune();
+  });
 
   async function run({ reuse = false } = {}) {
     if (!tauri) {
@@ -829,6 +868,7 @@ export function createGroups({
         input: dirs.input,
         base: dirs.base,
         request: request(),
+        labels,
       });
 
       /*
@@ -836,8 +876,8 @@ export function createGroups({
        *
        * The ids come back as one flat array and are laid onto the meshes in the
        * order they were exported. Anything that changes the triangle count
-       * between here and there — a hidden mesh, a multi-material mesh the
-       * exporter split differently, a loader that dropped a degenerate — shifts
+       * between here and there, a hidden mesh, a multi-material mesh the
+       * exporter split differently, a loader that dropped a degenerate, shifts
        * every id after it and produces a segmentation that is wrong everywhere
        * and looks fine. Counting is cheap; being wrong quietly is not.
        */
@@ -891,6 +931,7 @@ export function createGroups({
     set("sTriangles", num(r.triangles));
     set("sSuper", num(r.superfaces));
     set("sShells", num(r.shells));
+    set("sLabels", r.labels ? num(r.labels) : ", ");
     set("sTime", `${(r.ms / 1000).toFixed(2)} s`);
     if (el.warnColour) el.warnColour.hidden = !!r.colourTextured;
     if (el.warnManifold) {
@@ -918,8 +959,8 @@ export function createGroups({
      * A selection is expressed as a relabelling, not as a second code path.
      *
      * Everything unpicked collapses onto one shared id, so the split produces a
-     * mesh per picked group plus a single remainder — which is what "keep these
-     * parts" means — and `splitByGroup` never learns that selection exists.
+     * mesh per picked group plus a single remainder, which is what "keep these
+     * parts" means, and `splitByGroup` never learns that selection exists.
      */
     let labelOfSuper = data.shown;
     const rest = data.groups;
@@ -1024,7 +1065,7 @@ export function createGroups({
             filters: [{ name: t("dlg.pngImage"), extensions: ["png"] }],
           });
           if (!path) continue;
-          const bytes = Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) =>
+          const bytes = Uint8Array.from(atob(url.slice(url.indexOf(", ") + 1)), (c) =>
             c.charCodeAt(0)
           );
           const { writeFile } = await import("@tauri-apps/plugin-fs");

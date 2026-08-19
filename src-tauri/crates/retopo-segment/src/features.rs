@@ -8,7 +8,7 @@
 //! segmenter ends up with a material weight it cannot tune.
 //!
 //! **Colour is the load bearing one here, and that is not the usual answer.**
-//! The classical literature — Shapira, Katz, the whole Princeton benchmark —
+//! The classical literature, Shapira, Katz, the whole Princeton benchmark,
 //! segments untextured meshes, so none of it looks at colour at all. But a mesh
 //! that came out of Hunyuan3D or Meshy arrives as one shell, one material and
 //! one UV atlas, which means three of the six features are constant across the
@@ -89,6 +89,16 @@ pub struct FaceFeatures {
     pub material: Vec<u32>,
     /// Chart id, where a chart stops at a UV seam.
     pub uv_island: Vec<u32>,
+    /// A part id somebody else decided, or empty.
+    ///
+    /// This is where a neural segmentation arrives. PartField, P3-SAM and SAMesh
+    /// all answer with one label per face and nothing else, no hierarchy, no
+    /// features, no notion of how sure they are, and that is exactly an
+    /// *identity* in the sense the rest of this file means: equal or not, so a
+    /// barrier. Everything downstream then works on it unchanged, which is the
+    /// point: the slider, the families, the split and the map do not need to
+    /// learn where the answer came from.
+    pub label: Vec<u32>,
     pub normal: Vec<Vec3>,
     /// Area, used to weight everything that averages over a region.
     pub area: Vec<f32>,
@@ -128,7 +138,7 @@ impl EdgeFeatures {
 ///
 /// Asked of the *UVs* rather than of the render indices. Two triangles can hold
 /// a welded point in two different render vertices for reasons that have nothing
-/// to do with the atlas — a hard normal split does exactly that — and calling
+/// to do with the atlas, a hard normal split does exactly that, and calling
 /// those a seam would cut the model along every crease a second time.
 fn uv_seams(mesh: &Mesh, adj: &Adjacency) -> Vec<bool> {
     if !mesh.has_uvs() {
@@ -173,6 +183,20 @@ fn corner_uv(mesh: &Mesh, t: usize, w: u32) -> Option<Vec2> {
 
 impl FaceFeatures {
     pub fn build(mesh: &Mesh, adj: &Adjacency, edges: &EdgeFeatures) -> Self {
+        Self::build_with(mesh, adj, edges, None)
+    }
+
+    /// As [`FaceFeatures::build`], with part labels somebody else produced.
+    ///
+    /// A label array of the wrong length is ignored rather than trusted: it can
+    /// only mean it describes a different mesh, and laying it on this one would
+    /// segment the model by an answer about another.
+    pub fn build_with(
+        mesh: &Mesh,
+        adj: &Adjacency,
+        edges: &EdgeFeatures,
+        labels: Option<&[u32]>,
+    ) -> Self {
         let nt = mesh.triangle_count();
 
         let normal: Vec<Vec3> = (0..nt).map(|t| mesh.face_normal(t)).collect();
@@ -190,6 +214,10 @@ impl FaceFeatures {
             normal,
             area,
             colour,
+            label: labels
+                .filter(|l| l.len() == nt)
+                .map(|l| l.to_vec())
+                .unwrap_or_default(),
             sdf: None,
             colour_is_textured,
             shell_count,
@@ -425,7 +453,7 @@ mod tests {
     fn two_halves_of_an_atlas_give_two_colours() {
         let mut m = quad();
         // Left half red, right half green. The diagonal of the quad runs from
-        // (0,0) to (1,1), so one triangle sits mostly left and the other right.
+        // (0, 0) to (1, 1), so one triangle sits mostly left and the other right.
         let mut img = Image::new(2, 1);
         img.rgba.copy_from_slice(&[255, 0, 0, 255, 0, 255, 0, 255]);
         m.images.push(img);

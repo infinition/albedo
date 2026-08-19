@@ -279,8 +279,8 @@ pub struct Mesh {
     ///
     /// Written by [`Mesh::remove_degenerate`], and it exists because that method
     /// silently changes the numbering everything downstream indexes by. Anything
-    /// that hands per-triangle results *back* to whoever supplied the file — a
-    /// segmentation, most of all — is otherwise off by however many degenerate
+    /// that hands per-triangle results *back* to whoever supplied the file, a
+    /// segmentation, most of all, is otherwise off by however many degenerate
     /// faces happened to be in it, which is a result that renders perfectly and
     /// is wrong from the first dropped triangle onwards.
     pub from_source: Vec<u32>,

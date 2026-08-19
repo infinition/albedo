@@ -13,8 +13,8 @@
 //!
 //! ## Where this sits against the literature
 //!
-//! The neural work is where the field is — PartField (ICCV 2025), P3-SAM,
-//! SAMesh — and all of it wants PyTorch, a GPU and a few hundred megabytes of
+//! The neural work is where the field is, PartField (ICCV 2025), P3-SAM,
+//! SAMesh, and all of it wants PyTorch, a GPU and a few hundred megabytes of
 //! weights. Albedo is a five megabyte executable that also has to start fast
 //! enough to draw an Explorer thumbnail, so none of it can live in here.
 //!
@@ -86,6 +86,8 @@ pub struct SegmentReport {
     /// it is the difference between a good result and a puzzling one, and the
     /// person looking at the model cannot tell from the viewport.
     pub colour_textured: bool,
+    /// Distinct part labels the caller supplied, or zero when none were.
+    pub labels: usize,
     /// Edges with more than two triangles. Dihedral angles are unreliable
     /// wherever these are, which is worth a warning rather than a refusal.
     pub non_manifold_edges: usize,
@@ -104,6 +106,22 @@ pub fn segment(
     opts: &SegmentOptions,
     progress: &mut dyn FnMut(f32),
 ) -> Segmentation {
+    segment_with(mesh, opts, None, progress)
+}
+
+/// Segment a mesh, starting from part labels somebody else produced.
+///
+/// One label per triangle, in the mesh's own numbering. They act as a barrier,
+/// so the result never joins two parts the labels called different, and
+/// everything above still runs, so the geometry and the colour can split one of
+/// those parts further, and the slider can merge them back. A neural answer
+/// becomes the floor of the hierarchy rather than the whole of it.
+pub fn segment_with(
+    mesh: &Mesh,
+    opts: &SegmentOptions,
+    labels: Option<&[u32]>,
+    progress: &mut dyn FnMut(f32),
+) -> Segmentation {
     let started = Instant::now();
 
     progress(0.0);
@@ -113,7 +131,7 @@ pub fn segment(
     progress(0.25);
     // Sampling the atlas six times per triangle is most of the wall clock on
     // anything with a texture, which is why the bar sits here for a while.
-    let ff = FaceFeatures::build(mesh, &adj, &ef);
+    let ff = FaceFeatures::build_with(mesh, &adj, &ef, labels);
     progress(0.55);
     let dendrogram = cluster::build(mesh, &adj, &ff, &ef, opts);
     progress(1.0);
@@ -130,6 +148,12 @@ pub fn segment(
         uv_islands: ff.uv_island_count,
         materials: mesh.materials.len(),
         colour_textured: ff.colour_is_textured,
+        labels: {
+            let mut seen: Vec<u32> = ff.label.clone();
+            seen.sort_unstable();
+            seen.dedup();
+            seen.len()
+        },
         non_manifold_edges: adj.non_manifold_edges,
         ms: started.elapsed().as_millis() as u64,
     };

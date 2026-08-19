@@ -2,9 +2,9 @@
 //!
 //! Two stages, and the split between them is the whole performance story.
 //!
-//! **Superfaces** collapse every edge nobody could argue about — same colour,
-//! no crease, same material — before anything expensive looks at the mesh. A
-//! typical generated asset goes from 500,000 triangles to something in the tens
+//! **Superfaces** collapse every edge nobody could argue about, same colour,
+//! no crease, same material, before anything expensive looks at the mesh. A
+//! typical generated asset goes from 500, 000 triangles to something in the tens
 //! of thousands, and every later stage is priced against that number instead.
 //!
 //! **The hierarchy** then merges superfaces cheapest-pair-first, and records
@@ -44,7 +44,7 @@ pub struct Dendrogram {
     pub super_of_face: Vec<u32>,
     pub super_count: usize,
     /// The superface across each of the three edges of each triangle, in corner
-    /// order `(0,1)`, `(1,2)`, `(2,0)`. `u32::MAX` where the mesh has an open
+    /// order `(0, 1)`, `(1, 2)`, `(2, 0)`. `u32::MAX` where the mesh has an open
     /// border. This is what lets a shader draw group outlines without anybody
     /// computing a border on the CPU every time the slider moves.
     pub nbr_of_face: Vec<[u32; 3]>,
@@ -63,7 +63,7 @@ pub struct Dendrogram {
     /// Not needed to cut the hierarchy, and carried anyway, because the
     /// hierarchy only ever produces *connected* groups. Two rocks lying apart on
     /// the same ground share no edge, so no amount of merging can ever put them
-    /// in one group — the floor of the slider is the number of connected pieces
+    /// in one group, the floor of the slider is the number of connected pieces
     /// and that is topology, not a setting. Grouping them by what they look like
     /// is a second question, asked of these means, and answered above this
     /// engine rather than inside it.

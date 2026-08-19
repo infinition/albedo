@@ -20,7 +20,7 @@ import { WIRE_ATTRIBUTES } from "../viewer/wire.js";
  * The textures are **shared, not copied**. A clone of a material copies map
  * references and not the images behind them, so ten parts off one atlas cost
  * one atlas on the GPU and come out pixel-identical to the source. Giving each
- * part a tight atlas of its own is a different operation — it is a bake, and
+ * part a tight atlas of its own is a different operation, it is a bake, and
  * there is already an engine in this repository for that.
  *
  * ## What has to be carried across
@@ -29,7 +29,7 @@ import { WIRE_ATTRIBUTES } from "../viewer/wire.js";
  * listed in `WIRE_ATTRIBUTES` and belongs to how the model is being looked at
  * rather than to the model. The per-triangle material slot comes from
  * `geometry.groups`, which is the only place a mesh with several materials
- * records which triangle belongs to which — and which nothing in this
+ * records which triangle belongs to which, and which nothing in this
  * application had ever needed to read per triangle before.
  */
 
@@ -118,8 +118,8 @@ export function splitByGroup({ root, meshes, labelOfSuper, name }) {
    * One material per group, across every mesh the group turned out to touch.
    *
    * Kept outside the loop below on purpose. A group is very often spread over
-   * several source meshes — that is exactly the case the appearance grouping
-   * exists for, where two hundred separate rocks are one family — and giving
+   * several source meshes, that is exactly the case the appearance grouping
+   * exists for, where two hundred separate rocks are one family, and giving
    * each fragment its own clone would hand back two hundred materials called
    * "Famille 1" that have to be edited two hundred times. The geometry stays
    * separate because separate rocks *are* separate objects; the surface does
@@ -130,9 +130,9 @@ export function splitByGroup({ root, meshes, labelOfSuper, name }) {
   /*
    * Whether a group's name is enough to identify its surface.
    *
-   * A group that spans two source materials has to become two materials —
+   * A group that spans two source materials has to become two materials,
    * they carry different textures and there is no such thing as one material
-   * with two atlases — and calling both of them "Famille 1" would leave two
+   * with two atlases, and calling both of them "Famille 1" would leave two
    * rows in the panel with one name between them. When the model had a single
    * material to begin with, which is the whole case this mode was built for,
    * that never happens and the names stay clean.
@@ -203,7 +203,7 @@ export function splitByGroup({ root, meshes, labelOfSuper, name }) {
        * the floor are two different surfaces that happen to be first in their
        * own lists. Caching on the number let a group spanning both take
        * whichever mesh was processed first and silently drop the other's
-       * textures — a result that renders perfectly and is wrong. Caught by
+       * textures, a result that renders perfectly and is wrong. Caught by
        * counting the distinct maps before and after a split: three went in and
        * two came out.
        */
@@ -254,7 +254,7 @@ export function splitByGroup({ root, meshes, labelOfSuper, name }) {
  * Put a split back.
  *
  * One level, owned by this mode, because the application's undo stack holds
- * poses and nothing else — it was built for the gizmo and a split is not a
+ * poses and nothing else, it was built for the gizmo and a split is not a
  * transform. The removed meshes are kept rather than rebuilt: they are the
  * originals, geometry and materials and all, so restoring them is exact and
  * costs nothing but holding the reference.

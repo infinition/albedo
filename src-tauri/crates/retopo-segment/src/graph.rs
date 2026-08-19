@@ -52,8 +52,8 @@ impl Default for Weights {
         Self {
             concavity: 1.0,
             convexity: 0.25,
-            // Above the others on purpose. On the input this tool exists for —
-            // one shell, one material, one atlas — colour is the only feature
+            // Above the others on purpose. On the input this tool exists for,
+            // one shell, one material, one atlas, colour is the only feature
             // carrying information about anything the geometry does not already
             // say twice.
             colour: 1.4,
@@ -108,8 +108,8 @@ pub struct SegmentOptions {
     /// used to be a threshold on the same weighted cost the clustering uses,
     /// which made it meaningless in two directions at once: raising the colour
     /// weight silently tightened it, and on a real textured model the ordinary
-    /// grain of a photograph already exceeded it, so a 700,000 triangle mesh
-    /// produced 630,000 superfaces and the pre-merge did nothing at all.
+    /// grain of a photograph already exceeded it, so a 700, 000 triangle mesh
+    /// produced 630, 000 superfaces and the pre-merge did nothing at all.
     ///
     /// The default is a just-noticeable difference. Below it, two triangles are
     /// not "similar enough to risk merging"; they are the same colour.
@@ -191,7 +191,11 @@ pub fn edge_terms(
 ) -> EdgeTerms {
     let barrier = (opts.barriers.material && ff.material[a] != ff.material[b])
         || (opts.barriers.shell && ff.shell[a] != ff.shell[b])
-        || (opts.barriers.uv_island && ff.uv_island[a] != ff.uv_island[b]);
+        || (opts.barriers.uv_island && ff.uv_island[a] != ff.uv_island[b])
+        // Imported labels have no switch. Somebody supplied an answer about
+        // this mesh; honouring it only when a checkbox agrees would make the
+        // import mean something different from what it says.
+        || (!ff.label.is_empty() && ff.label[a] != ff.label[b]);
 
     // Positive is convex, negative is concave. Pinned by a test in this crate
     // rather than taken on trust from the doc comment upstream, because the
@@ -234,7 +238,7 @@ mod tests {
     use retopo_core::mesh::{Material, Mesh};
     use retopo_core::Adjacency;
 
-    /// A hinge: two triangles sharing the edge from (0,0,0) to (1,0,0), the
+    /// A hinge: two triangles sharing the edge from (0, 0, 0) to (1, 0, 0), the
     /// second folded out of the plane by `lift` along z.
     ///
     /// Positive `lift` folds the second triangle up towards the first's normal
