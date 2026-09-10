@@ -67,8 +67,8 @@ jobs:
         run: |
           APP=src-tauri/target/universal-apple-darwin/release/bundle/macos/Albedo.app
           test -f "$APP/Contents/PlugIns/AlbedoThumbnail.appex/Contents/MacOS/AlbedoThumbnail"
-          lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/albedo"
-          lipo -verify_arch arm64 x86_64 "$APP/Contents/PlugIns/AlbedoThumbnail.appex/Contents/MacOS/AlbedoThumbnail"
+          lipo "$APP/Contents/MacOS/albedo" -verify_arch arm64 x86_64
+          lipo "$APP/Contents/PlugIns/AlbedoThumbnail.appex/Contents/MacOS/AlbedoThumbnail" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$APP"
           python3 scripts/thumbnail-smoke.py --binary "$APP/Contents/MacOS/albedo"
           python3 scripts/thumbnail-smoke.py --mac-app "$APP"
