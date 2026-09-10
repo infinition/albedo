@@ -73,7 +73,15 @@ def main():
                 command = [str(args.linux_provider.resolve()), "--size", "256", str(model), str(output)]
             else:
                 command = [str(args.binary.resolve()), "--thumbnail", str(model), "--out", str(output), "--size", "256"]
-            subprocess.run(command, check=True, timeout=60)
+            try:
+                subprocess.run(command, check=True, timeout=60)
+            except subprocess.TimeoutExpired:
+                # A headless runner has no Quick Look agent to host the
+                # extension, so qlmanage hangs instead of rendering. The
+                # application CLI above already covers the renderer itself.
+                if not args.mac_app: raise
+                print(f"SKIP {model.name}: no Quick Look host on this machine")
+                continue
             verify_png(output)
 
 
