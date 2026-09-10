@@ -1,0 +1,4 @@
+[Thumbnailer Entry]
+TryExec=/usr/bin/albedo-thumbnailer
+Exec=/usr/bin/albedo-thumbnailer --size %s %i %o
+MimeType=model/gltf-binary;model/gltf+json;application/vnd.autodesk.fbx;model/obj;model/stl;application/x-ply;model/vnd.collada+xml;model/3mf;image/x-3ds;model/vnd.usdz+zip;model/x-albedo-usd;model/x-albedo-usda;model/x-albedo-usdc;model/x-albedo-wrl;model/x-albedo-vrml;model/x-albedo-vox;model/x-albedo-amf;model/x-albedo-pcd;model/x-albedo-xyz;model/x-albedo-nif;model/x-albedo-kf;model/x-albedo-kfa;

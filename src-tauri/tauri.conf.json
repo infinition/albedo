@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Albedo",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "identifier": "com.infinition.albedo",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -27,37 +27,59 @@
       "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://cdn.jsdelivr.net; worker-src 'self' blob:; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost https://www.gstatic.com https://cdn.jsdelivr.net data: blob:; style-src 'self' 'unsafe-inline'",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/icon.ico"],
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "fileAssociations": [
       {
-        "ext": ["glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf", "3ds", "usdz", "usd", "usda", "usdc", "wrl", "vrml", "vox", "amf", "pcd", "xyz"],
+        "ext": [
+          "glb",
+          "gltf",
+          "fbx",
+          "obj",
+          "stl",
+          "ply",
+          "dae",
+          "3mf",
+          "3ds",
+          "usdz",
+          "usd",
+          "usda",
+          "usdc",
+          "wrl",
+          "vrml",
+          "vox",
+          "amf",
+          "pcd",
+          "xyz"
+        ],
         "name": "Modele3D",
         "description": "Modèle 3D",
         "role": "Viewer"
       },
       {
-        "ext": ["nif", "kf", "kfa"],
+        "ext": [
+          "nif",
+          "kf",
+          "kfa"
+        ],
         "name": "ModeleNIF",
         "description": "Modèle NetImmerse / Gamebryo",
         "role": "Viewer"
       }
-    ],
-    "resources": {
-      "../shell-thumbnails/target/release/albedo_thumbnails.dll": "albedo_thumbnails.dll",
-      "icons/albedo-file.ico": "albedo-file.ico"
-    },
-    "windows": {
-      "nsis": {
-        "installMode": "currentUser",
-        "installerHooks": "installer-hooks.nsi"
-      }
-    }
+    ]
   }
 }

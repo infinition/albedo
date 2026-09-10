@@ -443,38 +443,75 @@ impl Mesh {
         let adj = Adjacency::build(self);
         let sharp = adj.sharp_edges(self, sharp_angle_deg);
 
-        let mut islands = UnionFind::new(self.triangles.len());
+        // Smoothing is local to each vertex fan. Connecting whole faces lets a
+        // distant smooth path reconnect the two sides of a crease.
+        let mut islands = UnionFind::new(self.triangles.len() * 3);
+        let mut incidence = vec![0u32; adj.edges.len()];
+        for edges in &adj.tri_edges {
+            for &e in edges {
+                incidence[e as usize] += 1;
+            }
+        }
         for (ei, e) in adj.edges.iter().enumerate() {
-            if sharp[ei] {
+            if sharp[ei] || incidence[ei] != 2 {
                 continue;
             }
             if let (Some(a), Some(b)) = (e.tri[0], e.tri[1]) {
-                islands.union(a, b);
+                for &w in &e.v {
+                    let ca = self.triangles[a as usize]
+                        .iter()
+                        .position(|&c| self.weld[c as usize] == w)
+                        .unwrap();
+                    let cb = self.triangles[b as usize]
+                        .iter()
+                        .position(|&c| self.weld[c as usize] == w)
+                        .unwrap();
+                    islands.union(a * 3 + ca as u32, b * 3 + cb as u32);
+                }
             }
         }
 
-        let mut acc: HashMap<(u32, u32), Vec3> = HashMap::new();
-        let mut tri_island = vec![0u32; self.triangles.len()];
-        for (t, slot) in tri_island.iter_mut().enumerate() {
-            let island = islands.find(t as u32);
-            *slot = island;
+        let mut acc: HashMap<u32, Vec3> = HashMap::new();
+        let mut corner_islands = vec![[0u32; 3]; self.triangles.len()];
+        for (t, slots) in corner_islands.iter_mut().enumerate() {
             let nw = self.face_normal_weighted(t);
-            for &c in &self.triangles[t] {
-                let w = self.weld[c as usize];
-                *acc.entry((w, island)).or_insert(Vec3::ZERO) += nw;
+            for (k, slot) in slots.iter_mut().enumerate() {
+                *slot = islands.find((t * 3 + k) as u32);
+                *acc.entry(*slot).or_insert(Vec3::ZERO) += nw;
             }
         }
 
-        for (t, &island) in tri_island.iter().enumerate() {
+        let has_uv = self.uvs.len() == n;
+        let mut first_island = vec![None; n];
+        let mut split: HashMap<(u32, u32), u32> = HashMap::new();
+        for (t, slots) in corner_islands.iter().enumerate() {
             let fallback = self.face_normal(t);
-            for &c in &self.triangles[t] {
-                let w = self.weld[c as usize];
+            for (k, &island) in slots.iter().enumerate() {
+                let c = self.triangles[t][k];
+                let index = match first_island[c as usize] {
+                    None => {
+                        first_island[c as usize] = Some(island);
+                        c
+                    }
+                    Some(i) if i == island => c,
+                    Some(_) => *split.entry((c, island)).or_insert_with(|| {
+                        let new = self.positions.len() as u32;
+                        self.positions.push(self.positions[c as usize]);
+                        self.weld.push(self.weld[c as usize]);
+                        self.normals.push(Vec3::ZERO);
+                        if has_uv {
+                            self.uvs.push(self.uvs[c as usize]);
+                        }
+                        new
+                    }),
+                };
                 let v = acc
-                    .get(&(w, island))
+                    .get(&island)
                     .copied()
                     .unwrap_or(fallback)
                     .normalize_or_zero();
-                self.normals[c as usize] = if v == Vec3::ZERO { fallback } else { v };
+                self.normals[index as usize] = if v == Vec3::ZERO { fallback } else { v };
+                self.triangles[t][k] = index;
             }
         }
     }
@@ -598,11 +635,21 @@ impl Mesh {
         } else if !other.uvs.is_empty() || !self.uvs.is_empty() {
             // Mixed UV coverage: pad both sides so the invariant holds.
             self.uvs.resize(vbase as usize, Vec2::ZERO);
-            self.uvs
-                .extend(other.uvs.iter().copied().chain(std::iter::repeat(Vec2::ZERO)).take(other.positions.len()));
+            self.uvs.extend(
+                other
+                    .uvs
+                    .iter()
+                    .copied()
+                    .chain(std::iter::repeat(Vec2::ZERO))
+                    .take(other.positions.len()),
+            );
         }
-        self.triangles
-            .extend(other.triangles.iter().map(|f| [f[0] + vbase, f[1] + vbase, f[2] + vbase]));
+        self.triangles.extend(
+            other
+                .triangles
+                .iter()
+                .map(|f| [f[0] + vbase, f[1] + vbase, f[2] + vbase]),
+        );
         self.tri_material
             .extend(other.tri_material.iter().map(|m| m + mbase));
 
@@ -678,12 +725,49 @@ mod tests {
     }
 
     #[test]
+    fn shared_vertices_split_at_creases_without_splitting_topology() {
+        let mut m = cube();
+        let mut positions = vec![Vec3::ZERO; m.weld_count];
+        for (i, &w) in m.weld.iter().enumerate() {
+            positions[w as usize] = m.positions[i];
+        }
+        for face in &mut m.triangles {
+            for c in face {
+                *c = m.weld[*c as usize];
+            }
+        }
+        m.positions = positions;
+        m.uvs = vec![Vec2::new(0.25, 0.75); 8];
+        m.rebuild_weld(0.0);
+        m.compute_normals(30.0);
+        assert_eq!(m.positions.len(), 24);
+        assert_eq!(m.weld_count, 8);
+        assert_eq!(m.uvs.len(), 24);
+        for (t, face) in m.triangles.iter().enumerate() {
+            for &v in face {
+                assert!(m.normals[v as usize].dot(m.face_normal(t)) > 0.9999);
+            }
+        }
+        let indices = m.triangles.clone();
+        m.compute_normals(30.0);
+        assert_eq!(
+            m.positions.len(),
+            24,
+            "recomputing must not keep adding vertices"
+        );
+        assert_eq!(indices, m.triangles);
+    }
+
+    #[test]
     fn smooth_angle_above_ninety_degrees_rounds_the_cube() {
         let mut m = cube();
         m.compute_normals(120.0);
         // With every edge treated as smooth, corner normals become diagonals.
         let n = m.normals[0].abs();
-        assert!(n.x > 0.4 && n.y > 0.4 && n.z > 0.4, "expected a corner normal, got {n:?}");
+        assert!(
+            n.x > 0.4 && n.y > 0.4 && n.z > 0.4,
+            "expected a corner normal, got {n:?}"
+        );
     }
 
     #[test]

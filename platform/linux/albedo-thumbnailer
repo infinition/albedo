@@ -1,0 +1,6 @@
+#!/bin/sh
+# A file-manager sandbox has no display or D-Bus session. Xvfb supplies a local
+# software GL display without opening a window on the user's desktop.
+exec /usr/bin/timeout --kill-after=3 50 /usr/bin/xvfb-run -a -s '-screen 0 2048x2048x24 -nolisten tcp' \
+  /usr/bin/env LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11 \
+  /usr/bin/python3 /usr/lib/albedo-thumbnailer/thumbnailer.py "$@"

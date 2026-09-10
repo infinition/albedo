@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "infoPlist": "../platform/macos/AppInfo.plist",
+      "files": { "PlugIns/AlbedoThumbnail.appex": "../platform/macos/build/AlbedoThumbnail.appex" }
+    }
+  }
+}

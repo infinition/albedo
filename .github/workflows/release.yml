@@ -1,126 +1,100 @@
-name: Release Portable Executable
+name: Desktop builds and releases
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-and-release:
-    runs-on: windows-latest
-
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+            args: --bundles nsis
+          - os: ubuntu-24.04
+            artifact: linux-x64
+            args: --bundles deb,rpm,appimage
+          - os: macos-15
+            artifact: macos-universal
+            args: --target universal-apple-darwin --bundles app,dmg
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: macOS architectures
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          echo 'APPLE_SIGNING_IDENTITY=-' >> "$GITHUB_ENV"
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf rpm libfuse2t64 python3-gi gir1.2-webkit2-4.1 xvfb xauth libgl1-mesa-dri
+      - run: npm ci
+      - run: npm test
+      - name: Native metadata and thumbnail resource checks
+        run: python tests/platforms.test.py
+      - name: Build frontend and native thumbnail provider
+        run: npm run build:all
+      - name: Rust regression tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p albedo -p retopo-core -p retopo-remesh -p retopo-bake
+      # Tauri embeds the frontend; a bare cargo build can retain the dev URL.
+      - name: Build production application and packages
+        run: npm run tauri build -- ${{ matrix.args }}
+      - name: Windows thumbnail rendering
+        if: runner.os == 'Windows'
+        run: python scripts/thumbnail-smoke.py --binary src-tauri/target/release/albedo.exe
+      - name: Linux thumbnail rendering
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y ./src-tauri/target/release/bundle/deb/*.deb
+          python3 scripts/thumbnail-smoke.py --linux-provider /usr/bin/albedo-thumbnailer
+          xvfb-run -a python3 scripts/thumbnail-smoke.py --binary src-tauri/target/release/albedo
+      - name: Verify macOS application and Quick Look extension
+        if: runner.os == 'macOS'
+        run: |
+          APP=src-tauri/target/universal-apple-darwin/release/bundle/macos/Albedo.app
+          test -f "$APP/Contents/PlugIns/AlbedoThumbnail.appex/Contents/MacOS/AlbedoThumbnail"
+          lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/albedo"
+          lipo -verify_arch arm64 x86_64 "$APP/Contents/PlugIns/AlbedoThumbnail.appex/Contents/MacOS/AlbedoThumbnail"
+          codesign --verify --deep --strict "$APP"
+          python3 scripts/thumbnail-smoke.py --binary "$APP/Contents/MacOS/albedo"
+          python3 scripts/thumbnail-smoke.py --mac-app "$APP"
+      - name: Prepare assets and verify embedded Windows provider
+        run: node scripts/package-release.mjs
+      - uses: actions/upload-artifact@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          name: albedo-${{ matrix.artifact }}
+          path: release-assets/*
+          if-no-files-found: error
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Through the Tauri CLI, never through cargo alone. A bare
-      # `cargo build --release` produced a binary that asked localhost for its
-      # interface and showed the webview's own error page to anyone who
-      # downloaded it: the CLI is what tells the build to bake the frontend in
-      # rather than point at the development server. It also runs
-      # `build:all` itself, which is what puts the provider DLL and the
-      # frontend in place before the compiler needs them.
-      #
-      # --no-bundle stops at the executable. The portable single file is the
-      # release; an installer would be a second thing to keep in step.
-      - name: Build Portable Executable
-        run: npm run tauri build -- --no-bundle
-
-      # Le rendu ne se verifie pas ici. Une machine hebergee n'a pas de carte
-      # graphique, donc pas de contexte WebGL : l'essai echouerait pour une
-      # raison qui ne concerne pas le binaire. Ce qui a repare la v0.1.0 est
-      # l'etape ci-dessus, qui compile par l'outil Tauri au lieu de cargo seul.
-      # L'essai reel se fait sur un poste de travail, ou il y a un ecran.
-
-      # The one thing that can go wrong quietly.
-      #
-      # `build.rs` turns the provider DLL into an `include_bytes!` when it finds
-      # it, and emits `PROVIDER = None` when it does not — deliberately, so the
-      # application still compiles on a tree where the provider has never been
-      # built. In CI that same kindness means a failed or skipped
-      # `build:thumbnails` produces a green release, an executable with no
-      # provider in it, and release notes promising one. Nothing fails, nothing
-      # is logged, and the first person to notice is a user whose Explorer shows
-      # generic icons.
-      #
-      # So the property is checked rather than the file: a DLL on disk proves
-      # nothing if cargo had already compiled without it. Sixty-four bytes from
-      # the middle of the DLL are looked for inside the executable, which is the
-      # actual claim the release notes make.
-      - name: Verify the provider is embedded
-        shell: powershell
-        run: |
-          $dll = "shell-thumbnails\target\release\albedo_thumbnails.dll"
-          $exe = "src-tauri\target\release\albedo.exe"
-          if (-not (Test-Path $dll)) { throw "provider DLL absente : build:thumbnails n'a rien produit" }
-          if (-not (Test-Path $exe)) { throw "albedo.exe absent" }
-          $bytes = [System.IO.File]::ReadAllBytes($dll)
-          # Latin-1 maps every byte to one character, so a byte search becomes a
-          # string search without any value being reinterpreted on the way.
-          $enc = [System.Text.Encoding]::GetEncoding(28591)
-          $probe = $enc.GetString($bytes, [int]($bytes.Length / 2), 64)
-          $hay = $enc.GetString([System.IO.File]::ReadAllBytes($exe))
-          if ($hay.IndexOf($probe) -lt 0) {
-            throw "albedo.exe ne contient pas la DLL : elle a ete construite apres la compilation, ou pas du tout"
-          }
-          Write-Host "provider embarque : $($bytes.Length) octets"
-
-      - name: Prepare Release Executable & Zip
-        shell: powershell
-        run: |
-          $tag = "${{ github.ref_name }}"
-          Copy-Item "src-tauri\target\release\albedo.exe" "Albedo.exe"
-          Compress-Archive -Path "Albedo.exe" -DestinationPath "Albedo-${tag}-portable-win-x64.zip"
-
-      - name: Generate Commit Details Changelog
-        id: changelog
-        shell: powershell
-        run: |
-          $prevTag = (git tag --sort=-creatordate | Select-Object -Skip 1 | Select-Object -First 1)
-          if ($prevTag) {
-            $commits = git log "$prevTag..HEAD" --pretty=format:"* %s (%h)"
-          } else {
-            $commits = git log -n 30 --pretty=format:"* %s (%h)"
-          }
-          
-          $body = @"
-          ## Albedo Portable Release (${{ github.ref_name }})
-          
-          Standalone portable Windows 64-bit executable with embedded application icon and embedded shell thumbnail provider DLL. No installer or administrative rights required.
-          
-          ### Commit Log & Changes
-          $commits
-          "@
-          
-          Set-Content -Path "release_notes.md" -Value $body -Encoding UTF8
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Albedo ${{ github.ref_name }}
-          body_path: release_notes.md
-          files: |
-            Albedo.exe
-            Albedo-${{ github.ref_name }}-portable-win-x64.zip
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          pattern: albedo-*
+          path: release-assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: docs/releases/v1.5.0.md
+          files: release-assets/*
+          fail_on_unmatched_files: true

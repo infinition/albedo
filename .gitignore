@@ -1,5 +1,9 @@
 node_modules/
 dist/
+release-assets/
+public/codecs/
+platform/macos/build/
+__pycache__/
 target/
 src-tauri/gen/
 *.log

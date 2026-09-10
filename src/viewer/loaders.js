@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { t } from "../i18n/index.js";
+import { siblingManager } from "./siblings.js";
+export { siblingManager } from "./siblings.js";
 
 export const SUPPORTED = [
   "glb", "gltf", "fbx", "obj", "stl", "ply", "dae", "3mf",
@@ -37,30 +39,6 @@ const nameOf = (url) => decodeURIComponent(url.split(/[?#]/)[0].split("/").pop()
  * its requests through the manager, so putting the folder back here fixes the
  * whole family at once.
  */
-export function siblingManager(url, resolveSibling) {
-  const manager = new THREE.LoadingManager();
-  if (!resolveSibling) return manager;
-
-  manager.setURLModifier((requested) => {
-    if (!requested || requested === url) return requested;
-    if (/^(blob|data):/i.test(requested)) return requested;
-    const m = /^https?:\/\/asset\.localhost\/(.*)$/i.exec(requested);
-    if (!m) return requested;
-    let rel;
-    try {
-      rel = decodeURIComponent(m[1]);
-    } catch (_) {
-      return requested;
-    }
-    // Already a full path: the asset protocol produced it, leave it alone.
-    if (/^[a-z]:[\\/]/i.test(rel) || rel.startsWith("\\\\") || rel.startsWith("/")) {
-      return requested;
-    }
-    return resolveSibling(rel.split(/[?#]/)[0]) || requested;
-  });
-  return manager;
-}
-
 let gltfLoader = null;
 
 async function getGLTFLoader(renderer, manager) {
@@ -77,10 +55,10 @@ async function getGLTFLoader(renderer, manager) {
       import("./specgloss.js"),
     ]);
   const draco = new DRACOLoader().setDecoderPath(
-    "https://www.gstatic.com/draco/versioned/decoders/1.5.6/"
+    new URL("/codecs/draco/", window.location.href).href
   );
   const ktx2 = new KTX2Loader().setTranscoderPath(
-    "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/basis/"
+    new URL("/codecs/basis/", window.location.href).href
   );
   if (renderer) ktx2.detectSupport(renderer);
   gltfLoader = new GLTFLoader(manager)

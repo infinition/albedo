@@ -1,0 +1,6 @@
+# Unix entry points must stay executable text even when edited on Windows.
+platform/linux/albedo-thumbnailer text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.plist text eol=lf
+*.swift text eol=lf

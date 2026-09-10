@@ -41,9 +41,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct RemeshRequest {
-    /// `decimate` spends a budget where the silhouette needs it. `isotropic`
-    /// rebuilds toward even edge lengths and a valence of six, which is what a
-    /// model that will deform or subdivide wants instead.
+    /// `decimate` simplifies; `isotropic` rebuilds uniform triangles;
+    /// `adaptive` allocates triangle density using source curvature.
     pub method: String,
     /// Stop once this many triangles remain.
     pub target_triangles: usize,
@@ -176,6 +175,8 @@ impl Default for RemeshRequest {
 pub struct RemeshReport {
     pub input_triangles: usize,
     pub output_triangles: usize,
+    #[serde(default)]
+    pub target_triangles: usize,
     pub collapses: usize,
     pub rejected_topology: usize,
     pub rejected_flip: usize,
@@ -191,8 +192,10 @@ pub struct RemeshReport {
     pub aspect_before: f32,
     pub aspect_after: f32,
     pub quads: usize,
-    /// Share of the surface covered by quads rather than lone triangles.
+    /// Fraction of output triangles belonging to quads, not surface area.
     pub quad_fraction: f32,
+    #[serde(default)]
+    pub recovered_quads: usize,
     /// Atlas charts, and how much of the square they actually fill.
     pub charts: usize,
     pub utilisation: f32,
@@ -231,6 +234,8 @@ pub fn remesh_file(
     let started = std::time::Instant::now();
     let mut report = RemeshReport::default();
 
+    validate_method(&req.method)?;
+
     let bytes = std::fs::read(input).map_err(|e| format!("lecture impossible: {e}"))?;
     let mut mesh = retopo_core::glb::load_bytes(&bytes).map_err(|e| format!("{e:#}"))?;
 
@@ -239,16 +244,18 @@ pub fn remesh_file(
     if req.target_triangles == 0 {
         return Err("aucun budget de triangles".into());
     }
-    if req.target_triangles >= source_count {
-        return Err(format!(
-            "le budget ({}) n'est pas inférieur au maillage source ({source_count})",
-            req.target_triangles
-        ));
-    }
+    report.target_triangles = req.target_triangles;
+    // A small part may already be under budget during a per-object run. The
+    // decimator returns it unchanged; reconstruction may also increase density.
 
     // Stage 1: holes. Cheap, so it gets the first five percent of the bar.
     if req.fill_holes {
-        let fill = retopo_remesh::fill_holes(&mut mesh, &retopo_remesh::FillOptions { max_loop_edges: 5_000 });
+        let fill = retopo_remesh::fill_holes(
+            &mut mesh,
+            &retopo_remesh::FillOptions {
+                max_loop_edges: 5_000,
+            },
+        );
         report.holes_filled = fill.loops_filled;
         report.holes_left = fill.loops_found.saturating_sub(fill.loops_filled);
     }
@@ -269,26 +276,34 @@ pub fn remesh_file(
 
     // Stage 2: reduce.
     let mut result = match req.method.as_str() {
-        "isotropic" => {
+        "isotropic" | "adaptive" => {
             let opts = retopo_remesh::IsotropicOptions {
                 target_triangles: req.target_triangles,
                 sharp_angle_deg: req.sharp_angle_deg,
+                preserve_boundary: req.preserve_boundary,
+                adaptivity: if req.method == "adaptive" { 1.0 } else { 0.0 },
                 ..Default::default()
             };
-            let (m, s) = retopo_remesh::isotropic(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
+            let (m, s) =
+                retopo_remesh::isotropic(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
             report.collapses = s.collapses;
             m
         }
         _ => {
             let opts = retopo_remesh::DecimateOptions {
                 target_triangles: req.target_triangles,
-                max_error: req.max_error,
+                max_error: if req.max_error == 0.0 {
+                    f32::INFINITY
+                } else {
+                    req.max_error
+                },
                 preserve_boundary: req.preserve_boundary,
                 sharp_angle_deg: req.sharp_angle_deg,
                 seam_penalty: req.seam_penalty,
                 ..Default::default()
             };
-            let (m, s) = retopo_remesh::decimate(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
+            let (m, s) =
+                retopo_remesh::decimate(&mesh, &opts, &mut |f| progress(r0 + f * (r1 - r0)));
             report.collapses = s.collapses;
             report.rejected_topology = s.rejected_topology;
             report.rejected_flip = s.rejected_flip;
@@ -305,7 +320,12 @@ pub fn remesh_file(
             iterations: req.relax_iterations,
             strength: req.relax_strength,
             preserve_features: true,
-            sharp_angle_deg: req.relax_angle_deg,
+            preserve_boundary: req.preserve_boundary,
+            sharp_angle_deg: if req.method == "decimate" {
+                req.relax_angle_deg
+            } else {
+                req.relax_angle_deg.min(req.sharp_angle_deg)
+            },
             ..Default::default()
         };
         let s = retopo_remesh::relax(&mut result, Some(&source_bvh), &opts, &mut |f| {
@@ -319,19 +339,6 @@ pub fn remesh_file(
 
     report.output_triangles = result.triangle_count();
 
-    // Stage 4: pair into quads, and carry the mask out beside the file.
-    if req.pair_quads {
-        let opts = retopo_remesh::QuadOptions::default();
-        let pairing = retopo_remesh::pair_into_quads(&result, &opts);
-        report.quads = pairing.stats.quads;
-        report.quad_fraction = pairing.stats.quad_fraction;
-
-        let mut raw = Vec::with_capacity(pairing.edge_mask.len() * 4);
-        for m in &pairing.edge_mask {
-            raw.extend_from_slice(&m.to_le_bytes());
-        }
-        let _ = std::fs::write(sidecar(output, "quads"), &raw);
-    }
     progress(b0);
 
     // Filled by the bake when it can vouch for the mapping; see run_bake.
@@ -346,12 +353,38 @@ pub fn remesh_file(
     // because the whole low poly inherited a single pair of metallic and
     // roughness scalars.
     if req.bake {
-        result = run_bake(&result, &mesh, req, &mut report, &mut chart_bytes, &mut |f| {
-            progress(b0 + f * (b1 - b0))
-        })?;
+        result = run_bake(
+            &result,
+            &mesh,
+            req,
+            &mut report,
+            &mut chart_bytes,
+            &mut |f| progress(b0 + f * (b1 - b0)),
+        )?;
     }
     if let Some(raw) = &chart_bytes {
         let _ = std::fs::write(sidecar(output, "charts"), raw);
+    }
+
+    // Pair the final topology, after the bake has rebuilt vertex indices.
+    // glTF groups triangles by material; sidecars must use that same order.
+    if req.pair_quads {
+        let pairing = retopo_remesh::pair_into_quads(
+            &result,
+            &retopo_remesh::QuadOptions {
+                max_fold_deg: req.sharp_angle_deg,
+                ..Default::default()
+            },
+        );
+        report.quads = pairing.stats.quads;
+        report.quad_fraction = pairing.stats.quad_fraction;
+        report.recovered_quads = pairing.stats.recovered_quads;
+        let raw = ordered_triangle_u32(&result, &pairing.edge_mask);
+        std::fs::write(sidecar(output, "quads"), raw)
+            .map_err(|e| format!("écriture des quads impossible: {e}"))?;
+    } else if sidecar(output, "quads").exists() {
+        std::fs::remove_file(sidecar(output, "quads"))
+            .map_err(|e| format!("ancien masque de quads: {e}"))?;
     }
 
     // How far the result actually moved, per vertex, for the heatmap.
@@ -432,11 +465,7 @@ fn run_bake(
         );
     }
     if charts.chart_of_tri.len() == baked.mesh.triangle_count() {
-        let mut raw = Vec::with_capacity(charts.chart_of_tri.len() * 4);
-        for c in &charts.chart_of_tri {
-            raw.extend_from_slice(&c.to_le_bytes());
-        }
-        *chart_bytes = Some(raw);
+        *chart_bytes = Some(ordered_triangle_u32(&baked.mesh, &charts.chart_of_tri));
     }
 
     report.charts = baked.stats.charts;
@@ -505,6 +534,124 @@ fn sidecar(output: &Path, ext: &str) -> PathBuf {
     output.with_file_name(name)
 }
 
+fn validate_method(method: &str) -> Result<(), String> {
+    match method {
+        "decimate" | "isotropic" | "adaptive" => Ok(()),
+        _ => Err(format!("méthode de retopologie inconnue: {method}")),
+    }
+}
+
+fn ordered_triangle_u32(mesh: &retopo_core::Mesh, values: &[u32]) -> Vec<u8> {
+    let count = mesh.materials.len().max(1);
+    let mut groups = vec![Vec::new(); count];
+    for (t, &value) in values.iter().enumerate() {
+        let material = mesh
+            .tri_material
+            .get(t)
+            .copied()
+            .unwrap_or(0)
+            .min(count as u32 - 1);
+        groups[material as usize].extend_from_slice(&value.to_le_bytes());
+    }
+    groups.into_iter().flatten().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecars_follow_material_primitive_order() {
+        let mesh = retopo_core::Mesh {
+            tri_material: vec![1, 0, 1, 0],
+            materials: vec![Default::default(), Default::default()],
+            ..Default::default()
+        };
+        let bytes = ordered_triangle_u32(&mesh, &[10, 20, 30, 40]);
+        let values: Vec<_> = bytes
+            .chunks_exact(4)
+            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        assert_eq!(values, vec![20, 40, 10, 30]);
+    }
+
+    #[test]
+    fn unknown_methods_never_fall_back_to_decimation() {
+        assert!(validate_method("adaptive").is_ok());
+        assert!(validate_method("typo").is_err());
+    }
+
+    #[test]
+    fn reconstruction_round_trips_and_clears_a_disabled_quad_mask() {
+        use retopo_core::glam::Vec3;
+        let mut mesh = retopo_core::Mesh::default();
+        for j in 0..=4 {
+            for i in 0..=4 {
+                mesh.positions.push(Vec3::new(i as f32, j as f32, 0.0));
+            }
+        }
+        for j in 0..4 {
+            for i in 0..4 {
+                let a = j * 5 + i;
+                mesh.triangles
+                    .extend([[a, a + 1, a + 6], [a, a + 6, a + 5]]);
+                mesh.tri_material.extend([0, 0]);
+            }
+        }
+        mesh.materials.push(Default::default());
+        mesh.rebuild_weld(0.0);
+        mesh.compute_normals(40.0);
+        let dir = std::env::temp_dir().join(format!(
+            "albedo-retopo-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        let input = dir.join("source.glb");
+        let output = dir.join("output.glb");
+        retopo_core::glb::save_path(&mesh, &input).unwrap();
+        for method in ["decimate", "isotropic", "adaptive"] {
+            let req = RemeshRequest {
+                method: method.into(),
+                target_triangles: 32,
+                pair_quads: true,
+                ..Default::default()
+            };
+            let mut progress = Vec::new();
+            let report = remesh_file(&input, &output, &req, &mut |p| progress.push(p)).unwrap();
+            assert_eq!(progress.last(), Some(&1.0));
+            assert!(progress.windows(2).all(|p| p[0] <= p[1]));
+            let out = retopo_core::glb::load_path(&output).unwrap();
+            assert_eq!(out.triangle_count(), report.output_triangles);
+            assert!(report.quads > 0);
+            assert_eq!(
+                std::fs::metadata(sidecar(&output, "quads")).unwrap().len() as usize,
+                out.triangle_count() * 4
+            );
+        }
+        remesh_file(
+            &input,
+            &output,
+            &RemeshRequest {
+                method: "adaptive".into(),
+                target_triangles: 32,
+                pair_quads: false,
+                ..Default::default()
+            },
+            &mut |_| {},
+        )
+        .unwrap();
+        assert!(!sidecar(&output, "quads").exists());
+        for path in [input, sidecar(&output, "dev"), output] {
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir(dir).unwrap();
+    }
+}
+
 // --- the command line ------------------------------------------------------
 
 const USAGE: &str = "\
@@ -518,6 +665,7 @@ albedo bake <source.glb> <résultat.glb> [options du bake]
   --faces <N>        budget de triangles (obligatoire)
   --out <fichier>    sortie, par défaut <modèle>-retopo.glb
   --isotropic        reconstruire vers des arêtes régulières au lieu de décimer
+  --adaptive         reconstruire avec une densité adaptée à la courbure
   --holes            combler les trous avant de réduire
   --angle <degrés>   angle de pli pour la réduction, défaut 40
   --seam <coût>      coût d'une couture d'UV, défaut 4
@@ -595,6 +743,10 @@ pub fn cli_main() -> Option<i32> {
                 req.method = "isotropic".into();
                 i += 1;
             }
+            "--adaptive" => {
+                req.method = "adaptive".into();
+                i += 1;
+            }
             "--holes" => {
                 req.fill_holes = true;
                 i += 1;
@@ -608,7 +760,9 @@ pub fn cli_main() -> Option<i32> {
                 i += 2;
             }
             "--max-error" => {
-                req.max_error = take(i).and_then(|v| v.parse().ok()).unwrap_or(f32::INFINITY);
+                req.max_error = take(i)
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(f32::INFINITY);
                 i += 2;
             }
             "--relax-strength" => {
@@ -755,7 +909,10 @@ pub fn cli_main() -> Option<i32> {
                     r.deviation_max
                 );
                 if r.holes_filled > 0 || r.holes_left > 0 {
-                    println!("trous : {} comblés, {} laissés ouverts", r.holes_filled, r.holes_left);
+                    println!(
+                        "trous : {} comblés, {} laissés ouverts",
+                        r.holes_filled, r.holes_left
+                    );
                 }
                 if r.aspect_after > 0.0 {
                     println!(
@@ -765,7 +922,7 @@ pub fn cli_main() -> Option<i32> {
                 }
                 if r.quads > 0 {
                     println!(
-                        "quads : {} ({:.0} % de la surface)",
+                        "quads : {} ({:.0} % des triangles appariés)",
                         r.quads,
                         r.quad_fraction * 100.0
                     );
@@ -838,8 +995,14 @@ pub fn retopo_workdir() -> Result<Workdir, String> {
         .unwrap_or(0);
     Ok(Workdir {
         input: dir.join("source.glb").to_string_lossy().into_owned(),
-        output: dir.join(format!("result-{n}.glb")).to_string_lossy().into_owned(),
-        rebake: dir.join(format!("bake-{n}.glb")).to_string_lossy().into_owned(),
+        output: dir
+            .join(format!("result-{n}.glb"))
+            .to_string_lossy()
+            .into_owned(),
+        rebake: dir
+            .join(format!("bake-{n}.glb"))
+            .to_string_lossy()
+            .into_owned(),
     })
 }
 
@@ -947,9 +1110,13 @@ pub fn retopo_cancel() -> bool {
 fn drive(app: &tauri::AppHandle, mut cmd: Command) -> Result<RemeshReport, String> {
     use tauri::Emitter;
 
-    cmd.arg("--machine").stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.arg("--machine")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     no_window(&mut cmd);
-    let mut child = cmd.spawn().map_err(|e| format!("lancement impossible: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("lancement impossible: {e}"))?;
 
     // The pipes come out before the child goes into the shared slot, so reading
     // them never holds the lock a cancel needs.
@@ -1016,7 +1183,11 @@ pub async fn retopo_bake(
     tauri::async_runtime::spawn_blocking(move || {
         let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
         let mut cmd = Command::new(exe);
-        cmd.arg("bake").arg(&high).arg(&low).arg("--out").arg(&output);
+        cmd.arg("bake")
+            .arg(&high)
+            .arg(&low)
+            .arg("--out")
+            .arg(&output);
         bake_args(&mut cmd, &request);
         drive(&app, cmd)
     })
@@ -1032,6 +1203,7 @@ pub async fn retopo_decimate(
     output: String,
     request: RemeshRequest,
 ) -> Result<RemeshReport, String> {
+    validate_method(&request.method)?;
     tauri::async_runtime::spawn_blocking(move || {
         let exe = std::env::current_exe().map_err(|e| format!("exécutable introuvable: {e}"))?;
 
@@ -1062,6 +1234,8 @@ pub async fn retopo_decimate(
         }
         if request.method == "isotropic" {
             cmd.arg("--isotropic");
+        } else if request.method == "adaptive" {
+            cmd.arg("--adaptive");
         }
         if request.fill_holes {
             cmd.arg("--holes");

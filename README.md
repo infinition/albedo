@@ -4,9 +4,9 @@
 
 # Albedo
 
-A local 3D asset viewer for Windows. Open a model, look at it properly, and inspect what it is actually made of. No account, no upload, no network round trip. 
+A local 3D asset viewer for Windows, macOS and Linux. Open a model, look at it properly, and inspect what it is actually made of. No account or upload.
 
-Built with three.js inside a Tauri shell. The entire application is a 5.5 MB executable with nothing to install alongside it, and that figure now includes a retopology engine and a texture baker.
+Built with three.js inside a Tauri shell, with a Rust retopology engine and texture baker. Windows has a portable executable; macOS uses a universal application bundle; Linux offers Debian/RPM packages and an AppImage. See [platform installation and validation](docs/PLATFORMS.md).
 
 <br>
 
@@ -29,6 +29,8 @@ Built with three.js inside a Tauri shell. The entire application is a 5.5 MB exe
   - **USD (Binary `PXR-USDC` & `.usdz`)**: Native binary crate decoder with LZ4 decompression and float array decoding.
 - **Inspection Tools**: 11 unlit inspection channels (Albedo, Normals, Roughness, Metalness, AO, Emissive, Alpha, etc.) plus PBR/Unlit toggles and material contradiction detection.
 - **Windows Explorer Thumbnails**: Native `IThumbnailProvider` COM extension generating high-resolution Windows Explorer thumbnails for **all supported 3D formats** (GLB, glTF, FBX, OBJ, STL, NIF, USD, PLY, DAE, 3DS, VOX, etc.) via background WebGL rendering.
+- **macOS and Linux thumbnails**: A bundled Quick Look extension and a freedesktop thumbnailer reuse the same Three.js loaders, material conversion and PNG renderer. Native file-manager permissions can restrict external textures and buffers; see the platform notes.
+- **Adaptive retopology**: Source-curvature sizing, protected borders and creases, transported quad directions and matching repair. [Algorithm, measurements and limits](docs/RETOPO-ADAPTIVE.md).
 - **Forced File Association & Registry Integration**: Easily register or force 3D file associations and thumbnail shell handlers in the Windows Registry (`HKCU`) with a single click from the application settings panel.
 - **Asset Manager**: Local asset library with sidecar tagging (`.albedo/library.json`), search, filtering, and a non-leaking preview strip.
 - **Multi-Device Navigation**: Orbit and Fly camera modes, full Xbox controller mapping, and 6-DOF 3Dconnexion SpaceMouse support via WebHID.
@@ -105,7 +107,7 @@ Detailed technical documentation and reference guides are organized in the [`doc
 - [**Supported Formats & Decoders**](docs/FORMATS.md): Full format compatibility status matrix, NIF block size benchmarks, and USD crate parsing notes.
 - [**Navigation & Controls Guide**](docs/CONTROLS.md): Keyboard shortcuts, Xbox gamepad controls, SpaceMouse WebHID 6-DOF mapping, and Edit Mode handles.
 - [**Architecture & System Design**](docs/ARCHITECTURE.md): Startup optimization metrics, memory disposal & leak prevention, material contradiction rules, shell thumbnail COM DLL architecture, and post-processing pipeline.
-- [**Porting Beyond Windows**](docs/porting.md): What survives a port and what does not, the Linux thumbnailer contract, the macOS Quick Look extension, and the signing each one demands.
+- [**Desktop Platforms**](docs/PLATFORMS.md): Builds, native thumbnail providers, installation and platform validation.
 - [**Feature Verification & Roadmap**](docs/ROADMAP.md): Comprehensive feature verification checklist, test evidence log, and upcoming milestones.
 - [**Retopology & Baking**](docs/RETOPO.md): How the plancton engine becomes the Retopo tab, what the viewer already provides for it, the startup contract it must not break, and the phased plan.
 

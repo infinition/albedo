@@ -29,6 +29,11 @@ fn embed_thumbnail_provider() {
     println!("cargo:rerun-if-changed={}", dll.display());
 
     let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("provider.rs");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        std::fs::write(out, "pub const PROVIDER: Option<&[u8]> = None;")
+            .expect("write provider.rs");
+        return;
+    }
     let body = match std::fs::canonicalize(dll) {
         Ok(full) => format!(
             "pub const PROVIDER: Option<&[u8]> = Some(include_bytes!(r\"{}\"));",

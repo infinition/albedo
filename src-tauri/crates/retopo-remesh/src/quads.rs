@@ -1,10 +1,9 @@
 //! Pairing triangles into quads.
 //!
-//! On a regular isotropic mesh, most triangles have a neighbour they form a
-//! decent quad with. Finding those pairs greedily gives a quad-dominant result
-//! without any of the machinery a field-aligned remesher needs, and it is good
-//! enough for the thing quads are actually wanted for: predictable edge loops
-//! when the model deforms, and clean subdivision.
+//! Candidates respect winding, convexity, material boundaries and manifold
+//! incidence. A transported cross field guides their alignment; bounded
+//! augmenting paths recover pairs missed by greedy matching. This produces a
+//! quad-dominant mesh, without promising animation-ready global edge loops.
 //!
 //! Nothing is merged in the geometry. glTF has no quads, so the mesh stays
 //! triangles and the pairing travels alongside as an edge mask: which of a
@@ -16,6 +15,7 @@ use glam::Vec3;
 use retopo_core::{Adjacency, Mesh};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct QuadOptions {
     /// Two triangles will not pair if their normals differ by more than this.
     pub max_fold_deg: f32,
@@ -29,6 +29,9 @@ pub struct QuadOptions {
     /// Generous by default, because a strap or a cylinder is legitimately made
     /// of long thin quads.
     pub max_aspect: f32,
+    pub direction_weight: f32,
+    pub field_iterations: u32,
+    pub repair_passes: u32,
 }
 
 impl Default for QuadOptions {
@@ -37,6 +40,9 @@ impl Default for QuadOptions {
             max_fold_deg: 40.0,
             max_angle_error_deg: 55.0,
             max_aspect: 6.0,
+            direction_weight: 0.35,
+            field_iterations: 24,
+            repair_passes: 4,
         }
     }
 }
@@ -45,8 +51,9 @@ impl Default for QuadOptions {
 pub struct QuadStats {
     pub quads: usize,
     pub triangles_left: usize,
-    /// Share of the surface covered by quads rather than lone triangles.
+    /// Fraction of input triangles belonging to quads (not surface area).
     pub quad_fraction: f32,
+    pub recovered_quads: usize,
 }
 
 /// The pairing, plus the per triangle edge mask the viewer draws.
@@ -72,15 +79,37 @@ pub fn pair_into_quads(mesh: &Mesh, opts: &QuadOptions) -> Pairing {
 
     let adj = Adjacency::build(mesh);
     let cos_fold = opts.max_fold_deg.to_radians().cos();
+    let mut incidence = vec![0u32; adj.edges.len()];
+    for edges in &adj.tri_edges {
+        for &e in edges {
+            incidence[e as usize] += 1;
+        }
+    }
+    let field = (opts.direction_weight > 0.0 && opts.field_iterations > 0).then(|| {
+        crate::field::CrossField::solve(mesh, &adj, opts.max_fold_deg, opts.field_iterations)
+    });
 
     // Every interior edge is a candidate diagonal, scored by how square the quad
     // it would produce is.
     let mut candidates: Vec<(f32, u32, usize, usize)> = Vec::new();
     for (ei, e) in adj.edges.iter().enumerate() {
+        if incidence[ei] != 2 {
+            continue;
+        }
         let (Some(t1), Some(t2)) = (e.tri[0], e.tri[1]) else {
             continue;
         };
         let (t1, t2) = (t1 as usize, t2 as usize);
+        if t1 == t2 || mesh.tri_material.get(t1) != mesh.tri_material.get(t2) {
+            continue;
+        }
+        let forward = |t: usize| {
+            let f = mesh.triangles[t].map(|r| mesh.weld[r as usize]);
+            (0..3).any(|k| f[k] == e.v[0] && f[(k + 1) % 3] == e.v[1])
+        };
+        if forward(t1) == forward(t2) {
+            continue;
+        }
         let n1 = mesh.face_normal(t1);
         let n2 = mesh.face_normal(t2);
         if n1 == Vec3::ZERO || n2 == Vec3::ZERO || n1.dot(n2) < cos_fold {
@@ -89,6 +118,9 @@ pub fn pair_into_quads(mesh: &Mesh, opts: &QuadOptions) -> Pairing {
         let Some(quad) = quad_corners(mesh, t1, t2, e.v) else {
             continue;
         };
+        if !convex(&quad) {
+            continue;
+        }
         let error = worst_angle_error(&quad);
         if error > opts.max_angle_error_deg {
             continue;
@@ -99,20 +131,44 @@ pub fn pair_into_quads(mesh: &Mesh, opts: &QuadOptions) -> Pairing {
         }
         // Rank by angle error first, with elongation as a gentle tiebreak: a
         // square beats a rectangle, but a rectangle still beats a rhombus.
-        candidates.push((error + aspect, ei as u32, t1, t2));
+        let alignment = field
+            .as_ref()
+            .map(|f| {
+                (0..4)
+                    .map(|k| {
+                        let side = quad[(k + 1) % 4] - quad[k];
+                        f.penalty(t1, side) + f.penalty(t2, side)
+                    })
+                    .sum::<f32>()
+                    / 8.0
+            })
+            .unwrap_or(0.0);
+        let score = error + aspect + 90.0 * opts.direction_weight.clamp(0.0, 2.0) * alignment;
+        if score.is_finite() {
+            candidates.push((score, ei as u32, t1, t2));
+        }
     }
 
-    // Greedy, best first. A proper maximum weight matching would pair a few more
-    // triangles; on a regular mesh the difference is small and greedy is
-    // predictable, which matters more when a slider is driving it.
-    candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
+    candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let mut graph = vec![Vec::with_capacity(3); nt];
+    for &(_, _, a, b) in &candidates {
+        graph[a].push(b);
+        graph[b].push(a);
+    }
 
-    for (_, ei, t1, t2) in candidates {
+    for &(_, _, t1, t2) in &candidates {
         if pairing.partner[t1] >= 0 || pairing.partner[t2] >= 0 {
             continue;
         }
         pairing.partner[t1] = t2 as i32;
         pairing.partner[t2] = t1 as i32;
+    }
+    let greedy = pairing.partner.iter().filter(|&&p| p >= 0).count() / 2;
+    repair_matching(&graph, &mut pairing.partner, opts.repair_passes.min(8));
+    for &(_, ei, t1, t2) in &candidates {
+        if pairing.partner[t1] != t2 as i32 {
+            continue;
+        }
         // Hide the diagonal on both sides.
         for &t in &[t1, t2] {
             for k in 0..3 {
@@ -123,10 +179,80 @@ pub fn pair_into_quads(mesh: &Mesh, opts: &QuadOptions) -> Pairing {
         }
         pairing.stats.quads += 1;
     }
+    pairing.stats.recovered_quads = pairing.stats.quads - greedy;
 
     pairing.stats.triangles_left = pairing.partner.iter().filter(|p| **p < 0).count();
     pairing.stats.quad_fraction = (pairing.stats.quads * 2) as f32 / nt as f32;
     pairing
+}
+
+/// Alternating paths of at most five edges. On the triangle dual every node
+/// has at most three neighbours, so each pass is O(triangles), with bounded
+/// stack/memory use. This is deliberately not an exact blossom solver.
+fn repair_matching(graph: &[Vec<usize>], partner: &mut [i32], passes: u32) {
+    fn find(graph: &[Vec<usize>], partner: &[i32], path: &mut Vec<usize>, left: u32) -> bool {
+        let a = *path.last().unwrap();
+        for &b in &graph[a] {
+            if path.contains(&b) {
+                continue;
+            }
+            path.push(b);
+            if partner[b] < 0 {
+                return true;
+            }
+            let c = partner[b] as usize;
+            if left > 1 && !path.contains(&c) {
+                path.push(c);
+                if find(graph, partner, path, left - 1) {
+                    return true;
+                }
+                path.pop();
+            }
+            path.pop();
+        }
+        false
+    }
+    let mut path = Vec::with_capacity(6);
+    for _ in 0..passes {
+        let mut changed = false;
+        for root in 0..partner.len() {
+            if partner[root] >= 0 {
+                continue;
+            }
+            path.clear();
+            path.push(root);
+            if find(graph, partner, &mut path, 3) {
+                for pair in path.chunks_exact(2) {
+                    partner[pair[0]] = pair[1] as i32;
+                    partner[pair[1]] = pair[0] as i32;
+                }
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
+fn convex(q: &[Vec3; 4]) -> bool {
+    if q.iter().any(|p| !p.is_finite()) {
+        return false;
+    }
+    let n = (q[1] - q[0]).cross(q[2] - q[0]) + (q[2] - q[0]).cross(q[3] - q[0]);
+    let scale = (0..4)
+        .map(|k| q[k].distance_squared(q[(k + 1) % 4]))
+        .fold(0.0f32, f32::max);
+    if n.length_squared() <= scale * scale * 1e-12 {
+        return false;
+    }
+    let n = n.normalize_or_zero();
+    (0..4).all(|k| {
+        (q[(k + 1) % 4] - q[k])
+            .cross(q[(k + 2) % 4] - q[(k + 1) % 4])
+            .dot(n)
+            > scale * 1e-7
+    })
 }
 
 /// The four corners of the quad two triangles would make, in order around it.
@@ -167,7 +293,7 @@ fn side_aspect(quad: &[Vec3; 4]) -> f32 {
         min = min.min(d);
         max = max.max(d);
     }
-    if min <= 1e-9 {
+    if min <= 0.0 {
         f32::INFINITY
     } else {
         max / min
@@ -213,8 +339,10 @@ mod tests {
         let idx = |i: usize, j: usize| (j * (n + 1) + i) as u32;
         for j in 0..n {
             for i in 0..n {
-                m.triangles.push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1)]);
-                m.triangles.push([idx(i, j), idx(i + 1, j + 1), idx(i, j + 1)]);
+                m.triangles
+                    .push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1)]);
+                m.triangles
+                    .push([idx(i, j), idx(i + 1, j + 1), idx(i, j + 1)]);
                 m.tri_material.push(0);
                 m.tri_material.push(0);
             }
@@ -282,7 +410,10 @@ mod tests {
         m.compute_normals(40.0);
 
         let p = pair_into_quads(&m, &QuadOptions::default());
-        assert_eq!(p.stats.quads, 0, "a ninety degree fold was paired into a quad");
+        assert_eq!(
+            p.stats.quads, 0,
+            "a ninety degree fold was paired into a quad"
+        );
     }
 
     fn two_triangle_quad(corners: [Vec3; 4]) -> Mesh {
@@ -315,7 +446,10 @@ mod tests {
         // is what refused it.
         let loose = pair_into_quads(
             &m,
-            &QuadOptions { max_aspect: 100.0, ..Default::default() },
+            &QuadOptions {
+                max_aspect: 100.0,
+                ..Default::default()
+            },
         );
         assert_eq!(loose.stats.quads, 1);
     }
@@ -332,7 +466,11 @@ mod tests {
         assert_eq!(pair_into_quads(&m, &QuadOptions::default()).stats.quads, 0);
         let loose = pair_into_quads(
             &m,
-            &QuadOptions { max_angle_error_deg: 89.0, max_aspect: 100.0, ..Default::default() },
+            &QuadOptions {
+                max_angle_error_deg: 89.0,
+                max_aspect: 100.0,
+                ..Default::default()
+            },
         );
         assert_eq!(loose.stats.quads, 1);
     }
@@ -359,5 +497,103 @@ mod tests {
         let p = pair_into_quads(&Mesh::default(), &QuadOptions::default());
         assert_eq!(p.stats.quads, 0);
         assert!(p.partner.is_empty());
+    }
+
+    #[test]
+    fn alternating_paths_recover_the_greedy_trap() {
+        let graph = vec![vec![1], vec![2, 0], vec![1, 3], vec![2]];
+        let mut partner = vec![-1, 2, 1, -1];
+        repair_matching(&graph, &mut partner, 4);
+        assert_eq!(partner, vec![1, 0, 3, 2]);
+    }
+
+    #[test]
+    fn five_edge_paths_and_odd_cycles_keep_matching_valid() {
+        let graph = vec![
+            vec![1],
+            vec![2, 0],
+            vec![1, 3, 4],
+            vec![4, 2],
+            vec![3, 2, 5],
+            vec![4],
+        ];
+        let mut partner = vec![-1, 2, 1, 4, 3, -1];
+        repair_matching(&graph, &mut partner, 4);
+        for (a, &b) in partner.iter().enumerate() {
+            assert!(b >= 0);
+            assert!(graph[a].contains(&(b as usize)));
+            assert_eq!(partner[b as usize], a as i32);
+        }
+    }
+
+    #[test]
+    fn material_boundaries_are_real_edges() {
+        let mut m = grid(1);
+        m.materials.push(Material::default());
+        m.tri_material[1] = 1;
+        assert_eq!(pair_into_quads(&m, &QuadOptions::default()).stats.quads, 0);
+    }
+
+    #[test]
+    fn non_manifold_edges_are_not_hidden() {
+        let mut m = grid(1);
+        m.positions.push(Vec3::new(0.0, 0.0, 1.0));
+        m.triangles.push([0, 4, 3]);
+        m.tri_material.push(0);
+        m.rebuild_weld(0.0);
+        assert_eq!(Adjacency::build(&m).non_manifold_edges, 1);
+        assert_eq!(pair_into_quads(&m, &QuadOptions::default()).stats.quads, 0);
+    }
+
+    #[test]
+    fn concavity_is_rejected_even_with_loose_angle_limits() {
+        let m = two_triangle_quad([
+            Vec3::ZERO,
+            Vec3::X * 2.0,
+            Vec3::new(0.4, 0.4, 0.0),
+            Vec3::Y * 2.0,
+        ]);
+        let p = pair_into_quads(
+            &m,
+            &QuadOptions {
+                max_angle_error_deg: 180.0,
+                max_aspect: 100.0,
+                ..Default::default()
+            },
+        );
+        assert_eq!(p.stats.quads, 0);
+    }
+
+    #[test]
+    fn field_transports_across_rotated_face_frames() {
+        let mut m = grid(5);
+        let rotation = glam::Quat::from_rotation_x(0.7) * glam::Quat::from_rotation_z(0.31);
+        for p in &mut m.positions {
+            *p = rotation * *p;
+        }
+        let adj = Adjacency::build(&m);
+        let f = crate::field::CrossField::solve(&m, &adj, 40.0, 48);
+        let x = rotation * Vec3::X;
+        let diagonal = rotation * (Vec3::X + Vec3::Y);
+        for t in 0..m.triangle_count() {
+            assert!(f.penalty(t, x) < 0.01);
+            assert!(f.penalty(t, diagonal) > 0.5);
+        }
+        assert_eq!(pair_into_quads(&m, &QuadOptions::default()).stats.quads, 25);
+    }
+
+    #[test]
+    fn pairing_is_scale_invariant_and_repeatable() {
+        let m = grid(5);
+        let baseline = pair_into_quads(&m, &QuadOptions::default());
+        for scale in [1e-5, 1.0, 1e5] {
+            let mut scaled = m.clone();
+            for p in &mut scaled.positions {
+                *p *= scale;
+            }
+            let paired = pair_into_quads(&scaled, &QuadOptions::default());
+            assert_eq!(baseline.partner, paired.partner);
+            assert_eq!(baseline.edge_mask, paired.edge_mask);
+        }
     }
 }

@@ -90,7 +90,6 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
   // Whether this call brings data worth overwriting what is already there.
   const carries = !!(mask || charts || dev);
   let tri = 0;
-  let vert = 0;
   object.traverse((n) => {
     if (!n.isMesh && !n.isSkinnedMesh) return;
     let g = n.geometry;
@@ -107,7 +106,6 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
      */
     if (!carries && g.attributes.aBary) {
       tri += g.attributes.position.count / 3;
-      vert += g.attributes.position.count;
       return;
     }
 
@@ -148,7 +146,7 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
       const m = mask ? mask[t] : undefined;
       edges[i] = m === undefined ? ALL_EDGES : m;
       if (charts) chart[i] = charts[t] ?? 0;
-      if (dev) deviation[i] = dev[vert + (source[i] ?? i)] ?? 0;
+      if (dev) deviation[i] = dev[source[i] ?? i] ?? 0;
     }
 
     g.setAttribute("aBary", new THREE.BufferAttribute(bary, 3));
@@ -156,22 +154,8 @@ export function prepareWire(object, mask = null, charts = null, dev = null) {
     g.setAttribute("aChart", new THREE.BufferAttribute(chart, 1));
     g.setAttribute("aDev", new THREE.BufferAttribute(deviation, 1));
     tri += count / 3;
-    // Vertices are counted in the *engine's* numbering, not the expanded one, so
-    // a second mesh starts where the first one's own vertices ended.
-    /*
-     * A loop, and not `Math.max(...source)`.
-     *
-     * The spread turns every entry of the index buffer into a separate function
-     * argument, so a nine hundred thousand triangle mesh calls `Math.max` with
-     * 2.7 million of them and overflows the stack. It works on every small model
-     * you test with and dies on the first real one, which is the worst shape a
-     * bug can have.
-     */
-    let highest = 0;
-    for (let i = 0; i < source.length; i++) {
-      if (source[i] > highest) highest = source[i];
-    }
-    vert += before ? highest + 1 : count;
+    // Retopo GLBs share one vertex accessor across all material primitives.
+    // Each primitive index already addresses the global deviation buffer.
   });
   return tri;
 }

@@ -22,12 +22,14 @@ use glam::Vec3;
 use retopo_core::{Adjacency, Bvh, Mesh};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct RelaxOptions {
     pub iterations: u32,
     /// How far toward the neighbour average to move each pass, in `0..1`.
     pub strength: f32,
     /// Hold sharp edges and open borders in place.
     pub preserve_features: bool,
+    pub preserve_boundary: bool,
     /// Angle above which an edge counts as a feature *for relaxation*.
     ///
     /// Deliberately looser than the decimator's. A mesh reduced from a million
@@ -48,6 +50,7 @@ impl Default for RelaxOptions {
             iterations: 8,
             strength: 0.5,
             preserve_features: true,
+            preserve_boundary: true,
             sharp_angle_deg: 75.0,
             reproject: true,
         }
@@ -83,6 +86,16 @@ pub fn relax(
     opts: &RelaxOptions,
     progress: &mut dyn FnMut(f32),
 ) -> RelaxStats {
+    relax_with_pins(mesh, source, opts, &[], progress)
+}
+
+pub(crate) fn relax_with_pins(
+    mesh: &mut Mesh,
+    source: Option<&Bvh>,
+    opts: &RelaxOptions,
+    additional_pins: &[bool],
+    progress: &mut dyn FnMut(f32),
+) -> RelaxStats {
     let (worst, mean) = aspect_ratios(mesh);
     let mut stats = RelaxStats {
         aspect_before: worst,
@@ -107,9 +120,21 @@ pub fn relax(
     let start = pos.clone();
 
     let mut pinned = vec![false; nw];
-    if opts.preserve_features {
+    for (pin, &extra) in pinned.iter_mut().zip(additional_pins) {
+        *pin = extra;
+    }
+    {
+        let mut incidence = vec![0u32; adj.edges.len()];
+        for edges in &adj.tri_edges {
+            for &e in edges {
+                incidence[e as usize] += 1;
+            }
+        }
         for (ei, e) in adj.edges.iter().enumerate() {
-            if sharp[ei] || e.is_boundary() {
+            if incidence[ei] > 2
+                || (e.is_boundary() && opts.preserve_boundary)
+                || (!e.is_boundary() && sharp[ei] && opts.preserve_features)
+            {
                 pinned[e.v[0] as usize] = true;
                 pinned[e.v[1] as usize] = true;
             }
@@ -189,12 +214,33 @@ pub fn relax(
             if n != Vec3::ZERO {
                 delta -= n * n.dot(delta);
             }
-            let moved = pos[v] + delta;
-
-            next[v] = match source.filter(|_| opts.reproject) {
-                Some(bvh) => bvh.closest_point(moved).map(|h| h.point).unwrap_or(moved),
-                None => moved,
-            };
+            // Validate against already accepted moves in this pass. Checking
+            // each move against only the old mesh misses simultaneous flips.
+            for _ in 0..8 {
+                let moved = pos[v] + delta;
+                let candidate = match source.filter(|_| opts.reproject) {
+                    Some(bvh) => bvh.closest_point(moved).map(|h| h.point).unwrap_or(moved),
+                    None => moved,
+                };
+                let valid = candidate.is_finite()
+                    && adj.vertex_triangles(v as u32).iter().all(|&t| {
+                        let f = mesh.triangles[t as usize].map(|r| mesh.weld[r as usize] as usize);
+                        let old = f.map(|w| pos[w]);
+                        let new = f.map(|w| if w == v { candidate } else { next[w] });
+                        let n0 = (old[1] - old[0]).cross(old[2] - old[0]);
+                        let n1 = (new[1] - new[0]).cross(new[2] - new[0]);
+                        let scale = (new[1] - new[0])
+                            .length_squared()
+                            .max((new[2] - new[0]).length_squared());
+                        n1.length_squared() > scale * scale * 1e-12
+                            && n0.normalize_or_zero().dot(n1.normalize_or_zero()) >= 0.2
+                    });
+                if valid {
+                    next[v] = candidate;
+                    break;
+                }
+                delta *= 0.5;
+            }
         }
         pos = next;
         progress((it + 1) as f32 / opts.iterations as f32);
@@ -282,8 +328,10 @@ mod tests {
         let idx = |i: usize, j: usize| (j * (n + 1) + i) as u32;
         for j in 0..n {
             for i in 0..n {
-                m.triangles.push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1)]);
-                m.triangles.push([idx(i, j), idx(i + 1, j + 1), idx(i, j + 1)]);
+                m.triangles
+                    .push([idx(i, j), idx(i + 1, j), idx(i + 1, j + 1)]);
+                m.triangles
+                    .push([idx(i, j), idx(i + 1, j + 1), idx(i, j + 1)]);
                 m.tri_material.push(0);
                 m.tri_material.push(0);
             }
@@ -306,7 +354,11 @@ mod tests {
                     -Vec3::Y
                 } else {
                     let phi = (s % segments) as f32 / segments as f32 * 2.0 * PI;
-                    Vec3::new(theta.sin() * phi.cos(), theta.cos(), theta.sin() * phi.sin())
+                    Vec3::new(
+                        theta.sin() * phi.cos(),
+                        theta.cos(),
+                        theta.sin() * phi.sin(),
+                    )
                 };
                 m.positions.push(p);
             }
@@ -314,8 +366,10 @@ mod tests {
         let idx = |s: usize, r: usize| (r * (segments + 1) + s) as u32;
         for r in 0..rings {
             for s in 0..segments {
-                m.triangles.push([idx(s, r), idx(s + 1, r), idx(s + 1, r + 1)]);
-                m.triangles.push([idx(s, r), idx(s + 1, r + 1), idx(s, r + 1)]);
+                m.triangles
+                    .push([idx(s, r), idx(s + 1, r), idx(s + 1, r + 1)]);
+                m.triangles
+                    .push([idx(s, r), idx(s + 1, r + 1), idx(s, r + 1)]);
                 m.tri_material.push(0);
                 m.tri_material.push(0);
             }
@@ -336,7 +390,10 @@ mod tests {
         let stats = relax(
             &mut m,
             None,
-            &RelaxOptions { iterations: 16, ..Default::default() },
+            &RelaxOptions {
+                iterations: 16,
+                ..Default::default()
+            },
             &mut |_| {},
         );
         assert!(
@@ -357,6 +414,27 @@ mod tests {
         let after = m.bounds();
         assert!(after.min.abs_diff_eq(before.min, 1e-5), "{:?}", after.min);
         assert!(after.max.abs_diff_eq(before.max, 1e-5), "{:?}", after.max);
+    }
+
+    #[test]
+    fn full_strength_relaxation_does_not_invert_triangles() {
+        let mut m = jittered_grid(12);
+        let before: Vec<_> = (0..m.triangle_count()).map(|t| m.face_normal(t)).collect();
+        relax(
+            &mut m,
+            None,
+            &RelaxOptions {
+                iterations: 30,
+                strength: 1.0,
+                preserve_features: false,
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+        for (t, &n) in before.iter().enumerate() {
+            assert!(m.face_normal(t).dot(n) > 0.99);
+            assert!(m.face_area(t) > 0.0);
+        }
     }
 
     /// The whole point of the tangential projection. A plain Laplacian smooth
@@ -423,7 +501,10 @@ mod tests {
         let stats = relax(
             &mut m,
             None,
-            &RelaxOptions { iterations: 0, ..Default::default() },
+            &RelaxOptions {
+                iterations: 0,
+                ..Default::default()
+            },
             &mut |_| {},
         );
         assert_eq!(stats.moved, 0);
@@ -434,7 +515,9 @@ mod tests {
     fn progress_ends_at_one() {
         let mut m = jittered_grid(6);
         let mut seen = Vec::new();
-        relax(&mut m, None, &RelaxOptions::default(), &mut |p| seen.push(p));
+        relax(&mut m, None, &RelaxOptions::default(), &mut |p| {
+            seen.push(p)
+        });
         assert_eq!(seen.last().copied(), Some(1.0));
         assert!(seen.windows(2).all(|w| w[0] <= w[1]));
     }

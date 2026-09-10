@@ -1,5 +1,10 @@
 # Porting Albedo beyond Windows
 
+> Historical design notes. The implemented backends, packaging and current
+> validation status are documented in [Desktop platforms](PLATFORMS.md).
+> In particular, Linux thumbnailing now uses a separate WebKit/Xvfb host;
+> launching a hidden GUI directly is insufficient inside file-manager sandboxes.
+
 Written while everything here is still Windows only, because the shape of the
 problem is clearest before anyone has started. Nothing in this file is a plan
 with dates; it is a map of what moves, what does not, and where the real work

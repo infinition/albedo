@@ -6,13 +6,16 @@ export default defineConfig({
   server: {
     port: 5183,
     strictPort: true,
-    watch: { ignored: ["**/src-tauri/**"] },
+    // Rust build executables are locked on Windows while linking. Watching the
+    // thumbnail build directory could crash Vite with EBUSY during build:all.
+    watch: { ignored: ["**/src-tauri/**", "**/target/**"] },
   },
   build: {
-    target: "chrome110",
+    target: ["chrome110", "safari15"],
     sourcemap: false,
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
+      input: { main: "index.html", thumbnail: "thumbnail.html" },
       output: {
         /**
          * Keep the engine and its optional readers apart.

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="model/gltf-binary"><comment>GLB 3D model</comment><glob pattern="*.glb"/></mime-type>
+  <mime-type type="model/gltf+json"><comment>GLTF 3D model</comment><glob pattern="*.gltf"/></mime-type>
+  <mime-type type="application/vnd.autodesk.fbx"><comment>FBX 3D model</comment><glob pattern="*.fbx"/></mime-type>
+  <mime-type type="model/obj"><comment>OBJ 3D model</comment><glob pattern="*.obj"/></mime-type>
+  <mime-type type="model/stl"><comment>STL 3D model</comment><glob pattern="*.stl"/></mime-type>
+  <mime-type type="application/x-ply"><comment>PLY 3D model</comment><glob pattern="*.ply"/></mime-type>
+  <mime-type type="model/vnd.collada+xml"><comment>DAE 3D model</comment><glob pattern="*.dae"/></mime-type>
+  <mime-type type="model/3mf"><comment>3MF 3D model</comment><glob pattern="*.3mf"/></mime-type>
+  <mime-type type="image/x-3ds"><comment>3DS 3D model</comment><glob pattern="*.3ds"/></mime-type>
+  <mime-type type="model/vnd.usdz+zip"><comment>USDZ 3D model</comment><glob pattern="*.usdz"/></mime-type>
+  <mime-type type="model/x-albedo-usd"><comment>USD 3D model</comment><glob pattern="*.usd"/></mime-type>
+  <mime-type type="model/x-albedo-usda"><comment>USDA 3D model</comment><glob pattern="*.usda"/></mime-type>
+  <mime-type type="model/x-albedo-usdc"><comment>USDC 3D model</comment><glob pattern="*.usdc"/></mime-type>
+  <mime-type type="model/x-albedo-wrl"><comment>WRL 3D model</comment><glob pattern="*.wrl"/></mime-type>
+  <mime-type type="model/x-albedo-vrml"><comment>VRML 3D model</comment><glob pattern="*.vrml"/></mime-type>
+  <mime-type type="model/x-albedo-vox"><comment>VOX 3D model</comment><glob pattern="*.vox"/></mime-type>
+  <mime-type type="model/x-albedo-amf"><comment>AMF 3D model</comment><glob pattern="*.amf"/></mime-type>
+  <mime-type type="model/x-albedo-pcd"><comment>PCD 3D model</comment><glob pattern="*.pcd"/></mime-type>
+  <mime-type type="model/x-albedo-xyz"><comment>XYZ 3D model</comment><glob pattern="*.xyz"/></mime-type>
+  <mime-type type="model/x-albedo-nif"><comment>NIF 3D model</comment><glob pattern="*.nif"/></mime-type>
+  <mime-type type="model/x-albedo-kf"><comment>KF 3D model</comment><glob pattern="*.kf"/></mime-type>
+  <mime-type type="model/x-albedo-kfa"><comment>KFA 3D model</comment><glob pattern="*.kfa"/></mime-type>
+</mime-info>

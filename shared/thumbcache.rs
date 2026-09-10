@@ -9,13 +9,17 @@
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+#[path = "paths.rs"]
+#[allow(dead_code)]
+mod paths;
+
 /// Bumped whenever the viewer draws differently.
 ///
 /// The cache is keyed on the file, which is right until the renderer itself
 /// changes: correcting how USD states roughness, or how bright an environment
 /// lights a model, leaves every stored image showing the old answer with no
 /// reason to expire. Raising this number retires them all at once.
-pub const RENDER_EPOCH: u32 = 3;
+pub const RENDER_EPOCH: u32 = 4;
 
 /// Explorer asks for arbitrary widths; rounding to three sizes keeps the cache
 /// small and lets one picture serve a whole range of views.
@@ -39,8 +43,7 @@ pub fn hash64(bytes: &[u8]) -> u64 {
 
 /// Where every rendered picture lives.
 pub fn cache_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("LOCALAPPDATA")?;
-    Some(PathBuf::from(base).join("Albedo").join("thumbnails"))
+    Some(paths::cache_dir()?.join("thumbnails"))
 }
 
 /// Where a given model's picture lives.
@@ -60,7 +63,10 @@ pub fn cache_path(model: &Path, bucket: u32) -> Option<PathBuf> {
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
 
+    #[cfg(windows)]
     let mut key = model.to_string_lossy().to_lowercase().into_bytes();
+    #[cfg(not(windows))]
+    let mut key = model.as_os_str().as_encoded_bytes().to_vec();
     key.extend_from_slice(&stamp.to_le_bytes());
     key.extend_from_slice(&meta.len().to_le_bytes());
     key.extend_from_slice(&RENDER_EPOCH.to_le_bytes());

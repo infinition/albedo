@@ -1,5 +1,7 @@
 import { Viewer, shiftHue } from "./viewer/viewer.js";
 import { loadModel, SUPPORTED } from "./viewer/loaders.js";
+import { resolveSiblingPath } from "./paths.js";
+import { thumbnail, neutralThumbnailLook } from "./viewer/thumbnail.js";
 import { ChannelView, CHANNELS } from "./viewer/channels.js";
 import { applyFoundTextures } from "./viewer/textures.js";
 import {
@@ -1114,18 +1116,7 @@ const setProgress = (fraction) => {
  * resolve siblings on their own; they are given the real folder instead.
  */
 function siblingResolver(modelPath) {
-  const cut = Math.max(modelPath.lastIndexOf("\\"), modelPath.lastIndexOf("/"));
-  const dir = modelPath.slice(0, cut);
-  const unc = dir.startsWith("\\\\");
-  return (relative) => {
-    const parts = dir.split(/[\\/]/).filter(Boolean);
-    for (const segment of relative.split(/[\\/]/)) {
-      if (!segment || segment === ".") continue;
-      if (segment === "..") parts.pop();
-      else parts.push(segment);
-    }
-    return tauri.core.convertFileSrc((unc ? "\\\\" : "") + parts.join("\\"));
-  };
+  return (relative) => tauri.core.convertFileSrc(resolveSiblingPath(modelPath, relative));
 }
 
 async function open(url, label, { findTextures, resolveSibling } = {}) {
@@ -1486,10 +1477,13 @@ async function texturesSettled(deadline = 8000) {
  */
 async function renderThumbnail({ path, size }) {
   try {
-    await openPath(path);
-    if (!viewer.current) throw new Error("modèle illisible");
-    await texturesSettled();
-    const data = viewer.snapshot(size, { transparent: true });
+    const found = await tauri.core.invoke("scan_textures", { modelPath: path });
+    const toCandidate = (f) => ({ name: f.name, url: tauri.core.convertFileSrc(f.path) });
+    const data = await thumbnail(viewer, {
+      url: tauri.core.convertFileSrc(path), name: path.split(/[\\/]/).pop(), size,
+      candidates: found.map(toCandidate), resolveSibling: siblingResolver(path),
+      findTextures: async (names) => (await tauri.core.invoke("find_textures", { modelPath: path, names })).map(toCandidate),
+    });
     await tauri.core.invoke("write_thumbnail", { data });
   } catch (e) {
     await tauri.core.invoke("thumbnail_failed", { message: String(e?.message || e) });
@@ -3433,14 +3427,7 @@ $("btn-pedestal")?.addEventListener("click", async () => {
  * key has no room to say which look produced it.
  */
 function neutralLook() {
-  viewer.setExposure(1);
-  viewer.setEnvironmentIntensity(1);
-  viewer.envLighting = true;
-  viewer.setKeyLight(true);
-  viewer.setKeyLightPower(1.6);
-  viewer.setKeyLightColour("#ffffff");
-  viewer.setEnvironment("studio");
-  viewer.setClipping({ on: false });
+  neutralThumbnailLook(viewer);
 }
 
 /** Put the saved settings back, without writing them out again as we go. */
@@ -3705,9 +3692,9 @@ void shellReady.then(async () => {
       renderThumbnail(job);
     } else {
       // A file passed on the command line ("Open with…")
+      await tauri.event.listen("open-file", (e) => e.payload && openPath(e.payload));
       const startup = await tauri.core.invoke("startup_file").catch(() => null);
       if (startup) openPath(startup);
-      tauri.event.listen("open-file", (e) => e.payload && openPath(e.payload));
       // Something was written on the user's behalf, so they are told which, and
       // where to undo it. Once, on the first launch of a machine that had none.
       tauri.event.listen("shell-enabled", () => {
@@ -4590,6 +4577,10 @@ async function paintShellState(state) {
   $("shell-section").hidden = false;
   $("shell-on").disabled = !state.available || state.current_is_registered;
   $("shell-off").disabled = !state.registered;
+  if (state.detail) {
+    note.textContent = t(state.detail);
+    return;
+  }
   if (!state.registered) {
     note.textContent = state.available ? t("shell.inactive") : t("shell.unavailable");
     return;
@@ -5467,7 +5458,7 @@ window.addEventListener("keydown", (e) => {
       toast(t(document.body.classList.contains("clean") ? "toast.uiHidden" : "toast.uiVisible"));
       break;
     case "KeyF":
-      if (e.ctrlKey || e.altKey) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       viewer.frameCurrent();
       toast(t("toast.framed"));
@@ -5485,7 +5476,7 @@ window.addEventListener("keydown", (e) => {
     case "Digit5": applyChannel("uv"); toast(labelOfChannel("uv")); break;
     case "KeyO":
       // The same key opens a file with the modifier and orbits without it
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         openFile();
       } else {
@@ -5494,13 +5485,13 @@ window.addEventListener("keydown", (e) => {
       }
       break;
     case "KeyC":
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         copySelection();
       }
       break;
     case "KeyV":
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         pasteClipboard();
       } else {
@@ -5528,7 +5519,7 @@ window.addEventListener("keydown", (e) => {
     // roll and nothing at all while it is off. Modal, as in every tool that
     // has more to do than it has letters.
     case "KeyZ":
-      if (!e.ctrlKey) break;
+      if (!(e.ctrlKey || e.metaKey)) break;
       e.preventDefault();
       stepHistory(!e.shiftKey);
       break;
@@ -5548,7 +5539,7 @@ window.addEventListener("keydown", (e) => {
       } else setEditMode("translate");
       break;
     case "KeyS":
-      if (!e.ctrlKey) setEditMode("scale");
+      if (!(e.ctrlKey || e.metaKey)) setEditMode("scale");
       break;
     /*
      * Ctrl+T and Ctrl+W, which mean what they mean everywhere there are tabs.
@@ -5558,7 +5549,7 @@ window.addEventListener("keydown", (e) => {
      * and these are the two chords nobody has to be taught.
      */
     case "KeyT":
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         newDocument();
         setTitle("Albedo", true);
@@ -5583,7 +5574,7 @@ window.addEventListener("keydown", (e) => {
       } else setEditMode("rotate");
       break;
     case "KeyW":
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         if (activeDoc) closeDocument(activeDoc.id);
         break;

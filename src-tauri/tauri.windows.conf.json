@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "resources": {
+      "../shell-thumbnails/target/release/albedo_thumbnails.dll": "albedo_thumbnails.dll",
+      "icons/albedo-file.ico": "albedo-file.ico"
+    },
+    "windows": { "nsis": { "installMode": "currentUser", "installerHooks": "installer-hooks.nsi" } }
+  }
+}

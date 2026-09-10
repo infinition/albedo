@@ -19,11 +19,12 @@ import {
   snapshotIdentity,
   supersededBy,
 } from "../naming.js";
-import { applyStaticIn, num, register, t } from "../i18n/index.js";
+import { applyStaticIn, locale, num, register, t } from "../i18n/index.js";
 import { isPressed, setPressed } from "../ui/toggle.js";
 import rtFr from "./fr.json";
 import rtEn from "./en.json";
 import "./retopo.css";
+import { totalReport } from "./report.js";
 
 /*
  * This mode's strings live with this mode.
@@ -111,14 +112,16 @@ const SHELL = `
         is the name of one of the two things inside it: a heading that competes
         with its own contents.
       -->
-      <p class="rt-sub" data-i18n="rt.method">Méthode — choisis l'une des deux</p>
+      <p class="rt-sub" data-i18n="rt.method">Méthode</p>
       <div class="segment" role="group" data-i18n-aria="rt.method" aria-label="Méthode">
         <button class="seg" type="button" data-el="mmDecimate" data-i18n="rt.decimate">Décimer</button>
-        <button class="seg" type="button" data-el="mmIsotropic" data-i18n="rt.rebuild">Reconstruire</button>
+        <button class="seg" type="button" data-el="mmIsotropic" data-i18n="rt.rebuild">Uniforme</button>
+        <button class="seg" type="button" data-el="mmAdaptive" data-i18n="rt.adaptive">Adaptatif</button>
       </div>
+      <p class="rt-hint" data-el="mMethodHint"></p>
       <label class="rt-field">
         <span><span data-i18n="rt.triangles">Triangles</span> <span class="rt-num" data-el="mTargetValue">—</span></span>
-        <input type="range" data-el="mTarget" min="1" max="90" step="1" value="10" />
+        <input type="range" data-el="mTarget" min="0" max="1000" step="1" value="500" />
       </label>
       <label class="rt-field">
         <span><span data-i18n="rt.maxDeviation">Déviation max</span> <span class="rt-num" data-el="mMaxErrorValue">—</span></span>
@@ -320,10 +323,11 @@ const PANEL = `
   <div class="segment" role="group" data-i18n-aria="rt.method" aria-label="Méthode">
     <button class="seg active" type="button" data-el="mDecimate" data-i18n-title="rt.decimateTitle" data-i18n="rt.decimate" title="Dépenser le budget là où la silhouette en a besoin">Décimer</button>
     <button class="seg" type="button" data-el="mIsotropic" data-i18n-title="rt.rebuildTitle" data-i18n="rt.rebuild" title="Reconstruire vers des arêtes régulières et une valence de six">Reconstruire</button>
+    <button class="seg" type="button" data-el="mAdaptive" data-i18n-title="rt.adaptiveTitle" data-i18n="rt.adaptive">Adaptatif</button>
   </div>
   <label class="rt-field">
     <span><span data-i18n="rt.triangles">Triangles</span> <span class="rt-num" data-el="targetValue">—</span></span>
-    <input type="range" data-el="target" min="1" max="90" step="1" value="10" />
+    <input type="range" data-el="target" min="0" max="1000" step="1" value="500" />
   </label>
   <p class="rt-hint" data-el="methodHint"></p>
 
@@ -469,17 +473,29 @@ const PANEL = `
 </div>
 `;
 
+/**
+ * Triangles drawn by one object, its children left out.
+ *
+ * Separate from the sum below because the budget is now split between the
+ * meshes of a run at the ratio of their own sizes, and a mesh parented to
+ * another mesh would otherwise be counted twice: once inside its parent's
+ * total and once as itself, since the scope lists every mesh individually.
+ */
+function triangleCount(o) {
+  if (!o.isMesh && !o.isSkinnedMesh) return 0;
+  const g = o.geometry;
+  if (!g) return 0;
+  // An indexed geometry draws its index buffer; a soup draws its positions.
+  return Math.round((g.index ? g.index.count : g.attributes.position?.count || 0) / 3);
+}
+
 /** Triangles actually drawn, which is not the same as vertices. */
 function countTriangles(root) {
   let total = 0;
   root.traverse((o) => {
-    if (!o.isMesh && !o.isSkinnedMesh) return;
-    const g = o.geometry;
-    if (!g) return;
-    // An indexed geometry draws its index buffer; a soup draws its positions.
-    total += (g.index ? g.index.count : g.attributes.position?.count || 0) / 3;
+    total += triangleCount(o);
   });
-  return Math.round(total);
+  return total;
 }
 
 /* Grouped by the language that is on, never by French alone. */
@@ -609,6 +625,9 @@ export function createRetopo({
   });
 
   let source = 0;
+  /** Whether the budget slider has been moved by hand, and so must be left
+   *  where it was put rather than re-seeded on the next model. */
+  let targetTouched = false;
   let last = null;
   /** The arguments the report was last drawn from, so it can be redrawn. */
   let lastReport = null;
@@ -645,7 +664,7 @@ export function createRetopo({
   /** Index of the result currently in the scene, or -1 for the bare source. */
   let cursor = -1;
 
-  const METHOD_HINT = { decimate: "rt.hintDecimate", isotropic: "rt.hintIsotropic" };
+  const METHOD_HINT = { decimate: "rt.hintDecimate", isotropic: "rt.hintIsotropic", adaptive: "rt.hintAdaptive" };
 
   /** The drawn bake cage, rebuilt with each result. */
   let cage = null;
@@ -1294,8 +1313,65 @@ export function createRetopo({
 
   // --- painting -----------------------------------------------------------
 
-  /** The budget in triangles, from the slider's percentage. */
-  const budget = () => Math.max(4, Math.round((source * Number(el.target.value)) / 100));
+  /*
+   * The budget is a triangle count, and the slider travels on a logarithm.
+   *
+   * A percentage was the honest unit while a run meant "shrink this by so
+   * much", but it is not the unit anyone is given: a budget arrives as "under
+   * fifteen thousand", and turning that into a percentage means dividing by a
+   * source count the panel already knows. So the slider carries the count and
+   * the percentage rides along behind it.
+   *
+   * Logarithmic because the decisions live at the bottom. On a two hundred
+   * thousand triangle scan every useful answer is under ten percent, and a
+   * linear travel spends nine tenths of its length between "barely touched"
+   * and "not touched at all", with the whole interesting range crushed into
+   * the first centimetre. On a log travel a step is a constant *ratio*, which
+   * is how a budget is actually reasoned about.
+   */
+  const TARGET_FLOOR = 100;
+  /** Both ends of the travel, in triangles, for the current source. */
+  const targetSpan = () => [Math.min(TARGET_FLOOR, source), Math.max(source, 4)];
+
+  /** The budget in triangles, from the slider's position. */
+  function budget() {
+    if (!source) return 0;
+    const [lo, hi] = targetSpan();
+    if (hi <= lo) return hi;
+    const k = Number(el.target.value) / 1000;
+    const n = Math.round(Math.exp(Math.log(lo) + (Math.log(hi) - Math.log(lo)) * k));
+    return Math.max(4, Math.min(source, n));
+  }
+
+  /** The inverse, so the slider can be seeded from a triangle count. */
+  function positionFor(triangles) {
+    if (!source) return 500;
+    const [lo, hi] = targetSpan();
+    if (hi <= lo) return 1000;
+    const k =
+      (Math.log(Math.max(lo, Math.min(hi, triangles))) - Math.log(lo)) /
+      (Math.log(hi) - Math.log(lo));
+    return Math.round(Math.max(0, Math.min(1, k)) * 1000);
+  }
+
+  /**
+   * The budget, said the way a budget is said: "12,3 k tris (4,1 %)".
+   *
+   * Thousands rather than the full number because the slider moves and a label
+   * that reads 12 347 then 12 402 is asking to be read as an exact figure it is
+   * not; under ten thousand the exact count fits and is more useful than a
+   * rounded one. The percentage stays because the *method* thinks in ratios,
+   * and losing it would hide how much is being thrown away.
+   */
+  function budgetLabel(n) {
+    if (!source) return t("rt.noSource");
+    const count =
+      n >= 10_000
+        ? `${(n / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 })} k`
+        : fr(n);
+    const share = (n / source) * 100;
+    return `${count} (${share.toLocaleString(locale(), { maximumFractionDigits: share < 10 ? 1 : 0 })} %)`;
+  }
 
   /** The atlas side, from the slider's exponent. The useful sizes are powers of
    *  two and a linear 256..8192 slider spends its travel on values nobody picks. */
@@ -1303,6 +1379,8 @@ export function createRetopo({
 
   function setMethod(next) {
     method = next;
+    el.mAdaptive.classList.toggle("active", next === "adaptive");
+    el.mmAdaptive.classList.toggle("active", next === "adaptive");
     el.mDecimate.classList.toggle("active", next === "decimate");
     el.mIsotropic.classList.toggle("active", next === "isotropic");
     el.mmDecimate.classList.toggle("active", next === "decimate");
@@ -1318,7 +1396,10 @@ export function createRetopo({
   }
 
   function paint() {
-    el.targetValue.textContent = source ? `${fr(budget())} · ${el.target.value} %` : `${el.target.value} %`;
+    for (const key of ["maxError", "mMaxError", "seam", "mSeam"]) {
+      el[key].disabled = method !== "decimate";
+    }
+    el.targetValue.textContent = budgetLabel(budget());
     el.angleValue.textContent = `${el.angle.value}°`;
     el.seamValue.textContent = el.seam.value;
     el.relaxValue.textContent = el.relax.value;
@@ -1369,6 +1450,7 @@ export function createRetopo({
 
   /** Mirror the panel's controls into the unfolded menu. One direction only. */
   function syncMenu() {
+    el.mMethodHint.textContent = t(METHOD_HINT[method]);
     el.mTarget.value = el.target.value;
     el.mMaxError.value = el.maxError.value;
     el.mAngle.value = el.angle.value;
@@ -1385,7 +1467,7 @@ export function createRetopo({
     el.mBleed.value = el.bleed.value;
     el.mIsland.value = el.island.value;
 
-    el.mTargetValue.textContent = `${el.target.value} %`;
+    el.mTargetValue.textContent = budgetLabel(budget());
     el.mMaxErrorValue.textContent =
       Number(el.maxError.value) === 0 ? t("rt.none") : `${(Number(el.maxError.value) / 1000).toFixed(3)}`;
     el.mAngleValue.textContent = `${el.angle.value}°`;
@@ -1413,14 +1495,36 @@ export function createRetopo({
   }
 
   function refresh() {
-    source = viewer.current ? countTriangles(viewer.root) : 0;
+    /*
+     * Two counts, because two different questions are being asked.
+     *
+     * `loaded` answers "is there a model", which is what disables the button and
+     * writes the empty-handed message. `source` answers "how much geometry is
+     * this run about", which is what the budget is a fraction of, and that is
+     * the scope's answer rather than the scene's. They used to be the same
+     * number and the label lied on every scope but "Tout": pick one mesh out of
+     * forty and the panel still offered you a budget measured against all
+     * forty. It also counted this mode's own results as source geometry, so the
+     * figure grew every time a run finished.
+     */
+    const loaded = viewer.current ? countTriangles(viewer.root) : 0;
+    source = loaded ? sourceMeshes().reduce((n, o) => n + triangleCount(o), 0) : 0;
+
+    // The slider holds a position, not a count, so it survives a model change
+    // without meaning anything until one is loaded. Seed it at a tenth of the
+    // first model that arrives, and never touch it again once it has been moved:
+    // a slider that resets itself under your hand is worse than a bad default.
+    if (source && !targetTouched) el.target.value = String(positionFor(source / 10));
+
     // Never disabled while running: it is the cancel button then.
     el.run.disabled = running ? false : source === 0 || !tauri;
     el.run.title = running
       ? t("rt.killRun")
-      : source === 0
+      : loaded === 0
         ? t("rt.openFirst")
-        : "";
+        : source === 0
+          ? t("rt.scopeEmpty")
+          : "";
     paintHistory();
     el.rebake.disabled = !lastRun || running || !tauri;
     el.rebake.title = lastRun
@@ -1433,9 +1537,11 @@ export function createRetopo({
     if (!running) {
       const why = !tauri
         ? t("rt.noBridge")
-        : source === 0
+        : loaded === 0
           ? t("rt.noModel")
-          : "";
+          : source === 0
+            ? t("rt.scopeEmpty")
+            : "";
       if (why || el.note.dataset.why === "1") {
         say(why);
         if (why) el.note.dataset.why = "1";
@@ -1445,7 +1551,7 @@ export function createRetopo({
     // Say where the geometry will come from, because the two paths behave
     // differently and the difference is worth a sentence rather than a surprise.
     const p = sourcePath?.();
-    el.sourceNote.textContent = !source
+    el.sourceNote.textContent = !loaded
       ? ""
       : isGltf(p)
         ? t("rt.readsDirectly")
@@ -1460,11 +1566,15 @@ export function createRetopo({
     "aoSamples", "aoDistance",
   ];
   for (const k of LIVE) el[k].addEventListener("input", paint);
+  for (const k of ["target", "mTarget"]) {
+    el[k].addEventListener("input", () => { targetTouched = true; });
+  }
   for (const k of ["bake", "mAo", "holes", "boundary", "quads", "mMR", "mNormal", "mEmissive"]) {
     el[k].addEventListener("change", paint);
   }
   el.mDecimate.addEventListener("click", () => setMethod("decimate"));
   el.mIsotropic.addEventListener("click", () => setMethod("isotropic"));
+  el.mAdaptive.addEventListener("click", () => setMethod("adaptive"));
 
   // --- the unfolded menu --------------------------------------------------
   // A compact mirror of the panel's controls, reached by the arrow on the action
@@ -1507,6 +1617,7 @@ export function createRetopo({
   }
   el.mmDecimate.addEventListener("click", () => setMethod("decimate"));
   el.mmIsotropic.addEventListener("click", () => setMethod("isotropic"));
+  el.mmAdaptive.addEventListener("click", () => setMethod("adaptive"));
   // Sliders mirror the panel input, then repaint.
   for (const [m, p] of [
     ["mTarget", "target"], ["mMaxError", "maxError"], ["mAngle", "angle"],
@@ -1530,6 +1641,7 @@ export function createRetopo({
       for (const o of el.menu.querySelectorAll("[data-mscope]")) o.classList.toggle("active", o === b);
       for (const o of pane.querySelectorAll("[data-scope]")) o.classList.toggle("active", o.dataset.scope === b.dataset.mscope);
       scope = b.dataset.mscope;
+      refresh();
       paintScope();
     });
   }
@@ -1630,7 +1742,7 @@ export function createRetopo({
   }
 
   const runLabel = () => {
-    const verb = t(method === "isotropic" ? "rt.rebuild" : "rt.decimate");
+    const verb = t(method === "decimate" ? "rt.decimate" : "rt.reconstruct");
     return el.bake.checked ? `${verb} ${t("rt.andProject")}` : verb;
   };
 
@@ -1678,6 +1790,9 @@ export function createRetopo({
 
     if (!bakeOnly) {
       add(t("rt.triangles"), `${fr(r.inputTriangles)} → ${fr(r.outputTriangles)}`);
+      if (r.targetTriangles && r.outputTriangles > r.targetTriangles * 1.25) {
+        add(t("rt.budgetExceeded"), `${fr(r.outputTriangles)} / ${fr(r.targetTriangles)}`, "warn");
+      }
       add(t("rt.hudCut"), `${(100 - (r.outputTriangles / r.inputTriangles) * 100).toFixed(1)} %`, "good");
       add(t("rt.duration"), `${(r.millis / 1000).toFixed(2)} s`);
       add(t("rt.maxDeviation"), `${r.deviationMax.toPrecision(3)} ${t("rt.unit")}`);
@@ -1700,6 +1815,7 @@ export function createRetopo({
             r.aspectAfter < r.aspectBefore ? "good" : "");
       }
       if (r.quads) add(t("rt.hudQuads"), `${fr(r.quads)} · ${(r.quadFraction * 100).toFixed(0)} %`, "good");
+      if (r.recoveredQuads) add(t("rt.recoveredQuads"), fr(r.recoveredQuads), "good");
     } else {
       add(t("rt.bakeTime"), `${(r.millis / 1000).toFixed(2)} s`);
       add(t("rt.geometry"), t("rt.unchanged"));
@@ -1997,30 +2113,21 @@ export function createRetopo({
   /**
    * The budget, per mesh.
    *
-   * The slider is a percentage, and a percentage is the one form of budget that
-   * survives being applied mesh by mesh: each keeps the same share of its own
-   * detail, so a bolt and a hull both come out at forty percent rather than the
-   * hull eating a whole scene-wide allowance and the bolt vanishing.
+   * The slider names a total for the whole scope, and a total has to be shared
+   * out before it means anything to one mesh. It is shared at the ratio of each
+   * mesh's own size, which keeps the property the percentage had for free: a
+   * bolt and a hull both come out at the same fraction of themselves, rather
+   * than the hull eating a scene-wide allowance and the bolt vanishing. What it
+   * adds over the percentage is that the shares now sum to the number on the
+   * label, so "under fifteen thousand" is a promise about the run and not about
+   * one mesh of it.
+   *
+   * The floor of four is not a rounding guard. A mesh whose share lands under a
+   * tetrahedron cannot be built at all, so it is given one and the run stays a
+   * few triangles over budget rather than returning something degenerate.
    */
   const budgetFor = (mesh) =>
-    Math.max(4, Math.round((countTriangles(mesh) * Number(el.target.value)) / 100));
-
-  /** Add up N per-mesh reports into the one the panel shows. */
-  function totalReport(reports) {
-    if (reports.length === 1) return reports[0];
-    const sum = (k) => reports.reduce((a, r) => a + (r?.[k] || 0), 0);
-    const worst = (k) => reports.reduce((a, r) => Math.max(a, r?.[k] || 0), 0);
-    return {
-      ...reports[reports.length - 1],
-      inputTriangles: sum("inputTriangles"),
-      outputTriangles: sum("outputTriangles"),
-      millis: sum("millis"),
-      // A deviation is a distance, and distances do not add up: the number that
-      // means anything across N meshes is the worst one.
-      maxDeviation: worst("maxDeviation"),
-      meshes: reports.length,
-    };
-  }
+    source ? Math.max(4, Math.round((budget() * triangleCount(mesh)) / source)) : 4;
 
   async function run() {
     if (running || !tauri || !viewer.current) return;
@@ -2046,7 +2153,7 @@ export function createRetopo({
       const sources = sourceMeshes();
       if (!sources.length) throw new Error(t("rt.nothingToRun"));
 
-      const verb = t(method === "isotropic" ? "rt.rebuilding" : "rt.decimating");
+      const verb = t(method === "decimate" ? "rt.decimating" : "rt.rebuilding");
       /*
        * One mesh at a time, and one low poly per mesh.
        *
@@ -2314,6 +2421,9 @@ export function createRetopo({
       for (const o of pane.querySelectorAll("[data-scope]")) o.classList.toggle("active", o === b);
       scope = b.dataset.scope;
       paintScope();
+      // The budget is a fraction of the scope, so changing the scope changes the
+      // number on the slider even though the slider has not moved.
+      refresh();
     });
   }
 
@@ -2461,9 +2571,12 @@ export function createRetopo({
       paintHistory();
       refresh();
     },
-    /** The shared selection moved: only the scope line depends on it. */
+    /** The shared selection moved: the scope line and the budget follow it. */
     onSelection() {
       paintScope();
+      // Under the "Sélection" scope the budget is measured against what is
+      // picked, so a click in the Scene tab moves the number on this slider.
+      if (scope === "picked") refresh();
       // The cage follows what is chosen, so a scene of several low polys shows
       // the shell of the one being judged rather than the one made last.
       retargetCage();

@@ -15,7 +15,7 @@
 //! wrong; the stage that follows this one is a bake, which builds a fresh atlas
 //! anyway. Losing the source UVs here is a decision, not an oversight.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use glam::Vec3;
 use retopo_core::{Bvh, Mesh};
@@ -23,6 +23,7 @@ use retopo_core::{Bvh, Mesh};
 use crate::relax::{self, RelaxOptions};
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct IsotropicOptions {
     /// Edge length to converge on. Zero picks one from the mesh so the triangle
     /// count lands near `target_triangles`.
@@ -34,6 +35,10 @@ pub struct IsotropicOptions {
     pub sharp_angle_deg: f32,
     /// Relax passes between each remeshing iteration.
     pub relax_passes: u32,
+    /// Hold existing open-border vertices in place (splitting is still allowed).
+    pub preserve_boundary: bool,
+    /// Zero is uniform; one allocates smaller triangles to curved regions.
+    pub adaptivity: f32,
 }
 
 impl Default for IsotropicOptions {
@@ -44,6 +49,8 @@ impl Default for IsotropicOptions {
             iterations: 5,
             sharp_angle_deg: 45.0,
             relax_passes: 3,
+            preserve_boundary: true,
+            adaptivity: 0.0,
         }
     }
 }
@@ -56,8 +63,7 @@ pub struct IsotropicStats {
     pub collapses: usize,
     pub flips: usize,
     pub target_edge: f32,
-    /// Share of vertices whose valence is exactly six, the regularity a quad
-    /// pairing needs. Higher is better.
+    /// Share of interior vertices with valence six, a triangle regularity metric.
     pub regular_fraction: f32,
 }
 
@@ -71,14 +77,16 @@ pub fn isotropic(
         input_triangles: mesh.triangle_count(),
         ..Default::default()
     };
-    if mesh.triangles.is_empty() {
+    if mesh.triangles.is_empty() || opts.iterations == 0 {
+        stats.output_triangles = mesh.triangle_count();
+        progress(1.0);
         return (mesh.clone(), stats);
     }
 
     // A uniform mesh of N triangles over area A has edges of about
     // sqrt(4A / (N * sqrt(3))). Solving that backwards is a far better first
     // guess than any fixed number.
-    let target = if opts.target_edge > 0.0 {
+    let target = if opts.target_edge.is_finite() && opts.target_edge > 0.0 {
         opts.target_edge
     } else {
         let area = mesh.total_area().max(1e-12);
@@ -88,7 +96,13 @@ pub fn isotropic(
     stats.target_edge = target;
 
     let source = Bvh::build(mesh);
+    let sizes =
+        (opts.adaptivity > 0.0).then(|| crate::sizing::source_sizes(mesh, target, opts.adaptivity));
     let mut d = Dyn::from_mesh(mesh);
+    d.lock_features(opts.sharp_angle_deg, opts.preserve_boundary);
+    if let Some(sizes) = &sizes {
+        d.size.clone_from(sizes);
+    }
     let high = target * 4.0 / 3.0;
     let low = target * 4.0 / 5.0;
 
@@ -101,26 +115,43 @@ pub fn isotropic(
         // limit. The mesh comes out *less* uniform than it went in. Driving each
         // stage to a fixed point is what makes the sequence converge.
         stats.splits += d.run_to_fixpoint(8, |d| d.split_long(high, &source));
-        stats.collapses += d.run_to_fixpoint(6, |d| d.collapse_short(low, high));
+        stats.collapses += d.run_to_fixpoint(6, |d| d.collapse_short(low, high, &source));
         stats.flips += d.run_to_fixpoint(4, |d| d.flip_to_valence());
 
         let mut out = d.to_mesh(opts.sharp_angle_deg);
-        relax::relax(
+        let mut next = Dyn::from_mesh(&out);
+        next.inherit_features(&d);
+        relax::relax_with_pins(
             &mut out,
             Some(&source),
             &RelaxOptions {
-                iterations: opts.relax_passes.max(1),
+                iterations: opts.relax_passes,
                 strength: 0.6,
-                sharp_angle_deg: opts.sharp_angle_deg.max(70.0),
+                sharp_angle_deg: opts.sharp_angle_deg,
+                // Source constraints are carried explicitly; coarse facets
+                // must not become additional creases on every iteration.
+                preserve_features: false,
+                preserve_boundary: false,
                 ..RelaxOptions::default()
             },
+            &next.locked,
             &mut |_| {},
         );
         d = Dyn::from_mesh(&out);
+        d.locked = next.locked;
+        d.features = next.features;
+        if let Some(sizes) = &sizes {
+            for (v, &p) in d.pos.iter().enumerate() {
+                d.size[v] = crate::sizing::sample(mesh, &source, sizes, p);
+            }
+        }
 
         progress((it + 1) as f32 / opts.iterations.max(1) as f32);
     }
 
+    // Relaxation changes the geometric admissibility of flips. Finish with
+    // connectivity optimization at the final positions, without another move.
+    stats.flips += d.run_to_fixpoint(4, |d| d.flip_to_valence());
     let out = d.to_mesh(opts.sharp_angle_deg);
     stats.output_triangles = out.triangle_count();
     stats.regular_fraction = regular_fraction(&out);
@@ -170,6 +201,9 @@ struct Dyn {
     alive: Vec<bool>,
     vtri: Vec<Vec<u32>>,
     dead_verts: Vec<bool>,
+    size: Vec<f32>,
+    locked: Vec<bool>,
+    features: HashSet<(u32, u32)>,
 }
 
 impl Dyn {
@@ -197,6 +231,9 @@ impl Dyn {
             alive: vec![true; tri.len()],
             vtri: vec![Vec::new(); nw],
             dead_verts: vec![false; nw],
+            size: vec![1.0; nw],
+            locked: vec![false; nw],
+            features: HashSet::new(),
             pos,
             tri,
         };
@@ -246,12 +283,62 @@ impl Dyn {
                 let slot = map.entry(key).or_insert([-1, -1]);
                 if slot[0] < 0 {
                     slot[0] = t as i32;
-                } else if slot[1] < 0 {
+                } else if slot[1] == -1 {
                     slot[1] = t as i32;
+                } else {
+                    slot[1] = -2; // non-manifold: never edit just two of its faces
                 }
             }
         }
-        map.into_iter().collect()
+        let mut edges: Vec<_> = map.into_iter().collect();
+        edges.sort_unstable_by_key(|e| e.0);
+        edges
+    }
+
+    fn lock_features(&mut self, angle: f32, preserve_boundary: bool) {
+        self.locked.fill(false);
+        self.features.clear();
+        let cos = angle.to_radians().cos();
+        for ((a, b), tris) in self.edges() {
+            let protect = if tris[1] == -2 {
+                true
+            } else if tris[1] < 0 {
+                preserve_boundary
+            } else {
+                let normal = |t: i32| {
+                    let f = self.tri[t as usize];
+                    (self.pos[f[1] as usize] - self.pos[f[0] as usize])
+                        .cross(self.pos[f[2] as usize] - self.pos[f[0] as usize])
+                        .normalize_or_zero()
+                };
+                normal(tris[0]).dot(normal(tris[1])) < cos
+            };
+            if protect {
+                self.features.insert((a, b));
+                self.locked[a as usize] = true;
+                self.locked[b as usize] = true;
+            }
+        }
+    }
+
+    fn inherit_features(&mut self, from: &Self) {
+        let key = |p: Vec3| p.to_array().map(|x| if x == 0.0 { 0 } else { x.to_bits() });
+        let lookup: HashMap<_, _> = self
+            .pos
+            .iter()
+            .enumerate()
+            .map(|(v, &p)| (key(p), v as u32))
+            .collect();
+        for &(a, b) in &from.features {
+            if let (Some(&a), Some(&b)) = (
+                lookup.get(&key(from.pos[a as usize])),
+                lookup.get(&key(from.pos[b as usize])),
+            ) {
+                self.features.insert(if a < b { (a, b) } else { (b, a) });
+                self.locked[a as usize] = true;
+                self.locked[b as usize] = true;
+            }
+        }
     }
 
     fn opposite(&self, t: usize, a: u32, b: u32) -> Option<u32> {
@@ -294,11 +381,12 @@ impl Dyn {
             if self.dead_verts[a as usize] || self.dead_verts[b as usize] {
                 continue;
             }
-            if tris[0] < 0 {
+            if tris[0] < 0 || tris[1] == -2 {
                 continue;
             }
             let (pa, pb) = (self.pos[a as usize], self.pos[b as usize]);
-            if pa.distance_squared(pb) <= high2 {
+            let size = (self.size[a as usize] + self.size[b as usize]) * 0.5;
+            if pa.distance_squared(pb) <= high2 * size * size {
                 continue;
             }
             // Both sides must still be the triangles this edge remembers.
@@ -312,6 +400,13 @@ impl Dyn {
             self.pos.push(mid);
             self.vtri.push(Vec::new());
             self.dead_verts.push(false);
+            self.size.push(size);
+            let feature = self.features.remove(&(a, b));
+            self.locked.push(feature);
+            if feature {
+                self.features.insert((a, m));
+                self.features.insert((b, m));
+            }
 
             for &t in &tris {
                 if t < 0 {
@@ -341,33 +436,72 @@ impl Dyn {
 
     /// Collapse every edge shorter than `low`, refusing anything that would
     /// pinch the surface, flip a face, or create an edge longer than `high`.
-    fn collapse_short(&mut self, low: f32, high: f32) -> usize {
+    fn collapse_short(&mut self, low: f32, high: f32, source: &Bvh) -> usize {
         let mut done = 0;
         let low2 = low * low;
         let high2 = high * high;
 
-        for ((a, b), _) in self.edges() {
+        for ((mut a, mut b), _) in self.edges() {
             if self.dead_verts[a as usize] || self.dead_verts[b as usize] {
                 continue;
             }
-            let (pa, pb) = (self.pos[a as usize], self.pos[b as usize]);
-            if pa.distance_squared(pb) > low2 {
+            if self.locked[a as usize] && self.locked[b as usize] {
                 continue;
             }
-            let target = (pa + pb) * 0.5;
+            // An interior vertex may collapse onto a protected endpoint. Keep
+            // that endpoint exactly fixed, including when its index is larger.
+            if self.locked[b as usize] {
+                std::mem::swap(&mut a, &mut b);
+            }
+            let (pa, pb) = (self.pos[a as usize], self.pos[b as usize]);
+            let size = (self.size[a as usize] + self.size[b as usize]) * 0.5;
+            if pa.distance_squared(pb) > low2 * size * size {
+                continue;
+            }
+            let target = if self.locked[a as usize] {
+                pa
+            } else {
+                let mid = (pa + pb) * 0.5;
+                source.closest_point(mid).map(|h| h.point).unwrap_or(mid)
+            };
 
             // The link condition, same reason as in the decimator: without it a
             // closed surface quietly becomes non manifold.
             let na = self.neighbours(a);
             let nb = self.neighbours(b);
             let shared: Vec<u32> = na.iter().copied().filter(|v| nb.contains(v)).collect();
-            let opposite: Vec<u32> = self
-                .vtri[a as usize]
+            let opposite: Vec<u32> = self.vtri[a as usize]
                 .iter()
                 .filter(|&&t| self.alive[t as usize] && self.tri[t as usize].contains(&b))
                 .filter_map(|&t| self.opposite(t as usize, a, b))
                 .collect();
-            if shared.len() != opposite.len() || !shared.iter().all(|v| opposite.contains(v)) {
+            if opposite.is_empty()
+                || opposite.len() > 2
+                || shared.len() != opposite.len()
+                || !shared.iter().all(|v| opposite.contains(v))
+            {
+                continue;
+            }
+            // The vertex-only link test misses a tetrahedron: collapsing it
+            // produces two copies of the same face. Check the surviving faces.
+            let mut faces = std::collections::HashSet::new();
+            let duplicate = self.vtri[a as usize]
+                .iter()
+                .chain(&self.vtri[b as usize])
+                .any(|&t| {
+                    let mut f = self.tri[t as usize];
+                    if !self.alive[t as usize] || (f.contains(&a) && f.contains(&b)) {
+                        return false;
+                    }
+                    for v in &mut f {
+                        if *v == b {
+                            *v = a;
+                        }
+                    }
+                    f.sort_unstable();
+                    !faces.insert(f)
+                });
+            if duplicate {
                 continue;
             }
 
@@ -377,7 +511,10 @@ impl Dyn {
                 .iter()
                 .chain(na.iter())
                 .filter(|&&v| v != a && v != b)
-                .any(|&v| self.pos[v as usize].distance_squared(target) > high2);
+                .any(|&v| {
+                    let local = (size + self.size[v as usize]) * 0.5;
+                    self.pos[v as usize].distance_squared(target) > high2 * local * local
+                });
             if too_long {
                 continue;
             }
@@ -402,6 +539,7 @@ impl Dyn {
                 self.vtri[a as usize].push(t as u32);
             }
             self.pos[a as usize] = target;
+            self.size[a as usize] = size;
             self.dead_verts[b as usize] = true;
             self.vtri[b as usize].clear();
             done += 1;
@@ -463,6 +601,9 @@ impl Dyn {
 
         for ((a, b), tris) in self.edges() {
             if tris[0] < 0 || tris[1] < 0 {
+                continue;
+            }
+            if self.locked[a as usize] || self.locked[b as usize] {
                 continue;
             }
             let (t1, t2) = (tris[0] as usize, tris[1] as usize);
@@ -562,7 +703,7 @@ impl Dyn {
 
 #[inline]
 fn deviation(valence: i32) -> i32 {
-    (valence - 6).abs()
+    (valence - 6).pow(2)
 }
 
 #[cfg(test)]
@@ -582,7 +723,11 @@ mod tests {
                     -Vec3::Y
                 } else {
                     let phi = (s % segments) as f32 / segments as f32 * 2.0 * PI;
-                    Vec3::new(theta.sin() * phi.cos(), theta.cos(), theta.sin() * phi.sin())
+                    Vec3::new(
+                        theta.sin() * phi.cos(),
+                        theta.cos(),
+                        theta.sin() * phi.sin(),
+                    )
                 };
                 m.positions.push(p);
             }
@@ -590,8 +735,10 @@ mod tests {
         let idx = |s: usize, r: usize| (r * (segments + 1) + s) as u32;
         for r in 0..rings {
             for s in 0..segments {
-                m.triangles.push([idx(s, r), idx(s + 1, r), idx(s + 1, r + 1)]);
-                m.triangles.push([idx(s, r), idx(s + 1, r + 1), idx(s, r + 1)]);
+                m.triangles
+                    .push([idx(s, r), idx(s + 1, r), idx(s + 1, r + 1)]);
+                m.triangles
+                    .push([idx(s, r), idx(s + 1, r + 1), idx(s, r + 1)]);
                 m.tri_material.push(0);
                 m.tri_material.push(0);
             }
@@ -647,7 +794,11 @@ mod tests {
         let n = adj.edges.len().max(1) as f64;
         let mean = sum / n;
         let variance = (sum2 / n - mean * mean).max(0.0);
-        let cv = if mean > 0.0 { variance.sqrt() / mean } else { 0.0 };
+        let cv = if mean > 0.0 {
+            variance.sqrt() / mean
+        } else {
+            0.0
+        };
         (min, max, mean as f32, cv as f32)
     }
 
@@ -660,7 +811,10 @@ mod tests {
 
         let (out, stats) = isotropic(
             &src,
-            &IsotropicOptions { target_triangles: 2000, ..Default::default() },
+            &IsotropicOptions {
+                target_triangles: 2000,
+                ..Default::default()
+            },
             &mut |_| {},
         );
         let spread_after = edge_spread(&out);
@@ -683,17 +837,17 @@ mod tests {
         let before = regular_fraction(&src);
         let (_, stats) = isotropic(
             &src,
-            &IsotropicOptions { target_triangles: 1500, ..Default::default() },
+            &IsotropicOptions {
+                target_triangles: 1500,
+                ..Default::default()
+            },
             &mut |_| {},
         );
-        // Measured: 0.709 to 0.785 on this fixture. The gain is real but
-        // bounded, and the bound is the fold guard in the flip pass rather than
-        // the valence rule: on a curved surface many valence-improving flips
-        // would tilt a triangle past what the surface can absorb. A final extra
-        // flip pass was tried and made it very slightly worse, so the pass is
-        // already at its fixed point.
+        // Feature and inversion guards take precedence over valence. Assert a
+        // net gain, not the old 6% margin from randomized edge iteration with
+        // no feature constraints on collapses or flips.
         assert!(
-            stats.regular_fraction > before + 0.06,
+            stats.regular_fraction > before,
             "valence six fraction went from {before} to {}",
             stats.regular_fraction
         );
@@ -705,7 +859,10 @@ mod tests {
         assert_eq!(Adjacency::build(&src).boundary_edge_count(), 0);
         let (out, _) = isotropic(
             &src,
-            &IsotropicOptions { target_triangles: 800, ..Default::default() },
+            &IsotropicOptions {
+                target_triangles: 800,
+                ..Default::default()
+            },
             &mut |_| {},
         );
         let adj = Adjacency::build(&out);
@@ -718,7 +875,10 @@ mod tests {
         let src = sphere(28, 20);
         let (out, _) = isotropic(
             &src,
-            &IsotropicOptions { target_triangles: 1200, ..Default::default() },
+            &IsotropicOptions {
+                target_triangles: 1200,
+                ..Default::default()
+            },
             &mut |_| {},
         );
         for p in &out.positions {
@@ -733,7 +893,10 @@ mod tests {
         for target in [500usize, 2000] {
             let (out, _) = isotropic(
                 &src,
-                &IsotropicOptions { target_triangles: target, ..Default::default() },
+                &IsotropicOptions {
+                    target_triangles: target,
+                    ..Default::default()
+                },
                 &mut |_| {},
             );
             let ratio = out.triangle_count() as f32 / target as f32;
@@ -750,7 +913,10 @@ mod tests {
         let src = sphere(24, 16);
         let (out, stats) = isotropic(
             &src,
-            &IsotropicOptions { target_edge: 0.25, ..Default::default() },
+            &IsotropicOptions {
+                target_edge: 0.25,
+                ..Default::default()
+            },
             &mut |_| {},
         );
         assert_eq!(stats.target_edge, 0.25);
@@ -764,7 +930,11 @@ mod tests {
         let mut seen = Vec::new();
         isotropic(
             &src,
-            &IsotropicOptions { target_triangles: 400, iterations: 3, ..Default::default() },
+            &IsotropicOptions {
+                target_triangles: 400,
+                iterations: 3,
+                ..Default::default()
+            },
             &mut |p| seen.push(p),
         );
         assert_eq!(seen.last().copied(), Some(1.0));
@@ -776,5 +946,131 @@ mod tests {
         let (out, stats) = isotropic(&Mesh::default(), &IsotropicOptions::default(), &mut |_| {});
         assert_eq!(out.triangle_count(), 0);
         assert_eq!(stats.input_triangles, 0);
+    }
+
+    #[test]
+    fn zero_iterations_is_a_noop() {
+        let src = sphere(12, 8);
+        let (out, s) = isotropic(
+            &src,
+            &IsotropicOptions {
+                iterations: 0,
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+        assert_eq!(src.triangles, out.triangles);
+        assert_eq!(src.positions, out.positions);
+        assert_eq!(s.output_triangles, src.triangle_count());
+    }
+
+    #[test]
+    fn tetrahedron_collapse_cannot_create_duplicate_faces() {
+        let mut src = Mesh {
+            positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::Z],
+            triangles: vec![[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]],
+            ..Default::default()
+        };
+        src.rebuild_weld(0.0);
+        let mut d = Dyn::from_mesh(&src);
+        assert_eq!(d.collapse_short(10.0, 100.0, &Bvh::build(&src)), 0);
+        assert_eq!(d.to_mesh(40.0).triangle_count(), 4);
+    }
+
+    #[test]
+    fn open_borders_and_crease_vertices_survive_reconstruction() {
+        let mut src = Mesh::default();
+        let n = 6;
+        for j in 0..=n {
+            for i in 0..=2 * n {
+                let x = i as f32 / n as f32 - 1.0;
+                src.positions
+                    .push(Vec3::new(x.min(0.0), j as f32 / n as f32, x.max(0.0)));
+            }
+        }
+        let index = |i, j| (j * (2 * n + 1) + i) as u32;
+        for j in 0..n {
+            for i in 0..2 * n {
+                src.triangles
+                    .push([index(i, j), index(i + 1, j), index(i + 1, j + 1)]);
+                src.triangles
+                    .push([index(i, j), index(i + 1, j + 1), index(i, j + 1)]);
+            }
+        }
+        src.rebuild_weld(0.0);
+        let adj = Adjacency::build(&src);
+        let sharp = adj.sharp_edges(&src, 40.0);
+        let (out, _) = isotropic(
+            &src,
+            &IsotropicOptions {
+                target_triangles: 60,
+                sharp_angle_deg: 40.0,
+                ..Default::default()
+            },
+            &mut |_| {},
+        );
+        for (e, &protected) in adj.edges.iter().zip(&sharp) {
+            if protected {
+                for &v in &e.v {
+                    assert!(
+                        out.positions.contains(&src.positions[v as usize]),
+                        "a protected vertex moved"
+                    );
+                }
+            }
+        }
+        assert_eq!(Adjacency::build(&out).non_manifold_edges, 0);
+    }
+
+    #[test]
+    fn adaptive_remeshing_is_deterministic_closed_and_on_source() {
+        let mut src = sphere(24, 16);
+        for p in &mut src.positions {
+            p.x *= 3.0;
+        }
+        let opts = IsotropicOptions {
+            target_triangles: 700,
+            adaptivity: 1.0,
+            ..Default::default()
+        };
+        let (a, _) = isotropic(&src, &opts, &mut |_| {});
+        let (b, _) = isotropic(&src, &opts, &mut |_| {});
+        assert_eq!(a.triangles, b.triangles);
+        assert_eq!(a.positions, b.positions);
+        assert!(Adjacency::build(&a).is_closed());
+        assert!((280..=1750).contains(&a.triangle_count()));
+        let source = Bvh::build(&src);
+        for p in &a.positions {
+            assert!(p.is_finite());
+            assert!(source.closest_point(*p).unwrap().dist2 < 1e-10);
+        }
+    }
+
+    #[test]
+    fn adaptive_sizes_follow_curvature_and_scale() {
+        let mut src = sphere(32, 24);
+        for p in &mut src.positions {
+            p.x *= 4.0;
+        }
+        let sizes = crate::sizing::source_sizes(&src, 0.2, 1.0);
+        let mut tips = Vec::new();
+        let mut waist = Vec::new();
+        for (r, &w) in src.weld.iter().enumerate() {
+            if src.positions[r].x.abs() > 3.8 {
+                tips.push(sizes[w as usize]);
+            }
+            if src.positions[r].x.abs() < 0.1 {
+                waist.push(sizes[w as usize]);
+            }
+        }
+        let mean = |x: &[f32]| x.iter().sum::<f32>() / x.len() as f32;
+        assert!(mean(&tips) < mean(&waist) * 0.8);
+        for p in &mut src.positions {
+            *p *= 100.0;
+        }
+        let scaled = crate::sizing::source_sizes(&src, 20.0, 1.0);
+        for (a, b) in sizes.iter().zip(scaled) {
+            assert!((a - b).abs() < 1e-3);
+        }
     }
 }

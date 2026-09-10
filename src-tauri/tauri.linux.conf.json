@@ -1,0 +1,219 @@
+{
+  "bundle": {
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage"
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "python3-gi",
+          "gir1.2-webkit2-4.1",
+          "xvfb",
+          "xauth",
+          "libgl1-mesa-dri"
+        ],
+        "files": {
+          "/usr/bin/albedo-thumbnailer": "../platform/linux/albedo-thumbnailer",
+          "/usr/lib/albedo-thumbnailer/thumbnailer.py": "../platform/linux/thumbnailer.py",
+          "/usr/lib/albedo-thumbnailer/dist": "../dist",
+          "/usr/share/mime/packages/albedo.xml": "../platform/linux/albedo.xml"
+        }
+      },
+      "rpm": {
+        "depends": [
+          "python3-gobject",
+          "webkit2gtk4.1",
+          "xorg-x11-server-Xvfb",
+          "xorg-x11-xauth",
+          "mesa-dri-drivers"
+        ],
+        "files": {
+          "/usr/bin/albedo-thumbnailer": "../platform/linux/albedo-thumbnailer",
+          "/usr/lib/albedo-thumbnailer/thumbnailer.py": "../platform/linux/thumbnailer.py",
+          "/usr/lib/albedo-thumbnailer/dist": "../dist",
+          "/usr/share/mime/packages/albedo.xml": "../platform/linux/albedo.xml"
+        }
+      }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "glb"
+        ],
+        "mimeType": "model/gltf-binary",
+        "name": "GLB 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "gltf"
+        ],
+        "mimeType": "model/gltf+json",
+        "name": "GLTF 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "fbx"
+        ],
+        "mimeType": "application/vnd.autodesk.fbx",
+        "name": "FBX 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "obj"
+        ],
+        "mimeType": "model/obj",
+        "name": "OBJ 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "stl"
+        ],
+        "mimeType": "model/stl",
+        "name": "STL 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "ply"
+        ],
+        "mimeType": "application/x-ply",
+        "name": "PLY 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "dae"
+        ],
+        "mimeType": "model/vnd.collada+xml",
+        "name": "DAE 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "3mf"
+        ],
+        "mimeType": "model/3mf",
+        "name": "3MF 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "3ds"
+        ],
+        "mimeType": "image/x-3ds",
+        "name": "3DS 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "usdz"
+        ],
+        "mimeType": "model/vnd.usdz+zip",
+        "name": "USDZ 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "usd"
+        ],
+        "mimeType": "model/x-albedo-usd",
+        "name": "USD 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "usda"
+        ],
+        "mimeType": "model/x-albedo-usda",
+        "name": "USDA 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "usdc"
+        ],
+        "mimeType": "model/x-albedo-usdc",
+        "name": "USDC 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "wrl"
+        ],
+        "mimeType": "model/x-albedo-wrl",
+        "name": "WRL 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "vrml"
+        ],
+        "mimeType": "model/x-albedo-vrml",
+        "name": "VRML 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "vox"
+        ],
+        "mimeType": "model/x-albedo-vox",
+        "name": "VOX 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "amf"
+        ],
+        "mimeType": "model/x-albedo-amf",
+        "name": "AMF 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "pcd"
+        ],
+        "mimeType": "model/x-albedo-pcd",
+        "name": "PCD 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "xyz"
+        ],
+        "mimeType": "model/x-albedo-xyz",
+        "name": "XYZ 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "nif"
+        ],
+        "mimeType": "model/x-albedo-nif",
+        "name": "NIF 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "kf"
+        ],
+        "mimeType": "model/x-albedo-kf",
+        "name": "KF 3D model",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "kfa"
+        ],
+        "mimeType": "model/x-albedo-kfa",
+        "name": "KFA 3D model",
+        "role": "Viewer"
+      }
+    ]
+  }
+}

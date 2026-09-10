@@ -1029,7 +1029,7 @@ export function createLibrary({ tauri, onOpen, prefs, hasModel, refit }) {
   el.grid.addEventListener(
     "wheel",
     (e) => {
-      if (!e.ctrlKey) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       setZoom(Number(el.zoom.value) * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
     },

@@ -1,9 +1,16 @@
 // Prevents an extra console window on Windows in release
 // No console window, ever: the app is a GUI even in debug builds
-#![windows_subsystem = "windows"]
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod library;
+#[path = "../../shared/paths.rs"]
+#[allow(dead_code)]
+mod paths;
 mod retopo;
+#[cfg(windows)]
+mod shell;
+#[cfg(not(windows))]
+#[path = "shell_unix.rs"]
 mod shell;
 
 use std::path::PathBuf;
@@ -142,7 +149,8 @@ fn write_thumbnail(data: String) -> Result<(), String> {
 /// The model could not be read: say so through the exit code, since a headless
 /// process has nowhere to print.
 #[tauri::command]
-fn thumbnail_failed(_message: String) {
+fn thumbnail_failed(message: String) {
+    eprintln!("thumbnail: {message}");
     std::process::exit(EXIT_FAILED);
 }
 
@@ -152,8 +160,7 @@ fn thumbnail_failed(_message: String) {
 /// and deliberately not beside the executable: a portable copy on a read only
 /// share must still start.
 fn prefs_path() -> Option<PathBuf> {
-    let base = std::env::var_os("APPDATA")?;
-    Some(PathBuf::from(base).join("Albedo").join("settings.json"))
+    Some(paths::config_dir()?.join("settings.json"))
 }
 
 /// The frontend owns the schema; this only carries the bytes.
@@ -210,15 +217,36 @@ fn startup_file() -> Option<String> {
     if thumb_job().is_some() {
         return None;
     }
+    #[cfg(target_os = "macos")]
+    {
+        let mut state = OPEN_FILE.lock().unwrap_or_else(|e| e.into_inner());
+        state.0 = true;
+        state.1.take().or_else(cli_model_path)
+    }
+    #[cfg(not(target_os = "macos"))]
     cli_model_path()
 }
+
+// Finder delivers document URLs as Opened events, not command-line arguments.
+// Queue a cold-launch event until the frontend has installed its listener.
+#[cfg(target_os = "macos")]
+static OPEN_FILE: std::sync::Mutex<(bool, Option<String>)> = std::sync::Mutex::new((false, None));
 
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "tga", "dds"];
 
 /// Folders artists actually drop their maps into, next to or under the model.
 const TEXTURE_DIRS: &[&str] = &[
-    "textures", "texture", "tex", "maps", "map", "materials", "material",
-    "images", "img", "source", "textures_unscrambled",
+    "textures",
+    "texture",
+    "tex",
+    "maps",
+    "map",
+    "materials",
+    "material",
+    "images",
+    "img",
+    "source",
+    "textures_unscrambled",
 ];
 
 #[derive(serde::Serialize)]
@@ -248,7 +276,11 @@ fn collect_images(dir: &std::path::Path, out: &mut Vec<TexEntry>, limit: usize) 
             continue;
         }
         out.push(TexEntry {
-            name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            name: path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
             path: path.to_string_lossy().to_string(),
         });
     }
@@ -287,10 +319,8 @@ fn scan_textures(model_path: String) -> Vec<TexEntry> {
 fn find_textures(model_path: String, names: Vec<String>) -> Vec<TexEntry> {
     use std::collections::HashMap;
 
-    let mut wanted: HashMap<String, Option<String>> = names
-        .iter()
-        .map(|n| (n.to_lowercase(), None))
-        .collect();
+    let mut wanted: HashMap<String, Option<String>> =
+        names.iter().map(|n| (n.to_lowercase(), None)).collect();
     if wanted.is_empty() {
         return Vec::new();
     }
@@ -298,7 +328,14 @@ fn find_textures(model_path: String, names: Vec<String>) -> Vec<TexEntry> {
     // while the loose file on disk is the original .tga.
     let stems: HashMap<String, String> = wanted
         .keys()
-        .map(|n| (n.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or_else(|| n.clone()), n.clone()))
+        .map(|n| {
+            (
+                n.rsplit_once('.')
+                    .map(|(s, _)| s.to_string())
+                    .unwrap_or_else(|| n.clone()),
+                n.clone(),
+            )
+        })
         .collect();
 
     let model = std::path::PathBuf::from(&model_path);
@@ -459,6 +496,27 @@ fn main() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Albedo");
+        .build(tauri::generate_context!())
+        .expect("error while building Albedo")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                if thumb_job().is_some() {
+                    return;
+                }
+                for path in urls
+                    .into_iter()
+                    .filter_map(|u| u.to_file_path().ok())
+                    .filter(|p| p.is_file())
+                {
+                    let path = path.to_string_lossy().into_owned();
+                    let mut state = OPEN_FILE.lock().unwrap_or_else(|e| e.into_inner());
+                    if state.0 {
+                        let _ = _app.emit("open-file", path);
+                    } else {
+                        state.1 = Some(path);
+                    }
+                }
+            }
+        });
 }

@@ -27,7 +27,9 @@ const MODEL_EXTS: &[&str] = &[
 ];
 
 /// Images worth showing next to the models that use them.
-const TEXTURE_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp", "gif", "tga", "dds", "exr", "hdr", "ktx2"];
+const TEXTURE_EXTS: &[&str] = &[
+    "png", "jpg", "jpeg", "webp", "bmp", "gif", "tga", "dds", "exr", "hdr", "ktx2",
+];
 
 /// Folders that only ever hold noise.
 const SKIP_DIRS: &[&str] = &[".git", ".svn", "node_modules", "__pycache__", ".albedo"];
@@ -78,8 +80,7 @@ fn kind_of(ext: &str) -> Option<&'static str> {
 }
 
 fn registry_path() -> Option<PathBuf> {
-    let base = std::env::var_os("APPDATA")?;
-    Some(PathBuf::from(base).join("Albedo").join("libraries.json"))
+    Some(crate::paths::config_dir()?.join("libraries.json"))
 }
 
 fn read_registry() -> Vec<LibraryRoot> {
@@ -114,7 +115,10 @@ pub fn library_add(path: String) -> Result<Vec<LibraryRoot>, String> {
     }
     let canonical = p.to_string_lossy().to_string();
     let mut roots = read_registry();
-    if roots.iter().any(|r| r.path.eq_ignore_ascii_case(&canonical)) {
+    if roots
+        .iter()
+        .any(|r| r.path.eq_ignore_ascii_case(&canonical))
+    {
         return Ok(roots);
     }
     let name = p
@@ -390,12 +394,19 @@ mod walk_tests {
         assert!(scan.entries.iter().any(|e| e.kind == "texture"));
         // Relative paths are what the sidecar keys on: they must be portable
         for e in &scan.entries {
-            assert!(!e.rel.contains(std::path::MAIN_SEPARATOR), "séparateur natif dans {}", e.rel);
+            assert!(
+                !e.rel.contains(std::path::MAIN_SEPARATOR),
+                "séparateur natif dans {}",
+                e.rel
+            );
             assert!(!e.rel.starts_with('/'), "chemin absolu: {}", e.rel);
             assert!(e.path.ends_with(&e.rel.replace('/', "\\")) || e.path.ends_with(&e.rel));
         }
         // Nested files report their folder
-        assert!(scan.folders.iter().any(|f| f.contains("nif") || f.contains("fmt")));
+        assert!(scan
+            .folders
+            .iter()
+            .any(|f| f.contains("nif") || f.contains("fmt")));
     }
 
     #[test]

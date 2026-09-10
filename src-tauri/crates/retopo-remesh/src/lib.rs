@@ -1,15 +1,17 @@
 //! Decimation and remeshing for Albedo's retopology engine.
 //!
-//! Step 1 ships quadric error decimation, which is what makes the viewer useful
-//! on day one. The field-aligned quad remesher (a Rust port of Instant
-//! Field-Aligned Meshes, BSD 3-Clause) lands in step 3 next to it.
+//! Quadric decimation, feature-preserving uniform/adaptive triangle remeshing,
+//! and direction-guided quad pairing. Pairing is quad-dominant; it does not
+//! promise a globally parameterized quad layout or animation-ready loops.
 
 pub mod decimate;
+mod field;
 pub mod holes;
 pub mod isotropic;
 pub mod quadric;
 pub mod quads;
 pub mod relax;
+mod sizing;
 
 pub use decimate::{decimate, DecimateOptions, DecimateStats};
 pub use holes::{boundary_loops, fill_holes, FillOptions, FillStats};
