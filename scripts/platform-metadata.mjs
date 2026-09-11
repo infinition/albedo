@@ -20,7 +20,12 @@ mkdirSync("platform/macos", { recursive: true });
 writeFileSync("platform/linux/albedo.thumbnailer", `[Thumbnailer Entry]\nTryExec=/usr/bin/albedo-thumbnailer\nExec=/usr/bin/albedo-thumbnailer --size %s %i %o\nMimeType=${mimetypes.join(";")};\n`);
 writeFileSync("platform/linux/albedo.xml", `<?xml version="1.0" encoding="UTF-8"?>\n<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">\n${extensions.map((ext, i) => `  <mime-type type="${mimetypes[i]}"><comment>${ext.toUpperCase()} 3D model</comment><glob pattern="*.${ext}"/></mime-type>`).join("\n")}\n</mime-info>\n`);
 const utis = extensions.map((ext) => `com.infinition.albedo.${ext}`);
-const imported = extensions.map((ext, i) => ({ UTTypeIdentifier: utis[i], UTTypeDescription: `${ext.toUpperCase()} 3D model`, UTTypeConformsTo: ["public.data", "public.3d-content"], UTTypeTagSpecification: { "public.filename-extension": [ext], "public.mime-type": [mimetypes[i]] } }));
+// Deliberately not `public.3d-content`: Apple's own SceneKit thumbnail extension
+// claims that whole family and system extensions win over third-party ones, so a
+// type conforming to it never reaches our provider. Formats whose UTI macOS itself
+// declares (glb, gltf, fbx, obj, stl, ply, dae, usd*) still go to SceneKit; the
+// extension can only serve the types below that nothing else owns.
+const imported = extensions.map((ext, i) => ({ UTTypeIdentifier: utis[i], UTTypeDescription: `${ext.toUpperCase()} 3D model`, UTTypeConformsTo: ["public.data"], UTTypeTagSpecification: { "public.filename-extension": [ext], "public.mime-type": [mimetypes[i]] } }));
 // Include system/industry UTIs as well: Launch Services may already know these
 // extensions through another application, and should still offer our provider.
 const known = ["org.khronos.glb", "org.khronos.gltf", "public.geometry-definition-format", "public.standard-tesselated-geometry-format", "public.polygon-file-format", "com.autodesk.fbx", "com.pixar.universal-scene-description", "com.pixar.universal-scene-description-mobile"];

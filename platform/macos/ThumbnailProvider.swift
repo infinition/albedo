@@ -81,7 +81,10 @@ private final class ThumbnailJob: NSObject, WKURLSchemeHandler, WKScriptMessageH
         let extent = min(request.maximumSize.width, request.maximumSize.height)
         let size = CGSize(width: extent, height: extent)
         finish(QLThumbnailReply(contextSize: size, drawing: { context in
-            context.draw(cgImage, in: CGRect(origin: .zero, size: size))
+            // The context is contextSize * request.scale pixels with an identity
+            // transform, so a rectangle in points would cover only one quarter.
+            let pixels = CGRect(x: 0, y: 0, width: CGFloat(context.width), height: CGFloat(context.height))
+            context.draw(cgImage, in: pixels)
             return true
         }), nil)
     }
@@ -132,7 +135,13 @@ private final class ThumbnailJob: NSObject, WKURLSchemeHandler, WKScriptMessageH
                 data = try Data(contentsOf: path)
                 mime = ["html": "text/html", "js": "text/javascript", "css": "text/css", "json": "application/json", "wasm": "application/wasm", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp" ][path.pathExtension.lowercased()] ?? "application/octet-stream"
             }
-            task.didReceive(URLResponse(url: url, mimeType: mime, expectedContentLength: data.count, textEncodingName: nil))
+            // fetch() sees no status on a plain URLResponse, so `response.ok` is
+            // false and the page reports a missing job; an HTTP response fixes that.
+            guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+                                                 headerFields: ["Content-Type": mime, "Content-Length": String(data.count)]) else {
+                throw CocoaError(.fileReadUnknown)
+            }
+            task.didReceive(response)
             task.didReceive(data)
             task.didFinish()
         } catch { task.didFailWithError(error) }

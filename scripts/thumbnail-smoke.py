@@ -28,6 +28,25 @@ def fixtures(folder):
     return [folder / ("model." + ext) for ext in ("glb", "gltf", "obj")]
 
 
+def fixture_3mf(folder):
+    """A 3MF cube. On macOS this is a type Albedo owns: glb/gltf/obj carry
+    Apple UTIs, and Quick Look hands those to the SceneKit extension."""
+    import zipfile
+    corners = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0), (0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)]
+    faces = [(0, 2, 1), (0, 3, 2), (4, 5, 6), (4, 6, 7), (0, 1, 5), (0, 5, 4), (1, 2, 6), (1, 6, 5), (2, 3, 7), (2, 7, 6), (3, 0, 4), (3, 4, 7)]
+    vertices = "".join(f'<vertex x="{x}" y="{y}" z="{z}"/>' for x, y, z in corners)
+    triangles = "".join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in faces)
+    model = ('<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+             f'<resources><object id="1" type="model"><mesh><vertices>{vertices}</vertices><triangles>{triangles}</triangles></mesh></object></resources>'
+             '<build><item objectid="1"/></build></model>')
+    path = folder / "model.3mf"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>')
+        archive.writestr("_rels/.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>')
+        archive.writestr("3D/3dmodel.model", model)
+    return path
+
+
 def verify_png(path):
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n", f"Not a PNG: {path}"
@@ -58,17 +77,23 @@ def main():
         folder = Path(tmp)
         models = fixtures(folder)
         if args.mac_app:
-            # Quick Look grants the selected document, not arbitrary sibling
-            # buffers. External glTF is covered by the application CLI above.
-            models = [model for model in models if model.suffix != ".gltf"]
+            # Only types whose UTI Albedo declares reach the extension: macOS
+            # owns glb/gltf/obj and routes them to SceneKit. Those formats are
+            # covered by the application CLI above.
+            models = [fixture_3mf(folder)]
             app = args.mac_app.resolve()
             subprocess.run(["/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", "-f", str(app)], check=True)
             subprocess.run(["pluginkit", "-a", str(app / "Contents/PlugIns/AlbedoThumbnail.appex")], check=True)
             subprocess.run(["pluginkit", "-e", "use", "-i", "com.infinition.albedo.thumbnail"], check=True)
+            # The agent caches its extension list; a fresh one sees the new registration.
+            subprocess.run(["killall", "-9", "com.apple.quicklook.ThumbnailsAgent"], check=False, capture_output=True)
+            helper = folder / "qlthumb"
+            source = Path(__file__).resolve().parents[1] / "platform/macos/qlthumb.swift"
+            subprocess.run(["xcrun", "swiftc", "-O", str(source), "-o", str(helper)], check=True)
         for model in models:
             output = folder / (model.name + ".png")
             if args.mac_app:
-                command = ["qlmanage", "-t", "-s", "256", "-o", str(folder), str(model)]
+                command = [str(helper), str(model), str(output), "256"]
             elif args.linux_provider:
                 command = [str(args.linux_provider.resolve()), "--size", "256", str(model), str(output)]
             else:
@@ -77,8 +102,8 @@ def main():
                 subprocess.run(command, check=True, timeout=60)
             except subprocess.TimeoutExpired:
                 # A headless runner has no Quick Look agent to host the
-                # extension, so qlmanage hangs instead of rendering. The
-                # application CLI above already covers the renderer itself.
+                # extension, so the request never completes. The application
+                # CLI above already covers the renderer itself.
                 if not args.mac_app: raise
                 print(f"SKIP {model.name}: no Quick Look host on this machine")
                 continue
