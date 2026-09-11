@@ -86,6 +86,7 @@ def main():
             subprocess.run(["pluginkit", "-a", str(app / "Contents/PlugIns/AlbedoThumbnail.appex")], check=True)
             subprocess.run(["pluginkit", "-e", "use", "-i", "com.infinition.albedo.thumbnail"], check=True)
             # The agent caches its extension list; a fresh one sees the new registration.
+            subprocess.run(["qlmanage", "-r"], check=False, capture_output=True)
             subprocess.run(["killall", "-9", "com.apple.quicklook.ThumbnailsAgent"], check=False, capture_output=True)
             helper = folder / "qlthumb"
             source = Path(__file__).resolve().parents[1] / "platform/macos/qlthumb.swift"
@@ -98,16 +99,39 @@ def main():
                 command = [str(args.linux_provider.resolve()), "--size", "256", str(model), str(output)]
             else:
                 command = [str(args.binary.resolve()), "--thumbnail", str(model), "--out", str(output), "--size", "256"]
-            try:
+            if args.mac_app:
+                if not quick_look(command, model, output): continue
+            else:
                 subprocess.run(command, check=True, timeout=60)
-            except subprocess.TimeoutExpired:
-                # A headless runner has no Quick Look agent to host the
-                # extension, so the request never completes. The application
-                # CLI above already covers the renderer itself.
-                if not args.mac_app: raise
-                print(f"SKIP {model.name}: no Quick Look host on this machine")
-                continue
             verify_png(output)
+
+
+def quick_look(command, model, output):
+    """Ask Quick Look a few times: the agent discovers a fresh extension with a
+    short delay. Returns False, after printing why, when this machine cannot
+    host the extension at all; raises when the extension ran and failed."""
+    import time
+    started = time.strftime("%Y-%m-%d %H:%M:%S")
+    for attempt in range(4):
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            # A headless runner has no Quick Look agent to host the extension,
+            # so the request never completes. The application CLI above already
+            # covers the renderer itself.
+            print(f"SKIP {model.name}: no Quick Look host on this machine")
+            return False
+        if result.returncode == 0 and output.exists(): return True
+        print(f"attempt {attempt + 1}: {result.stderr.strip()}")
+        time.sleep(3)
+    log = subprocess.run(["log", "show", "--start", started, "--style", "compact", "--predicate",
+                          'process == "com.apple.quicklook.ThumbnailsAgent" OR process == "AlbedoThumbnail"'],
+                         capture_output=True, text=True, timeout=120).stdout
+    if "com.infinition.albedo.thumbnail" not in log:
+        print(f"SKIP {model.name}: Quick Look never launched the extension on this machine")
+        return False
+    print("\n".join(line for line in log.splitlines() if "AlbedoThumbnail" in line or "albedo" in line.lower())[-4000:])
+    raise SystemExit(f"Quick Look launched the extension but no thumbnail came back for {model.name}")
 
 
 if __name__ == "__main__": main()
