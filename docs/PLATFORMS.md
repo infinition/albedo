@@ -101,7 +101,11 @@ Look rendering, and Linux native-helper/CLI rendering.
 Verified on macOS 26 (Apple Silicon): the Quick Look extension built by
 `platform/macos/build.py` renders a 3MF through `QLThumbnailGenerator` (the path
 Finder uses; `qlmanage -t` does not reach modern extensions, which is why the
-smoke test compiles `platform/macos/qlthumb.swift` instead). The Linux native
+smoke test compiles `platform/macos/qlthumb.swift` instead). GitHub's macOS
+runners are virtual machines without a GPU: WebKit's content process dies inside
+the extension sandbox there, so that step reports SKIP on the runner and only the
+application CLI rendering is checked; the Quick Look path needs real hardware.
+The Linux native
 job has **not been executed from this workspace**. Its results, and interactive
 Finder/Nautilus/Dolphin behavior, remain validation work on those operating
 systems. The workflow must pass before

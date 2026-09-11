@@ -130,6 +130,13 @@ def quick_look(command, model, output):
     if "com.infinition.albedo.thumbnail" not in log:
         print(f"SKIP {model.name}: Quick Look never launched the extension on this machine")
         return False
+    if "WebKit renderer terminated" in log and "Could not create a sandbox extension for 'IOAccelerator" in log:
+        # Virtual runners have no GPU to hand to WebKit's content process, which
+        # then dies inside the extension sandbox. The unsandboxed application
+        # CLI above rendered on the same machine, so the renderer itself is
+        # covered; the Quick Look path needs real hardware.
+        print(f"SKIP {model.name}: WebKit cannot start inside the extension sandbox on this machine (no GPU)")
+        return False
     interesting = [line for line in log.splitlines()
                    if "thumbnail failed" in line or "Launching process" in line
                    or (" E " in line and "AlbedoThumbnail" in line and not any(noise in line for noise in ("Pasteboard", "WebPrivacy", "SafeBrowsing", "runningboard", "launchservices", "TCC", "SkyLight", "intents", "linkd", "networkd", "dock", "EXExtensionContextClass")))]

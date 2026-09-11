@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "albedo"
-version = "1.5.2"
+version = "1.5.3"
 dependencies = [
  "retopo-bake",
  "retopo-core",
