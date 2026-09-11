@@ -1,6 +1,7 @@
 import AppKit
 import QuickLookThumbnailing
 import WebKit
+import os
 
 // An extension renders in its own process and sandbox. It never launches the
 // GUI application or assumes a logged-in application's cache already exists.
@@ -62,6 +63,9 @@ private final class ThumbnailJob: NSObject, WKURLSchemeHandler, WKScriptMessageH
     }
 
     private func fail(_ text: String) {
+        // Quick Look reports every failure as its own opaque code; the reason
+        // is only visible here: log stream --predicate 'process == "AlbedoThumbnail"'
+        os_log("thumbnail failed for %{public}@: %{public}@", log: .default, type: .error, request.fileURL.lastPathComponent, text)
         finish(nil, NSError(domain: "com.infinition.albedo.thumbnail", code: 1,
                             userInfo: [NSLocalizedDescriptionKey: text]))
     }
@@ -89,8 +93,8 @@ private final class ThumbnailJob: NSObject, WKURLSchemeHandler, WKScriptMessageH
         }), nil)
     }
 
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(nil, error) }
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(nil, error) }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fail("Navigation failed: \(error.localizedDescription)") }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fail("Navigation failed: \(error.localizedDescription)") }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { fail("WebKit renderer terminated") }
 
     private func modelURL(_ relative: String) -> String {

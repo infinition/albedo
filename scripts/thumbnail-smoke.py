@@ -130,7 +130,10 @@ def quick_look(command, model, output):
     if "com.infinition.albedo.thumbnail" not in log:
         print(f"SKIP {model.name}: Quick Look never launched the extension on this machine")
         return False
-    print("\n".join(line for line in log.splitlines() if "AlbedoThumbnail" in line or "albedo" in line.lower())[-4000:])
+    interesting = [line for line in log.splitlines()
+                   if "thumbnail failed" in line or "Launching process" in line
+                   or (" E " in line and "AlbedoThumbnail" in line and not any(noise in line for noise in ("Pasteboard", "WebPrivacy", "SafeBrowsing", "runningboard", "launchservices", "TCC", "SkyLight", "intents", "linkd", "networkd", "dock", "EXExtensionContextClass")))]
+    print("\n".join(interesting[:80]))
     raise SystemExit(f"Quick Look launched the extension but no thumbnail came back for {model.name}")
 
 
