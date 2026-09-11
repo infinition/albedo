@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.4
+
+macOS Finder renders GLB, glTF and FBX with Albedo: the extension names the
+system identifiers for those types, which Quick Look prefers over Apple's
+parent-type match. Restores `public.3d-content` on Albedo's own types and
+corrects the 1.5.3 notes. See [release notes](docs/releases/v1.5.4.md).
+
 ## 1.5.3
 
 macOS Quick Look thumbnails work: the extension is now reached for the formats

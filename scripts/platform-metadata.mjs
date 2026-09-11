@@ -20,14 +20,13 @@ mkdirSync("platform/macos", { recursive: true });
 writeFileSync("platform/linux/albedo.thumbnailer", `[Thumbnailer Entry]\nTryExec=/usr/bin/albedo-thumbnailer\nExec=/usr/bin/albedo-thumbnailer --size %s %i %o\nMimeType=${mimetypes.join(";")};\n`);
 writeFileSync("platform/linux/albedo.xml", `<?xml version="1.0" encoding="UTF-8"?>\n<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">\n${extensions.map((ext, i) => `  <mime-type type="${mimetypes[i]}"><comment>${ext.toUpperCase()} 3D model</comment><glob pattern="*.${ext}"/></mime-type>`).join("\n")}\n</mime-info>\n`);
 const utis = extensions.map((ext) => `com.infinition.albedo.${ext}`);
-// Deliberately not `public.3d-content`: Apple's own SceneKit thumbnail extension
-// claims that whole family and system extensions win over third-party ones, so a
-// type conforming to it never reaches our provider. Formats whose UTI macOS itself
-// declares (glb, gltf, fbx, obj, stl, ply, dae, usd*) still go to SceneKit; the
-// extension can only serve the types below that nothing else owns.
-const imported = extensions.map((ext, i) => ({ UTTypeIdentifier: utis[i], UTTypeDescription: `${ext.toUpperCase()} 3D model`, UTTypeConformsTo: ["public.data"], UTTypeTagSpecification: { "public.filename-extension": [ext], "public.mime-type": [mimetypes[i]] } }));
-// Include system/industry UTIs as well: Launch Services may already know these
-// extensions through another application, and should still offer our provider.
-const known = ["org.khronos.glb", "org.khronos.gltf", "public.geometry-definition-format", "public.standard-tesselated-geometry-format", "public.polygon-file-format", "com.autodesk.fbx", "com.pixar.universal-scene-description", "com.pixar.universal-scene-description-mobile"];
+const imported = extensions.map((ext, i) => ({ UTTypeIdentifier: utis[i], UTTypeDescription: `${ext.toUpperCase()} 3D model`, UTTypeConformsTo: ["public.data", "public.3d-content"], UTTypeTagSpecification: { "public.filename-extension": [ext], "public.mime-type": [mimetypes[i]] } }));
+// macOS declares its own types for several of these extensions and uses them
+// instead of ours. Quick Look picks the extension that names a file's exact
+// type before one matching a parent type, so listing the system identifiers
+// here is what gets GLB, glTF and FBX to this provider: Apple only covers them
+// through SceneKit's `public.3d-content`. OBJ, STL, PLY, USD and USDZ are named
+// exactly by Apple's own extensions and stay with them.
+const known = ["org.khronos.glb", "org.khronos.gltf", "public.geometry-definition-format", "public.standard-tesselated-geometry-format", "public.polygon-file-format", "com.autodesk.fbx", "com.autodesk.mac.fbx", "com.pixar.universal-scene-description", "com.pixar.universal-scene-description-mobile"];
 writeFileSync("platform/macos/AppInfo.plist", plist({ UTImportedTypeDeclarations: imported, CFBundleDocumentTypes: [{ CFBundleTypeName: "3D Model", CFBundleTypeRole: "Viewer", LSHandlerRank: "Alternate", LSItemContentTypes: [...utis, ...known], CFBundleTypeExtensions: extensions }] }));
 writeFileSync("platform/macos/ThumbnailInfo.plist", plist({ CFBundleExecutable: "AlbedoThumbnail", CFBundleIdentifier: "com.infinition.albedo.thumbnail", CFBundleName: "Albedo Thumbnail", CFBundleDisplayName: "Albedo 3D Thumbnails", CFBundlePackageType: "XPC!", CFBundleVersion: config.version, CFBundleShortVersionString: config.version, LSMinimumSystemVersion: "12.0", NSExtension: { NSExtensionPointIdentifier: "com.apple.quicklook.thumbnail", NSExtensionPrincipalClass: "ThumbnailProvider", NSExtensionAttributes: { QLSupportedContentTypes: [...utis, ...known], QLThumbnailMinimumDimension: 32 } } }));

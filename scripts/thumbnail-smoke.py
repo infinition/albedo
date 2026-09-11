@@ -29,8 +29,7 @@ def fixtures(folder):
 
 
 def fixture_3mf(folder):
-    """A 3MF cube. On macOS this is a type Albedo owns: glb/gltf/obj carry
-    Apple UTIs, and Quick Look hands those to the SceneKit extension."""
+    """A 3MF cube, a format only Albedo declares on macOS."""
     import zipfile
     corners = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0), (0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)]
     faces = [(0, 2, 1), (0, 3, 2), (4, 5, 6), (4, 6, 7), (0, 1, 5), (0, 5, 4), (1, 2, 6), (1, 6, 5), (2, 3, 7), (2, 7, 6), (3, 0, 4), (3, 4, 7)]
@@ -77,10 +76,10 @@ def main():
         folder = Path(tmp)
         models = fixtures(folder)
         if args.mac_app:
-            # Only types whose UTI Albedo declares reach the extension: macOS
-            # owns glb/gltf/obj and routes them to SceneKit. Those formats are
-            # covered by the application CLI above.
-            models = [fixture_3mf(folder)]
+            # Quick Look grants the selected document only, so external glTF
+            # buffers stay with the application CLI above. OBJ goes to Apple's
+            # own extension on macOS; GLB and 3MF reach this one.
+            models = [model for model in models if model.suffix == ".glb"] + [fixture_3mf(folder)]
             app = args.mac_app.resolve()
             subprocess.run(["/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", "-f", str(app)], check=True)
             subprocess.run(["pluginkit", "-a", str(app / "Contents/PlugIns/AlbedoThumbnail.appex")], check=True)

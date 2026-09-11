@@ -10,21 +10,23 @@ Pull requests and manual runs produce downloadable artifacts without a release.
 | System | Package | File-manager thumbnails |
 | --- | --- | --- |
 | Windows x64 | Portable EXE/ZIP or NSIS installer | Embedded COM provider; enabled on first ordinary launch, removable in Object settings |
-| macOS 12+ Intel / Apple Silicon | Universal `Albedo.app` in DMG | `Contents/PlugIns/AlbedoThumbnail.appex`, registered with Quick Look; serves only the formats macOS itself has no type for (see below) |
+| macOS 12+ Intel / Apple Silicon | Universal `Albedo.app` in DMG | `Contents/PlugIns/AlbedoThumbnail.appex`, registered with Quick Look; renders GLB, glTF, FBX and Albedo's own formats, Apple keeps OBJ, STL, PLY, USD and USDZ (see below) |
 | Linux x64 | `.deb` / `.rpm` | WebKitGTK/Python helper installed in `/usr`; registration in the user's thumbnailers directory on first ordinary launch |
 | Linux x64 | AppImage | Viewer and library thumbnails; install a native package for desktop thumbnails |
 
 On macOS, move the complete application into Applications before launching it.
 Enable the Albedo thumbnail extension in System Settings if macOS requires it.
 
-Quick Look hands a file to Apple's own SceneKit thumbnail extension whenever its
-type conforms to `public.3d-content`, and system extensions take precedence over
-third-party ones. macOS declares such types for `glb`, `gltf`, `fbx`, `obj`,
-`stl`, `ply`, `dae` and `usd*`, so Finder never asks Albedo for those: what
-SceneKit can read (USDZ, OBJ, STL, DAE) gets Apple's rendering, and what it
-cannot (GLB, glTF, FBX) gets a generic icon. Albedo's own types (`3mf`, `3ds`,
-`vox`, `amf`, `pcd`, `xyz`, `nif`, `kf`, `kfa`, `wrl`, `vrml`) are declared
-without that conformance on purpose; they are the ones the extension renders.
+Quick Look gives a file to the extension that names its exact type before one
+that only matches a parent type. Apple's extensions name OBJ, STL, PLY, USD and
+USDZ exactly, so Finder keeps Apple's rendering for those; Apple covers GLB, glTF,
+FBX and DAE only through SceneKit's `public.3d-content`, so the Albedo extension,
+which lists the system identifiers `org.khronos.glb`, `org.khronos.gltf` and
+`com.autodesk.mac.fbx`, renders them. DAE is left to SceneKit, which reads it
+natively. Albedo's own types (3MF, 3DS, VOX, AMF, PCD, XYZ, NIF, KF, KFA, WRL,
+VRML) are always its own. Finder shows every Quick Look thumbnail, Apple's
+included, on its white rounded card; the PNG itself is transparent.
+
 The default workflow uses ad-hoc signatures, not Apple notarization. Public
 Developer ID distribution requires the maintainer's signing credentials and
 notarization setup; this change does not create or install credentials. Local
@@ -99,7 +101,7 @@ also checks macOS universal architectures, signatures, CLI rendering and Quick
 Look rendering, and Linux native-helper/CLI rendering.
 
 Verified on macOS 26 (Apple Silicon): the Quick Look extension built by
-`platform/macos/build.py` renders a 3MF through `QLThumbnailGenerator` (the path
+`platform/macos/build.py` renders GLB, FBX and 3MF through `QLThumbnailGenerator` (the path
 Finder uses; `qlmanage -t` does not reach modern extensions, which is why the
 smoke test compiles `platform/macos/qlthumb.swift` instead). GitHub's macOS
 runners are virtual machines without a GPU: WebKit's content process dies inside

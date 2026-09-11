@@ -1,6 +1,6 @@
 {
   "name": "albedo",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "Local 3D asset viewer for Windows, macOS and Linux",
   "type": "module",
   "scripts": {
